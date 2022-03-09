@@ -1,7 +1,8 @@
-# PubMed Connections
+<img src="/app/static/logo-with-name.png" height=160 />
 
-WIP
-
+PubMed Connections (real name pending...) is a project
+to analyse the relationships between authors in the
+PubMed database in near real-time.
 
 ## Conda Environment
 
