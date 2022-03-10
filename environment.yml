@@ -1,0 +1,4 @@
+name: pubmed-connections
+dependencies:
+  - flask
+  - flask-sqlalchemy
