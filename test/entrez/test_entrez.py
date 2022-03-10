@@ -47,3 +47,4 @@ class TestFetcher(TestCase):
     def test_request_entrez_by_date(self):
         # This test is really slow...
         # print(len(download_all_modified_since(PUBMED_DB_NAME, "2022/03/08")))
+        pass
