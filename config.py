@@ -1,14 +1,21 @@
+import os
+
 
 # Statement for enabling the development environment
 DEBUG = True
 
 # Define the application directory
-import os
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+
+# Define the Entrez email, tool, and the optional api-key
+ENTREZ_EMAIL = ""
+ENTREZ_TOOL = "pubmedconnections"
+ENTREZ_API_KEY = None
 
 # Define the database - we are working with
 # SQLite for this example
-SQLALCHEMY_DATABASE_URI = 'sqlite:///' + os.path.join(BASE_DIR, 'app.db')
+SQLALCHEMY_DATABASE_URI = 'sqlite:///' + os.path.join(os.path.join(BASE_DIR, "data"), "app.db")
+SQLALCHEMY_TRACK_MODIFICATIONS = False
 DATABASE_CONNECT_OPTIONS = {}
 
 # Application threads. A common general assumption is
