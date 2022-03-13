@@ -1,20 +1,15 @@
 """
 This file provides functions to download the baseline XML files containing the PubMed data.
 """
-import hashlib
 import os.path
 import re
-import statistics
 import sys
+import threading
 import time
-import numpy as np
-from sklearn.linear_model import LinearRegression
 from ftplib import FTP
 from pathlib import Path
 from typing import Final
-
-import numpy as np
-
+from app.pubmed.analytics import DownloadAnalytics
 from app.pubmed.download import DownloadTempFile
 from config import PUBMED_ACCESS_EMAIL, PUBMED_FTP_DEBUG
 
@@ -25,7 +20,7 @@ PUBMED_FTP_UPDATES_DIR: Final[str] = "/pubmed/updatefiles/"
 # Settings recommended for Pubmed's FTP server.
 # See: https://ftp.ncbi.nlm.nih.gov/README.ftp
 PUBMED_FTP_PASSIVE = True
-PUBMED_FTP_BUFFER_SIZE_BYTES = 64 * 1024  # 64 KB
+PUBMED_FTP_BUFFER_SIZE_BYTES = 256 * 1024  # 256 KB
 PUBMED_FTP_TIMEOUT_SECONDS = 5 * 60  # 5 Minutes
 
 
@@ -42,7 +37,9 @@ class PubMedFTP:
         if PUBMED_ACCESS_EMAIL == "" or PUBMED_ACCESS_EMAIL is None:
             raise ValueError("Your PUBMED_ACCESS_EMAIL should be set in config.py")
 
-    def reopen_connection(self, *, delay=0):
+        self.recursive_entries = 0
+
+    def reopen_connection(self, *, delay: float = 0):
         try:
             if self._ftp is not None:
                 self._ftp.quit()
@@ -56,13 +53,22 @@ class PubMedFTP:
         self._ftp.set_debuglevel(2 if PUBMED_FTP_DEBUG else 0)
         self._ftp.connect(PUBMED_FTP_URL)
         self._ftp.login(passwd=PUBMED_ACCESS_EMAIL)
+        self._ftp.sendcmd("TYPE I")
         self._ftp.set_pasv(PUBMED_FTP_PASSIVE)
 
     def __enter__(self):
+        self.recursive_entries += 1
+        if self.recursive_entries > 1:
+            return
+
         self.reopen_connection()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        self.recursive_entries -= 1
+        if self.recursive_entries >= 1:
+            return
+
         if self._ftp is not None:
             self._ftp.quit()
             self._ftp = None
@@ -119,14 +125,18 @@ class PubMedFTP:
             # Already downloaded the whole file...
             return
 
-        print(" .. Downloading " + ftp_file + "...")
         with download_file:
+            self._ftp.sendcmd("TYPE I")
             self.ftp.retrbinary(
                 "RETR " + ftp_file,
                 download_file.write,
                 rest=start_byte,
                 blocksize=PUBMED_FTP_BUFFER_SIZE_BYTES
             )
+            if file_bytes != download_file.bytes_downloaded:
+                raise HashMatchingException("Bytes downloaded, {}, did not match the bytes expected, {}".format(
+                    download_file.bytes_downloaded, file_bytes
+                ))
 
     def download_hash_file(self, ftp_hash_file: str, file_bytes: int, download_file: DownloadTempFile):
         """
@@ -136,7 +146,7 @@ class PubMedFTP:
         self.download_file(ftp_hash_file, file_bytes, download_file)
 
         # The hash from the FTP server is in the form MD5(filename)= <hash>\n
-        extract_hash_pattern = re.compile("=\s*([\da-f]+)\s*$")
+        extract_hash_pattern = re.compile("=\\s*([\\da-f]+)\\s*$")
         expected_hash_str = download_file.contents.decode("utf-8")
         expected_hash_match = extract_hash_pattern.search(expected_hash_str)
         if expected_hash_match is None:
@@ -157,8 +167,8 @@ class PubMedFTP:
         from the hash file.
         """
         (ftp_df, df_bytes), (ftp_hf, hf_bytes) = pair
-        expected_hash = self.download_hash_file(ftp_hf, hf_bytes, download_hf)
 
+        expected_hash = self.download_hash_file(ftp_hf, hf_bytes, download_hf)
         with download_df:
             self.download_file(ftp_df, df_bytes, download_df)
 
@@ -168,12 +178,12 @@ class PubMedFTP:
                 download_hf.delete_downloaded_file()
                 raise HashMatchingException(
                     "Hash mismatch for data file " + download_df.target_file + ", " +
-                    expected_hash + " != " + actual_hash
+                    actual_hash + " != " + expected_hash
                 )
 
             return download_df.bytes_downloaded
 
-    def download_pair_with_retries(self, target_directory, dir_prefix, pair, *, retries=6):
+    def download_pair_with_retries(self, target_directory: str, dir_prefix: str, pair, *, retries=6):
         """
         Retries the download up to retries times if it fails.
 
@@ -222,86 +232,84 @@ class PubMedFTP:
                     download_df = None
                     download_hf_unchecked = None
 
-                if attempt == 3 or is_broken_conn:
-                    print(" .. Re-opening connection to the FTP server...")
-                    self.reopen_connection(delay=5)
-
                 if attempt == retries - 1:
                     raise e
-                else:
-                    print(
-                        " .. " + type(e).__name__ + " on attempt " + str(attempt + 1) + ": " + message,
-                        file=sys.stderr
-                    )
-                    time.sleep(1)
 
-    def download_pairs(self, target_directory, dir_prefix, pairs):
+                print(
+                    " .. " + type(e).__name__ + " on attempt " + str(attempt + 1) + ": " + message,
+                    file=sys.stderr
+                )
+                if attempt == 1 or attempt == 3 or is_broken_conn:
+                    print(" .. Re-opening connection to the FTP server...")
+                    self.reopen_connection(delay=0.5)  # Small delay can't hurt
+
+                time.sleep(1)
+
+    def download_pairs(
+            self, target_directory, dir_prefix, pairs,
+            *, connection_pool_size=3, report_interval_secs=60):
         """
         Synchronises all the given pairs into the target directory.
         The subdirectories within target_directory for the result
         files should already exist. Existing files will be overridden.
         """
-        print("PubMedFTP: Downloading", len(pairs), "data and hash file pairs into", dir_prefix)
+        if len(pairs) <= 0:
+            return
 
-        total_bytes = 0
-        df_sizes_mbs = []
-        for (_, df_bytes), (_, hf_bytes) in pairs:
-            total_bytes += df_bytes + hf_bytes
-            df_sizes_mbs.append(df_bytes / 1024.0 / 1024.0)
-        df_sizes_mbs = np.array(df_sizes_mbs).reshape((-1, 1))
+        print("PubMedFTP: Downloading " + str(len(pairs)) + " data and hash file pairs into " + dir_prefix + "...")
+        if connection_pool_size > len(pairs):
+            connection_pool_size = len(pairs)
 
-        elapsed_times = []
-        downloaded_sizes = []
-        downloaded_bytes = 0
+        # Use a pool of connections for faster transfers of multiple files at once.
+        conn_pool = [self]
+        for i in range(connection_pool_size - 1):
+            conn_pool.append(PubMedFTP())
 
+        # Define the work that needs to be done.
+        pairs_remaining = [*pairs]
         target_directory = os.path.join(target_directory, dir_prefix)
-        for index, pair in enumerate(pairs):
-            current_start = time.time()
-            byte_count = self.download_pair_with_retries(target_directory, dir_prefix, pair)
-            downloaded_bytes += byte_count
-            elapsed = time.time() - current_start
+        analytics = DownloadAnalytics([df_bytes for (_, df_bytes), _ in pairs], connection_pool_size)
+        lock = threading.Lock()
 
-            elapsed_times.append(elapsed)
-            downloaded_sizes.append(byte_count)
+        def do_work(connection: PubMedFTP):
+            """
+            Loops taking pairs to download from pairs_remaining.
+            """
+            with connection:
+                while True:
+                    with lock:
+                        if len(pairs_remaining) <= 0:
+                            break
 
-            # We use the elapsed times and sizes of the files that have been downloaded
-            # already to predict the relationship between file size and duration.
-            recent_secs_per_file = np.array(elapsed_times[-50:])
-            recent_mb_per_file = np.array(downloaded_sizes[-50:]) / 1024.0 / 1024.0
+                        pair = pairs_remaining.pop(0)
+                        analytics.update_remaining([df_bytes for (_, df_bytes), _ in pairs])
 
-            recent_mb_per_sec = np.mean(recent_mb_per_file / recent_secs_per_file).item()
-            current_mb_downloaded = byte_count / 1024.0 / 1024.0
-            mb_remaining = (total_bytes - downloaded_bytes) / 1024.0 / 1024.0
+                    start_time = time.time()
+                    bytes_downloaded = connection.download_pair_with_retries(target_directory, dir_prefix, pair)
+                    elapsed_time = time.time() - start_time
 
-            if len(recent_secs_per_file) >= 10:
-                # Weight more recent files higher.
-                weighted_recent_secs_per_file = np.concatenate((
-                    recent_secs_per_file, recent_secs_per_file[-10:], recent_secs_per_file[-20:],
-                    recent_secs_per_file[-30:], recent_secs_per_file[-40:]
-                ))
-                weighted_recent_mb_per_file = np.concatenate((
-                    recent_mb_per_file, recent_mb_per_file[-10:], recent_mb_per_file[-20:],
-                    recent_mb_per_file[-30:], recent_mb_per_file[-40:]
-                ))
+                    with lock:
+                        analytics.update(elapsed_time, bytes_downloaded)
 
-                # Do a linear regression to determine the relationship between file size and time.
-                weighted_recent_mb_per_file = weighted_recent_mb_per_file.reshape((-1, 1))
-                model = LinearRegression().fit(weighted_recent_mb_per_file, weighted_recent_secs_per_file)
-                predicted_times = model.predict(df_sizes_mbs[(index + 1):])
-                estimated_mins_remaining = np.sum(predicted_times) / 60
-            else:
-                # Use a dumb estimation if we don't have enough samples yet for the linear regression.
-                estimated_mins_remaining = mb_remaining / recent_mb_per_sec / 60
+        # Start threads to do the transfers.
+        threads = [threading.Thread(target=do_work, args=(conn,), daemon=True) for conn in conn_pool]
+        for thread in threads:
+            thread.start()
 
-            print(
-                "{} / {}. Downloading and verifying {} MB took {:.3f} seconds. "
-                "{} minutes remaining ({:.2f} MB/s)".format(
-                    index + 1, len(pairs), int(current_mb_downloaded), elapsed,
-                    "unknown" if estimated_mins_remaining < 0 else str(int(estimated_mins_remaining)),
-                    recent_mb_per_sec
-                )
-            )
-            print()
+        while True:
+            time.sleep(report_interval_secs)
+
+            # Check if all the threads have finished yet.
+            any_working = False
+            for thread in threads:
+                if thread.is_alive():
+                    any_working = True
+                    break
+            if not any_working:
+                break  # Done!
+
+            with lock:
+                analytics.report()
 
     def sync(self, target_directory):
         """

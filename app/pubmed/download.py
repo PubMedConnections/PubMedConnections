@@ -50,7 +50,6 @@ class DownloadTempFile:
         self.temp_file = open(self.temp_file_path, "wb")
         if self.bytes_downloaded > 0:
             self.temp_file.seek(self.bytes_downloaded)
-        self.do_delete = False
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
