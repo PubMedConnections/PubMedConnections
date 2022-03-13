@@ -2,3 +2,5 @@ name: pubmed-connections
 dependencies:
   - flask
   - flask-sqlalchemy
+  - numpy
+  - scikit-learn

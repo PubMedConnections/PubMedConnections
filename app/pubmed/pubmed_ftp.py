@@ -7,9 +7,13 @@ import re
 import statistics
 import sys
 import time
+import numpy as np
+from sklearn.linear_model import LinearRegression
 from ftplib import FTP
 from pathlib import Path
 from typing import Final
+
+import numpy as np
 
 from app.pubmed.download import DownloadTempFile
 from config import PUBMED_ACCESS_EMAIL, PUBMED_FTP_DEBUG
@@ -33,7 +37,6 @@ class PubMedFTP:
     """
     Wraps operations to interact with the PubMed FTP server.
     """
-
     def __init__(self):
         self._ftp = None
         if PUBMED_ACCESS_EMAIL == "" or PUBMED_ACCESS_EMAIL is None:
@@ -241,8 +244,11 @@ class PubMedFTP:
         print("PubMedFTP: Downloading", len(pairs), "data and hash file pairs into", dir_prefix)
 
         total_bytes = 0
+        df_sizes_mbs = []
         for (_, df_bytes), (_, hf_bytes) in pairs:
             total_bytes += df_bytes + hf_bytes
+            df_sizes_mbs.append(df_bytes / 1024.0 / 1024.0)
+        df_sizes_mbs = np.array(df_sizes_mbs).reshape((-1, 1))
 
         elapsed_times = []
         downloaded_sizes = []
@@ -258,18 +264,41 @@ class PubMedFTP:
             elapsed_times.append(elapsed)
             downloaded_sizes.append(byte_count)
 
-            current_mb_downloaded = int(byte_count / 1024 / 1024)
-            expected_secs_per_file = statistics.mean(elapsed_times[-10:])
-            expected_mb_per_file = statistics.mean(downloaded_sizes[-10:]) / 1024.0 / 1024.0
-            expected_mb_per_sec = expected_mb_per_file / expected_secs_per_file
-            mb_remaining = max(0, total_bytes - downloaded_bytes) / 1024.0 / 1024.0
-            expected_mins_remaining = mb_remaining / expected_mb_per_sec / 60
+            # We use the elapsed times and sizes of the files that have been downloaded
+            # already to predict the relationship between file size and duration.
+            recent_secs_per_file = np.array(elapsed_times[-50:])
+            recent_mb_per_file = np.array(downloaded_sizes[-50:]) / 1024.0 / 1024.0
+
+            recent_mb_per_sec = np.mean(recent_mb_per_file / recent_secs_per_file).item()
+            current_mb_downloaded = byte_count / 1024.0 / 1024.0
+            mb_remaining = (total_bytes - downloaded_bytes) / 1024.0 / 1024.0
+
+            if len(recent_secs_per_file) >= 10:
+                # Weight more recent files higher.
+                weighted_recent_secs_per_file = np.concatenate((
+                    recent_secs_per_file, recent_secs_per_file[-10:], recent_secs_per_file[-20:],
+                    recent_secs_per_file[-30:], recent_secs_per_file[-40:]
+                ))
+                weighted_recent_mb_per_file = np.concatenate((
+                    recent_mb_per_file, recent_mb_per_file[-10:], recent_mb_per_file[-20:],
+                    recent_mb_per_file[-30:], recent_mb_per_file[-40:]
+                ))
+
+                # Do a linear regression to determine the relationship between file size and time.
+                weighted_recent_mb_per_file = weighted_recent_mb_per_file.reshape((-1, 1))
+                model = LinearRegression().fit(weighted_recent_mb_per_file, weighted_recent_secs_per_file)
+                predicted_times = model.predict(df_sizes_mbs[(index + 1):])
+                estimated_mins_remaining = np.sum(predicted_times) / 60
+            else:
+                # Use a dumb estimation if we don't have enough samples yet for the linear regression.
+                estimated_mins_remaining = mb_remaining / recent_mb_per_sec / 60
 
             print(
-                "{} / {}. Downloading and checking {} MB took {:.3f} seconds. "
+                "{} / {}. Downloading and verifying {} MB took {:.3f} seconds. "
                 "{} minutes remaining ({:.2f} MB/s)".format(
-                    index + 1, len(pairs), current_mb_downloaded, elapsed,
-                    int(expected_mins_remaining), expected_mb_per_sec
+                    index + 1, len(pairs), int(current_mb_downloaded), elapsed,
+                    "unknown" if estimated_mins_remaining < 0 else str(int(estimated_mins_remaining)),
+                    recent_mb_per_sec
                 )
             )
             print()
