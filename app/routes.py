@@ -8,3 +8,8 @@ def not_found(error):
 @app.route("/")
 def index():
     return render_template('home.html')
+
+
+@app.route("/exampleGraph")
+def proofOfConcept():
+    return render_template('T.html')
