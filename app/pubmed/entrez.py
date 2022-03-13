@@ -1,12 +1,13 @@
 """
 This file provides functions to fetch metadata from the PubMed API.
 """
+import sys
 import threading
 import time
 from typing import Final
 from Bio import Entrez
 from app.utils import run_over_threads
-from config import ENTREZ_EMAIL, ENTREZ_TOOL, ENTREZ_API_KEY
+from config import PUBMED_ACCESS_EMAIL, ENTREZ_TOOL, ENTREZ_API_KEY
 
 
 PUBMED_DB_NAME: Final = "pubmed"
@@ -22,7 +23,7 @@ def init_entrez():
     if ENTREZ_TOOL is None:
         raise ValueError("Please fill out the ENTREZ_TOOL field in config.py")
 
-    Entrez.email = ENTREZ_EMAIL
+    Entrez.email = PUBMED_ACCESS_EMAIL
     Entrez.tool = ENTREZ_TOOL
     Entrez.api_key = ENTREZ_API_KEY
 
@@ -73,7 +74,11 @@ def request_entrez_database_list():
     """
     :return: A list of the names of the databases available from Entrez.
     """
-    return request_entrez_einfo()["DbInfo"]
+    einfo_response = request_entrez_einfo()
+    if "DbList" not in einfo_response:
+        print(einfo_response, file=sys.stderr)
+        raise ValueError("einfo response did not contain DbList")
+    return einfo_response["DbList"]
 
 
 def download_all_modified_since(db, date, max_download=50_000):
@@ -124,4 +129,4 @@ def download_all_modified_since(db, date, max_download=50_000):
         fetch_handle.close()
         return fetch_response
 
-    return run_over_threads("entrez_download_all_modified_since", do_fetch, arguments)
+    return run_over_threads(do_fetch, arguments)

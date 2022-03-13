@@ -3,6 +3,11 @@ from unittest import TestCase
 from app.utils import *
 
 
+def _test_run_over_threads_func(a, b, c):
+    time.sleep(1)
+    return a + b - c
+
+
 class TestUtils(TestCase):
     def test_curry(self):
         def func(*args, **kwargs):
@@ -16,10 +21,6 @@ class TestUtils(TestCase):
         self.assertEqual("[a, c], {a=b, d=e}", curry(func, "a", "c", a="b", d="e")())
 
     def test_run_over_threads(self):
-        def func(a, b, c):
-            time.sleep(1)
-            return a + b - c
-
         args = [
             [1, 2, 3],
             [2, 3, 4],
@@ -29,7 +30,7 @@ class TestUtils(TestCase):
         expected_results = [0, 1, 2, 3]
 
         start = time.time()
-        actual_results = run_over_threads("test_run_over_threads", func, args)
+        actual_results = run_over_threads(_test_run_over_threads_func, args)
         elapsed = time.time() - start
         self.assertTrue(0.9 < elapsed < 1.5)
 

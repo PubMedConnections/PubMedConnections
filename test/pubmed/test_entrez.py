@@ -3,7 +3,7 @@ from unittest import TestCase
 from app.pubmed.entrez import *
 
 
-class TestFetcher(TestCase):
+class TestEntrez(TestCase):
     def test_do_rate_limit(self):
         # Serial Test
         start = time.time()
@@ -17,14 +17,14 @@ class TestFetcher(TestCase):
 
         # Parallel Test 1
         start = time.time()
-        run_over_threads("test_do_rate_limit_4", do_rate_limit, [[], [], [], []])
+        run_over_threads(do_rate_limit, [[], [], [], []])
         elapsed = time.time() - start
         self.assertTrue(0.37 * 3 < elapsed < 0.37 * 4, "Incorrect elapsed time for parallel test, " + str(elapsed))
         time.sleep(0.37)
 
         # Parallel Test 2
         start = time.time()
-        run_over_threads("test_do_rate_limit_7", do_rate_limit, [[], [], [], [], [], [], []])
+        run_over_threads(do_rate_limit, [[], [], [], [], [], [], []])
         elapsed = time.time() - start
         self.assertTrue(0.37 * 6 < elapsed < 0.37 * 7, "Incorrect elapsed time for parallel test, " + str(elapsed))
 

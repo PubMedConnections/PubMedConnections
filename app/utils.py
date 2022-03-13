@@ -2,7 +2,7 @@
 This file contains general utility functions that don't
 really fit anywhere else.
 """
-import threading
+from multiprocessing.pool import ThreadPool
 
 
 def curry(fn, *curry_args, **curry_kwargs):
@@ -14,26 +14,11 @@ def curry(fn, *curry_args, **curry_kwargs):
     return curried
 
 
-def run_over_threads(name, fn, args_for_each_thread):
+def run_over_threads(fn, args):
     """
-    Spawns many threads to execute the given function.
-    Each thread invokes the function with a set of arguments
-    from the list of arguments given.
+    Spawns many threads to execute the given function using Python multiprocessing by default.
+    Each thread invokes the function with a set of arguments from the list of arguments given.
     :return: the list of all outputs from the invocations of the function.
     """
-    threads = []
-    results = []
-
-    def write_output_to_results(fn, args):
-        results.append(fn(*args))
-
-    for index, args in enumerate(args_for_each_thread):
-        t_name = "run_over_threads__" + name + "__" + str(index)
-        t = threading.Thread(name=t_name, target=curry(write_output_to_results, fn, args))
-        threads.append(t)
-        t.start()
-
-    for t in threads:
-        t.join()
-
-    return results
+    with ThreadPool() as pool:
+        return pool.starmap(fn, args)

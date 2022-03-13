@@ -3,12 +3,13 @@ import os
 
 # Statement for enabling the development environment
 DEBUG = True
+PUBMED_FTP_DEBUG = False
 
 # Define the application directory
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
 # Define the Entrez email, tool, and the optional api-key
-ENTREZ_EMAIL = ""
+PUBMED_ACCESS_EMAIL = ""
 ENTREZ_TOOL = "pubmedconnections"
 ENTREZ_API_KEY = None
 
