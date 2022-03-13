@@ -11,5 +11,5 @@ def index():
 
 
 @app.route("/exampleGraph")
-def proofOfConcept():
+def exampleGraph():
     return render_template('T.html')
