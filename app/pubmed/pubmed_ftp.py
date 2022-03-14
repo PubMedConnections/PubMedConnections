@@ -256,7 +256,8 @@ class PubMedFTP:
         if len(pairs) <= 0:
             return
 
-        print("PubMedFTP: Downloading " + str(len(pairs)) + " data and hash file pairs into " + dir_prefix + "...")
+        target_dir_with_prefix = os.path.join(target_directory, dir_prefix)
+        print("PubMedFTP: Downloading {} data files into {}...".format(len(pairs), target_dir_with_prefix))
         if connection_pool_size > len(pairs):
             connection_pool_size = len(pairs)
 
@@ -268,7 +269,7 @@ class PubMedFTP:
         # Define the work that needs to be done.
         pairs_remaining = [*pairs]
         target_directory = os.path.join(target_directory, dir_prefix)
-        analytics = DownloadAnalytics([df_bytes for (_, df_bytes), _ in pairs], connection_pool_size)
+        analytics = DownloadAnalytics([df_bytes for (_, df_bytes), _ in pairs_remaining], connection_pool_size)
         lock = threading.Lock()
 
         def do_work(connection: PubMedFTP):
@@ -282,7 +283,7 @@ class PubMedFTP:
                             break
 
                         pair = pairs_remaining.pop(0)
-                        analytics.update_remaining([df_bytes for (_, df_bytes), _ in pairs])
+                        analytics.update_remaining([df_bytes for (_, df_bytes), _ in pairs_remaining])
 
                     start_time = time.time()
                     bytes_downloaded = connection.download_pair_with_retries(target_directory, dir_prefix, pair)
@@ -296,9 +297,8 @@ class PubMedFTP:
         for thread in threads:
             thread.start()
 
+        last_report_time = time.time()
         while True:
-            time.sleep(report_interval_secs)
-
             # Check if all the threads have finished yet.
             any_working = False
             for thread in threads:
@@ -308,8 +308,14 @@ class PubMedFTP:
             if not any_working:
                 break  # Done!
 
-            with lock:
-                analytics.report()
+            if time.time() - last_report_time > report_interval_secs:
+                last_report_time = time.time()
+                with lock:
+                    analytics.report(prefix="PubMedFTP: ")
+
+            time.sleep(1)
+
+        print("PubMedFTP: Successfully downloaded {} data files into {}!".format(len(pairs), target_dir_with_prefix))
 
     def sync(self, target_directory):
         """

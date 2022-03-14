@@ -4,6 +4,21 @@ Calculates download analytics on the fly.
 import numpy as np
 
 
+def format_minutes(mins):
+    """
+    Formats minutes in the form "X hours, Y minutes"
+    """
+    hours = max(0, int(mins / 60))
+    hours_s = "s" if hours != 1 else ""
+
+    mins = max(0, int(mins % 60))
+    mins_s = "s" if mins != 1 else ""
+
+    if hours <= 0:
+        return "{} minute{}".format(mins, mins_s)
+    return "{} hour{}, {} minute{}".format(hours, hours_s, mins, mins_s)
+
+
 class DownloadAnalytics:
     def __init__(self, remaining_file_sizes, no_threads):
         self.download_times = []
@@ -25,7 +40,7 @@ class DownloadAnalytics:
         self.download_times.append(download_time)
         self.download_sizes.append(download_size)
 
-    def report(self, *, recent=50):
+    def report(self, *, prefix="", recent=50):
         """
         Prints out a report of how the downloads are progressing.
         """
@@ -43,15 +58,9 @@ class DownloadAnalytics:
 
         estimated_remaining_by_files = len(self.remaining_file_sizes) * avg_time_per_file
         estimated_remaining_by_size = mb_remaining / avg_mb_per_sec
-        estimated_remaining = 0.4 * estimated_remaining_by_files + 0.6 * estimated_remaining_by_size
+        estimated_remaining = 0.2 * estimated_remaining_by_files + 0.8 * estimated_remaining_by_size
 
-        est_hours_remaining = int(estimated_remaining / 60 / 60)
-        est_mins_remaining = int((estimated_remaining / 60) % 60)
-        est_time_remaining = "{} minutes".format(est_mins_remaining)
-        if est_hours_remaining > 0:
-            est_time_remaining = "{} hours, ".format(est_hours_remaining) + est_time_remaining
-
-        print("{} / {}. Estimated {} remaining ({:.2f} MB/s)\n".format(
-            self.total_files - len(self.download_sizes), self.total_files,
-            est_time_remaining, avg_mb_per_sec
+        print(prefix + "Downloaded {} of {} files. Estimated {} remaining ({:.2f} MB/s)\n".format(
+            len(self.download_sizes), self.total_files,
+            format_minutes(estimated_remaining / 60), avg_mb_per_sec
         ))
