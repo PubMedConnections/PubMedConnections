@@ -65,6 +65,7 @@ def union_objects(objects):
     array_desc = "[] of {}".format(len(objects))
 
     if issubclass(elem_type, dict):
+        # Swaps the dict and list around.
         # [{key: val}] -> {key: [val]}
         map_of_lists = {}
         for obj in objects:
@@ -79,6 +80,8 @@ def union_objects(objects):
             return {array_desc: map_of_lists}
 
     if issubclass(elem_type, list):
+        # Flattens lists of lists.
+        # [[values]...] -> [values...]
         union = []
         for obj in objects:
             union.extend(obj)
@@ -88,6 +91,7 @@ def union_objects(objects):
         else:
             return {array_desc: union}
 
+    # Reduces lists of elements to their type.
     if isinstance(objects, TempUnionList):
         return elem_type
     else:
