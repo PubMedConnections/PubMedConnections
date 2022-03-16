@@ -62,7 +62,7 @@ def union_objects(objects):
         return {"[]": None}
 
     elem_type = get_element_type(objects)
-    array_desc = "[] of {} {}s".format(len(objects), elem_type.__name__)
+    array_desc = "[] of {}".format(len(objects))
 
     if issubclass(elem_type, dict):
         # [{key: val}] -> {key: [val]}
