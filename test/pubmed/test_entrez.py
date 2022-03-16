@@ -1,6 +1,6 @@
 import time
 from unittest import TestCase
-from app.pubmed.entrez import *
+from app.pubmed.source_entrez import *
 
 
 class TestEntrez(TestCase):

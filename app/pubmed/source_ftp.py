@@ -322,6 +322,7 @@ class PubMedFTP:
         Downloads the baseline AND update data from the PubMed FTP server
         into the local directory, target_directory. This does not download
         files that already exist locally.
+        :return: All available baseline and update files.
         """
         print("PubMedFTP: Fetching available files...")
         baseline_pairs = self.read_baseline_file_pairs()
@@ -342,17 +343,21 @@ class PubMedFTP:
         # We want to skip any files that are already downloaded
         baseline_existing = os.listdir(baseline_path)
         updates_existing = os.listdir(updates_path)
-        baseline_pairs = PubMedFTP.filter_out_existing(
+        baseline_pairs_filtered = PubMedFTP.filter_out_existing(
             target_directory, baseline_prefix, baseline_pairs, baseline_existing
         )
-        updates_pairs = PubMedFTP.filter_out_existing(
+        updates_pairs_filtered = PubMedFTP.filter_out_existing(
             target_directory, updates_prefix, updates_pairs, updates_existing
         )
-        print("PubMedFTP: Found", len(baseline_pairs), "new baseline files to download")
-        print("PubMedFTP: Found", len(updates_pairs), "new update files to download")
+        print("PubMedFTP: Found", len(baseline_pairs_filtered), "new baseline files to download")
+        print("PubMedFTP: Found", len(updates_pairs_filtered), "new update files to download")
 
-        self.download_pairs(target_directory, baseline_prefix, baseline_pairs)
-        self.download_pairs(target_directory, updates_prefix, updates_pairs)
+        self.download_pairs(target_directory, baseline_prefix, baseline_pairs_filtered)
+        self.download_pairs(target_directory, updates_prefix, updates_pairs_filtered)
+
+        baseline_targets = PubMedFTP.convert_pairs_to_output_dfs(target_directory, baseline_prefix, baseline_pairs)
+        updates_targets = PubMedFTP.convert_pairs_to_output_dfs(target_directory, updates_prefix, updates_pairs)
+        return [*baseline_targets, *updates_targets]
 
     @staticmethod
     def get_datafiles_prefix(pairs):
@@ -397,6 +402,22 @@ class PubMedFTP:
         target_df = os.path.join(target_directory, df_name)
         target_hf = os.path.join(target_directory, hf_name)
         return target_df, target_hf
+
+    @staticmethod
+    def convert_pairs_to_output_dfs(target_directory, dir_prefix, pairs):
+        """
+        Converts all the given pairs to a path to their target data file on the local file system.
+        """
+        # The way the file paths are manipulated are weird here...
+        target_directory = os.path.join(target_directory, dir_prefix)
+
+        target_dfs = []
+        for pair in pairs:
+            target_df, _ = PubMedFTP.convert_pair_to_targets(target_directory, dir_prefix, pair)
+            target_dfs.append(target_df)
+
+        target_dfs.sort()
+        return target_dfs
 
     @staticmethod
     def filter_out_existing(target_directory, dir_prefix, pairs, existing):

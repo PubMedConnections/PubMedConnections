@@ -1,6 +1,6 @@
 import time
 from unittest import TestCase
-from app.pubmed.pubmed_ftp import *
+from app.pubmed.source_ftp import *
 
 
 class TestDownloadTempFile(TestCase):
