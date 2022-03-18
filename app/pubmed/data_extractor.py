@@ -4,7 +4,10 @@ or retrieved from the Entrez API, and extract the data
 we want from the results.
 """
 import gzip
+import json
+
 from Bio import Entrez
+from Bio.Entrez import Parser
 
 
 def parse_pubmed_xml_gzipped(path):
@@ -26,7 +29,24 @@ def get_object_structure(content, *, prefix=" ", depth=0, max_depth=8):
 
     if isinstance(content, dict):
         text = ""
+        if "__attributes__" in content:
+            attrs = content["__attributes__"]
+            if isinstance(attrs, list):
+                attrs = union_objects(attrs)
+            if len(attrs) > 0:
+                text += whole_prefix + ".attributes = " + ", ".join([key for key in attrs]) + "\n"
+
+        if "__type__" in content:
+            data_type = content["__type__"]
+            if issubclass(data_type, str):
+                data_type = str
+            if issubclass(data_type, int):
+                data_type = int
+            text += whole_prefix + ".type = " + data_type.__name__ + "\n"
+
         for key in content:
+            if key == "__attributes__" or key == "__type__":
+                continue
             text += whole_prefix + key + "\n"
             if next_depth < max_depth:
                 text += get_object_structure(
@@ -46,7 +66,6 @@ def get_object_structure(content, *, prefix=" ", depth=0, max_depth=8):
         )
         return text
     else:
-        # We only care about structure, not data.
         return ""
 
 
@@ -69,6 +88,11 @@ def union_objects(objects):
         # [{key: val}] -> {key: [val]}
         map_of_lists = {}
         for obj in objects:
+            if issubclass(elem_type, Entrez.Parser.DictionaryElement):
+                if "__attributes__" not in map_of_lists:
+                    map_of_lists["__attributes__"] = TempUnionList()
+                map_of_lists["__attributes__"].append(obj.attributes)
+
             for key in obj:
                 if key not in map_of_lists:
                     map_of_lists[key] = TempUnionList()
@@ -91,11 +115,20 @@ def union_objects(objects):
         else:
             return {array_desc: union}
 
-    # Reduces lists of elements to their type.
+    # Reduce lists of elements to empty dictionaries with attributes.
+    attrs = TempUnionList()
+    for obj in objects:
+        if hasattr(obj, "attributes") and len(obj.attributes) > 0:
+            attrs.append({"__attributes__": obj.attributes})
+
+    result = {"__type__": elem_type}
+    if len(attrs) > 0:
+        result = {**result, **union_objects(attrs)}
+
     if isinstance(objects, TempUnionList):
-        return elem_type
+        return result
     else:
-        return {array_desc: elem_type}
+        return {array_desc: result}
 
 
 def get_element_type(objects):

@@ -18,7 +18,7 @@ def init_entrez():
     """
     Initialises connection information for Entrez.
     """
-    if ENTREZ_EMAIL is None:
+    if PUBMED_ACCESS_EMAIL is None:
         raise ValueError("Please fill out the ENTREZ_EMAIL field in config.py")
     if ENTREZ_TOOL is None:
         raise ValueError("Please fill out the ENTREZ_TOOL field in config.py")

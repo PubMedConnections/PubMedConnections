@@ -1,3 +1,4 @@
+import gzip
 import os.path
 import pathlib
 import sys
@@ -27,15 +28,22 @@ if __name__ == "__main__":
         # Write an example file for us to look at the available data.
         example_target = targets[0]
         example_target_parts = pathlib.Path(example_target).parts
+        with gzip.open(targets[0], "rb") as file:
+            example_file_contents = file.read()
         example_object = parse_pubmed_xml_gzipped(targets[0])
+
         example_filename = example_target_parts[-2] + example_target_parts[-1]
         example_filename = example_filename[:example_filename.index(".")]
-        example_file = "./data/example." + example_filename + ".json"
-        with open(example_file, "w") as f:
+        example_file_prefix = "./data/pubmed/example."
+        example_file_xml = example_file_prefix + example_filename + ".xml"
+        example_file_json = example_file_prefix + example_filename + ".json"
+        with open(example_file_xml, "w") as f:
+            f.write(example_file_contents.decode("utf8"))
+        with open(example_file_json, "w") as f:
             f.write(json.dumps(example_object, indent=2, sort_keys=True))
 
         # Write out a file containing the structure of the example file.
-        example_structure_file = "./data/example." + example_filename + ".structure.txt"
+        example_structure_file = example_file_prefix + example_filename + ".structure.txt"
         example_structure = get_object_structure(example_object)
         with open(example_structure_file, "w") as f:
             f.write(example_structure)
