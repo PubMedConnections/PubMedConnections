@@ -13,6 +13,49 @@ def print_valid_modes():
     print(" - test: Run the test Flask webserver", file=sys.stderr)
 
 
+def run_sync():
+    """
+    Synchronises the PubMed dataset from FTP.
+    """
+    with PubMedFTP() as ftp:
+        targets = ftp.sync("./data")
+        print()
+
+    # Write an example file for us to look at the available data.
+    example_target = targets[0]
+    example_target_parts = pathlib.Path(example_target).parts
+
+    print("PubMedSync: Reading example file from", example_target)
+    with gzip.open(targets[0], "rb") as file:
+        example_file_contents = file.read()
+    example_object = parse_pubmed_xml_gzipped(targets[0])
+
+    example_filename = example_target_parts[-2] + example_target_parts[-1]
+    example_filename = example_filename[:example_filename.index(".")]
+    example_file_prefix = "./data/pubmed/example."
+    example_file_xml = example_file_prefix + example_filename + ".xml"
+
+    print("PubMedSync: Writing example file to", example_file_xml)
+    with open(example_file_xml, "w") as f:
+        f.write(example_file_contents.decode("utf8"))
+
+    # Write out a file containing the structure of the example file.
+    example_structure_file = example_file_prefix + example_filename + ".structure.txt"
+    example_structure = get_object_structure(example_object)
+
+    print("PubMedSync: Writing structure of example file to", example_structure_file)
+    with open(example_structure_file, "w") as f:
+        f.write(example_structure)
+
+
+def run_test():
+    """
+    Runs a test webserver.
+    """
+    from app import app as application
+    application.run(host='0.0.0.0', port=8080, debug=True)
+
+
 if __name__ == "__main__":
     args = sys.argv
     if len(args) < 2:
@@ -22,37 +65,17 @@ if __name__ == "__main__":
 
     mode = args[1]
     if mode == "sync":
-        with PubMedFTP() as ftp:
-            targets = ftp.sync("./data")
-            print()
-
-        # Write an example file for us to look at the available data.
-        example_target = targets[0]
-        example_target_parts = pathlib.Path(example_target).parts
-
-        print("PubMedSync: Reading example PubMed file from", example_target)
-        with gzip.open(targets[0], "rb") as file:
-            example_file_contents = file.read()
-        example_object = parse_pubmed_xml_gzipped(targets[0])
-
-        example_filename = example_target_parts[-2] + example_target_parts[-1]
-        example_filename = example_filename[:example_filename.index(".")]
-        example_file_prefix = "./data/pubmed/example."
-        example_file_xml = example_file_prefix + example_filename + ".xml"
-
-        print("PubMedSync: Writing example file to", example_file_xml)
-        with open(example_file_xml, "w") as f:
-            f.write(example_file_contents.decode("utf8"))
-
-        # Write out a file containing the structure of the example file.
-        example_structure_file = example_file_prefix + example_filename + ".structure.txt"
-        example_structure = get_object_structure(example_object)
-
-        print("PubMedSync: Writing structure of example file to", example_structure_file)
-        with open(example_structure_file, "w") as f:
-            f.write(example_structure)
+        if len(args) != 2:
+            print("Expected no arguments to sync", file=sys.stderr)
+            sys.exit(1)
+        run_sync()
 
     elif mode == "test":
-        # Run a test server.
-        from app import app as application
-        application.run(host='0.0.0.0', port=8080, debug=True)
+        if len(args) != 2:
+            print("Expected no arguments to test", file=sys.stderr)
+            sys.exit(1)
+        run_test()
+
+    else:
+        print("Unknown run-mode", mode, file=sys.stderr)
+        sys.exit(1)
