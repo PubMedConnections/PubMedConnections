@@ -3,6 +3,11 @@ import os.path
 import pathlib
 import sys
 import json
+
+from app import app as application
+from app import db
+from app.pubmed.db_model import PUBMED_DB_BIND
+from app.pubmed.sink_db import PubmedCacheSession, extract_to_pubmed_cache
 from app.pubmed.source_ftp import PubMedFTP
 from app.pubmed.data_extractor import parse_pubmed_xml_gzipped, get_object_structure
 
@@ -47,12 +52,25 @@ def run_sync():
     with open(example_structure_file, "w") as f:
         f.write(example_structure)
 
+    print()
+    print("Adding authors to DB")
+    db.create_all(bind=PUBMED_DB_BIND)
+    with PubmedCacheSession() as session:
+        extract_to_pubmed_cache(session, example_object)
+
+
+def run_extract():
+    """
+    Extracts data from the synchronized PubMed data files.
+    """
+    db.drop_all(bind=PUBMED_DB_BIND)
+    db.create_all(bind=PUBMED_DB_BIND)
+
 
 def run_test():
     """
     Runs a test webserver.
     """
-    from app import app as application
     application.run(host='0.0.0.0', port=8080, debug=True)
 
 
