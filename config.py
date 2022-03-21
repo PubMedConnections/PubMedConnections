@@ -10,21 +10,20 @@ ENTREZ_API_KEY = None
 # Statement for enabling the development environment
 DEBUG = True
 PUBMED_FTP_DEBUG = False
+SQLALCHEMY_ECHO = False
 
 
 # Define the application directory
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "data")
+APP_DB_FILE = os.path.join(DATA_DIR, "app.db")
 PUBMED_DIR = os.path.join(DATA_DIR, "pubmed")
 PUBMED_DB_FILE = os.path.join(PUBMED_DIR, "pubmed.db")
 
-
 # SQLAlchemy settings.
+SQLALCHEMY_DATABASE_URI = "sqlite:///{}".format(APP_DB_FILE)
 SQLALCHEMY_TRACK_MODIFICATIONS = False
 DATABASE_CONNECT_OPTIONS = {}
-SQLALCHEMY_BINDS = {
-    "pubmed": "sqlite:///{}".format(PUBMED_DB_FILE)
-}
 
 
 # Flask settings.

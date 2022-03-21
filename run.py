@@ -4,12 +4,14 @@ import pathlib
 import sys
 import json
 
+from Bio import Entrez
+
 from app import app as application
-from app import db
-from app.pubmed.db_model import PUBMED_DB_BIND
-from app.pubmed.sink_db import PubmedCacheSession, extract_to_pubmed_cache
+from app.pubmed.model import PubmedCacheConn
+from app.pubmed.sink_db import extract_to_pubmed_cache
 from app.pubmed.source_ftp import PubMedFTP
 from app.pubmed.data_extractor import parse_pubmed_xml_gzipped, get_object_structure
+from config import PUBMED_DB_FILE
 
 
 def print_valid_modes():
@@ -52,19 +54,21 @@ def run_sync():
     with open(example_structure_file, "w") as f:
         f.write(example_structure)
 
-    print()
-    print("Adding authors to DB")
-    db.create_all(bind=PUBMED_DB_BIND)
-    with PubmedCacheSession() as session:
-        extract_to_pubmed_cache(session, example_object)
-
 
 def run_extract():
     """
     Extracts data from the synchronized PubMed data files.
     """
-    db.drop_all(bind=PUBMED_DB_BIND)
-    db.create_all(bind=PUBMED_DB_BIND)
+    # TODO : Loop through all downloaded FTP files
+    example_file = "data/pubmed/example.pubmed22n0001.xml"
+    with open(example_file, "rb") as file:
+        example_object = Entrez.read(file)
+
+    # Start from scratch.
+    os.unlink(PUBMED_DB_FILE)
+    with PubmedCacheConn() as conn:
+        conn.create_all_tables()
+        extract_to_pubmed_cache(conn, example_object)
 
 
 def run_test():
@@ -87,6 +91,12 @@ if __name__ == "__main__":
             print("Expected no arguments to sync", file=sys.stderr)
             sys.exit(1)
         run_sync()
+
+    if mode == "extract":
+        if len(args) != 2:
+            print("Expected no arguments to extract", file=sys.stderr)
+            sys.exit(1)
+        run_extract()
 
     elif mode == "test":
         if len(args) != 2:
