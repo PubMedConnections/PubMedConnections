@@ -1,6 +1,8 @@
 """
 Calculates download analytics on the fly.
 """
+import time
+
 import numpy as np
 
 
@@ -20,12 +22,13 @@ def format_minutes(mins):
 
 
 class DownloadAnalytics:
-    def __init__(self, remaining_file_sizes, no_threads):
+    def __init__(self, remaining_file_sizes, no_threads, *, prediction_size_bias=0.8):
         self.download_times = []
         self.download_sizes = []
         self.remaining_file_sizes = remaining_file_sizes
         self.total_files = len(remaining_file_sizes)
         self.no_threads = no_threads
+        self.prediction_size_bias = prediction_size_bias
 
     def update_remaining(self, remaining_file_sizes):
         """
@@ -40,7 +43,7 @@ class DownloadAnalytics:
         self.download_times.append(download_time)
         self.download_sizes.append(download_size)
 
-    def report(self, *, prefix="", recent=50):
+    def report(self, *, prefix="", verb="Downloaded", recent=50):
         """
         Prints out a report of how the downloads are progressing.
         """
@@ -58,9 +61,11 @@ class DownloadAnalytics:
 
         estimated_remaining_by_files = len(self.remaining_file_sizes) * avg_time_per_file
         estimated_remaining_by_size = mb_remaining / avg_mb_per_sec
-        estimated_remaining = 0.2 * estimated_remaining_by_files + 0.8 * estimated_remaining_by_size
 
-        print(prefix + "Downloaded {} of {} files. Estimated {} remaining ({:.2f} MB/s)\n".format(
-            len(self.download_sizes), self.total_files,
+        bias = self.prediction_size_bias
+        estimated_remaining = (1 - bias) * estimated_remaining_by_files + bias * estimated_remaining_by_size
+
+        print(prefix + "{} {} of {} files. Estimated {} remaining ({:.2f} MB/s)\n".format(
+            verb, len(self.download_sizes), self.total_files,
             format_minutes(estimated_remaining / 60), avg_mb_per_sec
         ))

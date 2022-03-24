@@ -4,7 +4,6 @@ PubMed cache database.
 """
 import sqlite3
 from typing import Iterable
-
 from config import PUBMED_DB_FILE
 
 
@@ -12,32 +11,48 @@ class PubmedCacheConn:
     """
     Can be used to connect to the pubmed cache SQLite database.
     """
-    def __init__(self):
+    def __init__(self, *, safe=True):
         self.conn = None
+        self.safe = safe
 
     def __enter__(self):
         if self.conn is not None:
             raise ValueError("Already created connection!")
 
-        self.conn = sqlite3.connect(PUBMED_DB_FILE, isolation_level="DEFERRED")
+        self.conn = sqlite3.connect(PUBMED_DB_FILE, isolation_level=None)
+        cursor = self.conn.cursor()
 
         # Parameters to optimise for bulk data.
-        self.conn.cursor().execute("PRAGMA cache_size = -524288")  # 512 MB in KBs
-        self.conn.cursor().execute("PRAGMA mmap_size = 536870912")  # 512 MB in bytes
+        # cursor.execute("PRAGMA cache_size = -524288")  # 512 MB in KBs
+        # cursor.execute("PRAGMA mmap_size = 536870912")  # 512 MB in bytes
 
         # Turns off some safety measures to speed up performance.
-        self.conn.cursor().execute("PRAGMA synchronous = ON")
-        self.conn.cursor().execute("PRAGMA journal_mode = WAL")
+        if not self.safe:
+            cursor.execute("PRAGMA synchronous = OFF")
+            cursor.execute("PRAGMA journal_mode = OFF")
+        else:
+            cursor.execute("PRAGMA synchronous = ON")
+            cursor.execute("PRAGMA journal_mode = WAL")
 
+        # We manage the transactions ourselves.
+        cursor.execute("BEGIN TRANSACTION")
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         if self.conn is None:
             return
 
-        self.conn.commit()
+        cursor = self.conn.cursor()
+        cursor.execute("COMMIT")
+
         self.conn.close()
         self.conn = None
+
+    def commit_transaction(self):
+        """ Commits the current transaction and starts a new one. """
+        cursor = self.conn.cursor()
+        cursor.execute("COMMIT")
+        cursor.execute("BEGIN TRANSACTION")
 
     def __getattr__(self, attr):
         """ Delegate accesses to the cursor object. """
@@ -65,19 +80,19 @@ class ArticleAuthor:
     @staticmethod
     def create_table(conn: PubmedCacheConn):
         conn.cursor().execute("""
-            CREATE TABLE IF NOT EXISTS article_authors (
-                article_id INTEGER NOT NULL,
-                author_id INTEGER NOT NULL,
-                PRIMARY KEY (article_id, author_id),
-                FOREIGN KEY (article_id)
-                    REFERENCES articles (article_id)
-                        ON DELETE CASCADE
-                        ON UPDATE NO ACTION,
-                FOREIGN KEY (author_id)
-                    REFERENCES authors (author_id)
-                        ON DELETE CASCADE
-                        ON UPDATE NO ACTION
-            )
+        CREATE TABLE IF NOT EXISTS article_authors (
+            article_id INTEGER NOT NULL,
+            author_id INTEGER NOT NULL,
+            PRIMARY KEY (article_id, author_id),
+            FOREIGN KEY (article_id)
+                REFERENCES articles (article_id)
+                    ON DELETE CASCADE
+                    ON UPDATE NO ACTION,
+            FOREIGN KEY (author_id)
+                REFERENCES authors (author_id)
+                    ON DELETE CASCADE
+                    ON UPDATE NO ACTION
+        )
         """)
 
     @staticmethod
@@ -109,36 +124,36 @@ class Author:
     An author of a PubMed article.
     """
     def __init__(self,
-                 last_name: str = None,
-                 fore_name: str = None,
-                 suffix: str = None,
-                 initials: str = None,
-                 collective_name: str = None,
+                 full_name: str = None,
+                 is_collective: bool = False,
                  *,
                  author_id: int = None):
 
         self.author_id = author_id
-        self.last_name = last_name
-        self.fore_name = fore_name
-        self.suffix = suffix
-        self.initials = initials
-        self.collective_name = collective_name
-        self.full_name = self.generate_full_name()
+        self.full_name = full_name
+        self.is_collective = is_collective
 
-    def generate_full_name(self):
-        if self.collective_name is not None:
-            return self.collective_name
+    @staticmethod
+    def generate_from_name_pieces(last_name: str, fore_name: str, suffix: str,
+                                  initials: str, collective_name: str) -> 'Author':
 
-        last = " {}".format(self.last_name) if self.last_name is not None else ""
-        suffix = " {}".format(self.suffix) if self.suffix is not None else ""
-        if self.fore_name is not None:
-            first = self.fore_name
-        elif self.initials is not None:
-            first = " ".join(self.initials)
+        if collective_name is not None:
+            return Author(collective_name, True)
+
+        last = " {}".format(last_name) if last_name is not None else ""
+        suffix = " {}".format(suffix) if suffix is not None else ""
+        if fore_name is not None:
+            first = fore_name
+        elif initials is not None:
+            first = " ".join(initials)
         else:
             first = ""
 
-        return first + last + suffix
+        full_name = first + last + suffix
+        if len(full_name) == 0:
+            raise ValueError("No name pieces supplied")
+
+        return Author(full_name, False)
 
     @staticmethod
     def create_table(conn: PubmedCacheConn):
@@ -146,11 +161,7 @@ class Author:
             CREATE TABLE IF NOT EXISTS authors (
                 author_id INTEGER PRIMARY KEY NOT NULL,
                 full_name VARCHAR UNIQUE NOT NULL,
-                last_name VARCHAR,
-                fore_name VARCHAR,
-                suffix VARCHAR,
-                initials VARCHAR,
-                collective_name VARCHAR
+                is_collective BOOLEAN NOT NULL
             )
         """)
 
@@ -162,11 +173,10 @@ class Author:
         cursor.execute(
             """
             INSERT OR IGNORE INTO
-                authors (full_name, last_name, fore_name, suffix, initials, collective_name)
-                VALUES (?, ?, ?, ?, ?, ?)
+                authors (full_name, is_collective)
+                VALUES (?, ?)
             """,
-            (self.full_name, self.last_name, self.fore_name,
-             self.suffix, self.initials, self.collective_name)
+            (self.full_name, self.is_collective)
         )
         cursor.execute("SELECT author_id FROM authors WHERE full_name=?", (self.full_name,))
         for author_id, in cursor:
@@ -179,10 +189,10 @@ class Author:
         return self.full_name
 
     def __repr__(self):
-        if self.collective_name is not None:
-            return "<Author Collective {}>".format(self.collective_name)
+        if self.is_collective:
+            return "<Author Collective {}>".format(self.full_name)
 
-        return "<Author {}>".format(str(self))
+        return "<Author {}>".format(self.full_name)
 
 
 class Article:
@@ -190,22 +200,57 @@ class Article:
     A PubMed article.
     """
     def __init__(self,
-                 title: str,
+                 english_title: str = None,
+                 original_title: str = None,
                  *,
                  article_id: int = None):
 
-        if title is None:
-            raise ValueError("title cannot be None")
-
         self.article_id = article_id
-        self.title = title
+        self.english_title = english_title
+        self.original_title = original_title
+        self.title = self.generate_title()
+        self._authors = None
+
+    @property
+    def authors(self) -> list[Author]:
+        """ Returns all the Authors of this article. """
+        if self._authors is None:
+            raise ValueError("The authors of this article have not been read from the database")
+        return self._authors
+
+    @authors.setter
+    def authors(self, authors: list[Author]):
+        """ Sets the Authors of this article. """
+        self._authors = authors
+
+    def generate_title(self):
+        """
+        Generates a title without formatting information.
+        """
+        if self.english_title is None:
+            return self.original_title if self.original_title is not None else "<Unknown Title>"
+
+        result = ""
+        brackets = 0
+        for ch in self.english_title:
+            if ch == "[" or ch == "]":
+                continue
+            if ch == "(":
+                brackets += 1
+            elif ch == ")":
+                brackets -= 1
+            elif brackets <= 0:
+                result += ch
+
+        return result
 
     @staticmethod
     def create_table(conn: PubmedCacheConn):
         conn.cursor().execute("""
             CREATE TABLE IF NOT EXISTS articles (
                 article_id INTEGER PRIMARY KEY NOT NULL,
-                title VARCHAR NOT NULL
+                english_title VARCHAR,
+                original_title VARCHAR
             )
         """)
 
@@ -213,9 +258,9 @@ class Article:
         cursor = conn.cursor()
         cursor.execute(
             """
-                INSERT INTO articles (title)
-                VALUES (?)
-            """, (self.title,)
+                INSERT INTO articles (english_title, original_title)
+                VALUES (?, ?)
+            """, (self.english_title, self.original_title)
         )
         self.article_id = cursor.lastrowid
         return self.article_id
@@ -229,4 +274,4 @@ class Article:
         return prefix + self.title
 
     def __repr__(self):
-        return "<Article {}{}>".format(str(self))
+        return "<Article {}>".format(str(self))

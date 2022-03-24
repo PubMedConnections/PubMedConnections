@@ -2,6 +2,7 @@
 data/
 data-backup/
 config.py
+error.node.txt
 
 # General
 .DS_Store

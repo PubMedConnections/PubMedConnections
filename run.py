@@ -2,15 +2,14 @@ import gzip
 import os.path
 import pathlib
 import sys
-import json
-
-from Bio import Entrez
+import time
 
 from app import app as application
+from app.pubmed.analytics import DownloadAnalytics
 from app.pubmed.model import PubmedCacheConn
-from app.pubmed.sink_db import extract_to_pubmed_cache
+from app.pubmed.sink_db import add_to_pubmed_cache
 from app.pubmed.source_ftp import PubMedFTP
-from app.pubmed.data_extractor import parse_pubmed_xml_gzipped, get_object_structure
+from app.pubmed.source_files import list_downloaded_pubmed_files, read_all_pubmed_files
 from config import PUBMED_DB_FILE
 
 
@@ -20,12 +19,12 @@ def print_valid_modes():
     print(" - test: Run the test Flask webserver", file=sys.stderr)
 
 
-def run_sync():
+def run_sync(*, target_directory="./data"):
     """
     Synchronises the PubMed dataset from FTP.
     """
     with PubMedFTP() as ftp:
-        targets = ftp.sync("./data")
+        targets = ftp.sync(target_directory)
         print()
 
     # Write an example file for us to look at the available data.
@@ -35,40 +34,59 @@ def run_sync():
     print("PubMedSync: Reading example file from", example_target)
     with gzip.open(targets[0], "rb") as file:
         example_file_contents = file.read()
-    example_object = parse_pubmed_xml_gzipped(targets[0])
 
     example_filename = example_target_parts[-2] + example_target_parts[-1]
     example_filename = example_filename[:example_filename.index(".")]
-    example_file_prefix = "./data/pubmed/example."
+    example_file_prefix = os.path.join(target_directory, "pubmed", "example.")
     example_file_xml = example_file_prefix + example_filename + ".xml"
 
     print("PubMedSync: Writing example file to", example_file_xml)
     with open(example_file_xml, "w") as f:
         f.write(example_file_contents.decode("utf8"))
 
-    # Write out a file containing the structure of the example file.
-    example_structure_file = example_file_prefix + example_filename + ".structure.txt"
-    example_structure = get_object_structure(example_object)
 
-    print("PubMedSync: Writing structure of example file to", example_structure_file)
-    with open(example_structure_file, "w") as f:
-        f.write(example_structure)
-
-
-def run_extract():
+def run_extract(*, target_directory="./data", report_every=60, commit_every=10):
     """
     Extracts data from the synchronized PubMed data files.
     """
-    # TODO : Loop through all downloaded FTP files
-    example_file = "data/pubmed/example.pubmed22n0001.xml"
-    with open(example_file, "rb") as file:
-        example_object = Entrez.read(file)
+    pubmed_files = list_downloaded_pubmed_files(target_directory)
+    pubmed_file_sizes = []
+    for pubmed_file in pubmed_files:
+        pubmed_file_sizes.append(os.path.getsize(pubmed_file))
+
+    print("PubMedExtract: Extracting data from {} PubMed files".format(len(pubmed_files)))
+    print()
+
+    file_queue = read_all_pubmed_files(target_directory, pubmed_files)
 
     # Start from scratch.
     os.unlink(PUBMED_DB_FILE)
-    with PubmedCacheConn() as conn:
+
+    with PubmedCacheConn(safe=False) as conn:
         conn.create_all_tables()
-        extract_to_pubmed_cache(conn, example_object)
+
+        analytics = DownloadAnalytics(pubmed_file_sizes, no_threads=1, prediction_size_bias=0.2)
+        last_report_time = time.time()
+        while True:
+            start = time.time()
+            file = file_queue.get()
+            if file is None:
+                break
+
+            add_to_pubmed_cache(conn, file.articles)
+
+            # If the transactions get too big, then SQLite slows to a crawl.
+            if (file.index + 1) % commit_every == 0:
+                conn.commit_transaction()
+
+            duration = time.time() - start
+
+            analytics.update(duration, pubmed_file_sizes[file.index])
+            analytics.update_remaining(pubmed_file_sizes[file.index + 1:])
+
+            if time.time() - last_report_time >= report_every:
+                last_report_time = time.time()
+                analytics.report(prefix="PubMedExtract: ", verb="Processed")
 
 
 def run_test():
