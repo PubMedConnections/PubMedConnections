@@ -1,8 +1,8 @@
-<img src="/app/static/logo-with-name.png" height=160 />
+<img src="/app/static/logo-with-name.png" height=180 />
 
-PubMed Connections (real name pending...) is a project
-to analyse the relationships between authors in the
-PubMed database in near real-time.
+PubMed Connections is a web application that facilitates
+the analysis of the relationships between authors in the
+PubMed database.
 
 ## Config
 
