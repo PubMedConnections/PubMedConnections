@@ -9,6 +9,8 @@ import queue
 import threading
 import time
 import urllib.request
+from typing import Optional
+
 from lxml import etree
 
 from app.pubmed.extract_xml import extract_articles
@@ -42,30 +44,17 @@ def list_downloaded_pubmed_files(target_directory: str) -> list[str]:
     ])
 
 
-class ReadPubMedEnd:
-    """
-    Marks the end of reading PubMed data files.
-    """
+class ReadPubMedItem:
+    """ The contents of a PubMed file that has been read. """
 
-    def __cmp__(self, other):
-        return False
-
-    def __gt__(self, other):
-        return True
-
-
-class ReadPubMedFile:
-    """
-    The contents of a PubMed file that has been read.
-    """
-    def __init__(self, index: int, articles: list[Article]):
+    def __init__(self, index: int, articles: Optional[list[Article]]):
         self.index = index
         self.articles = articles
 
     def __eq__(self, other):
         if type(other) != type(self):
             return False
-        return other is not None and self.index == other.index
+        return self.index == other.index
 
     def __gt__(self, other):
         if type(other) != type(self):
@@ -78,12 +67,12 @@ def read_all_pubmed_files(
         file_paths: list[str],
         *,
         read_thread_count=4
-) -> queue.PriorityQueue[ReadPubMedFile]:
+) -> queue.PriorityQueue[ReadPubMedItem]:
     """
     Reads the contents of all the downloaded PubMed files and places
     them into the returned priority queue in the same order as file_paths.
-    Once all files are read, None will be added as the final element
-    of the queue.
+    Once all files are read, a file with a contents of None will be
+    returned from the queue.
     """
     input_queue = queue.SimpleQueue()
     for index, file in enumerate(file_paths):
@@ -105,7 +94,7 @@ def read_all_pubmed_files(
                 break
 
             articles = parse_pubmed_xml(target_directory, process_file)
-            output = ReadPubMedFile(process_index, articles)
+            output = ReadPubMedItem(process_index, articles)
             with unordered_queue_lock:
                 unordered_output_queue.put(output)
                 unordered_output_indices.add(process_index)
@@ -130,7 +119,7 @@ def read_all_pubmed_files(
                 # Sleep for 10 milliseconds.
                 time.sleep(0.01)
 
-        ordered_output_queue.put(ReadPubMedEnd())
+        ordered_output_queue.put(ReadPubMedItem(next_index, None))
 
     order_thread = threading.Thread(name="order", target=order_queue, daemon=True)
     threads.append(order_thread)

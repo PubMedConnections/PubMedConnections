@@ -10,7 +10,8 @@ from app.pubmed.model import PubmedCacheConn
 from app.pubmed.sink_db import add_to_pubmed_cache
 from app.pubmed.source_ftp import PubMedFTP
 from app.pubmed.source_files import list_downloaded_pubmed_files, read_all_pubmed_files
-from config import PUBMED_DB_FILE
+from app.utils import format_minutes
+from config import PUBMED_DB_FILE, NEO4J_DATABASE
 
 
 def print_valid_modes():
@@ -49,6 +50,8 @@ def run_extract(*, target_directory="./data", report_every=60, commit_every=10):
     """
     Extracts data from the synchronized PubMed data files.
     """
+    overall_start = time.time()
+
     pubmed_files = list_downloaded_pubmed_files(target_directory)
     pubmed_file_sizes = []
     for pubmed_file in pubmed_files:
@@ -59,19 +62,20 @@ def run_extract(*, target_directory="./data", report_every=60, commit_every=10):
 
     file_queue = read_all_pubmed_files(target_directory, pubmed_files)
 
-    # Start from scratch.
-    os.unlink(PUBMED_DB_FILE)
-
-    with PubmedCacheConn(safe=False) as conn:
-        conn.create_all_tables()
-
-        analytics = DownloadAnalytics(pubmed_file_sizes, no_threads=1, prediction_size_bias=0.2)
+    db_name = "{}.extract".format(NEO4J_DATABASE)
+    with PubmedCacheConn(database=db_name, reset_on_connect=True) as conn:
+        analytics = DownloadAnalytics(
+            pubmed_file_sizes,
+            no_threads=1,
+            prediction_size_bias=0.4,
+            history_for_prediction=150
+        )
         last_report_time = time.time()
         while True:
             start = time.time()
             file = file_queue.get()
-            if file is None:
-                break
+            if file.articles is None:
+                break  # Marks that there are no more files.
 
             add_to_pubmed_cache(conn, file.articles)
 
@@ -87,6 +91,11 @@ def run_extract(*, target_directory="./data", report_every=60, commit_every=10):
             if time.time() - last_report_time >= report_every:
                 last_report_time = time.time()
                 analytics.report(prefix="PubMedExtract: ", verb="Processed")
+
+    overall_duration = time.time() - overall_start
+    print("PubMedExtract: Completed extraction of {} data files in {}".format(
+        len(pubmed_files), format_minutes(overall_duration / 60)
+    ))
 
 
 def run_test():

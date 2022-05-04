@@ -4,3 +4,7 @@ dependencies:
   - numpy
   - scikit-learn
   - lxml
+  - neo4j-python-driver
+  - pip
+  - pip:
+    - atomics
