@@ -11,7 +11,7 @@ from app.pubmed.sink_db import add_to_pubmed_cache
 from app.pubmed.source_ftp import PubMedFTP
 from app.pubmed.source_files import list_downloaded_pubmed_files, read_all_pubmed_files
 from app.utils import format_minutes
-from config import PUBMED_DB_FILE, NEO4J_DATABASE
+from config import PUBMED_DB_FILE
 
 
 def print_valid_modes():
@@ -62,8 +62,13 @@ def run_extract(*, target_directory="./data", report_every=60, commit_every=10):
 
     file_queue = read_all_pubmed_files(target_directory, pubmed_files)
 
-    db_name = "{}.extract".format(NEO4J_DATABASE)
-    with PubmedCacheConn(database=db_name, reset_on_connect=True) as conn:
+    # Start from scratch.
+    if os.path.exists(PUBMED_DB_FILE):
+        os.unlink(PUBMED_DB_FILE)
+
+    with PubmedCacheConn(safe=False) as conn:
+        conn.create_all_tables()
+
         analytics = DownloadAnalytics(
             pubmed_file_sizes,
             no_threads=1,
