@@ -1,5 +1,5 @@
 """
-This file provides functions to fetch metadata from the PubMed API.
+This file provides functions to fetch metadata from the PubMed Entrez API.
 """
 import sys
 import threading

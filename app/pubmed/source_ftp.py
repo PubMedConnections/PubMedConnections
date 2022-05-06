@@ -9,7 +9,7 @@ import time
 from ftplib import FTP
 from pathlib import Path
 from typing import Final
-from app.pubmed.analytics import DownloadAnalytics
+from app.pubmed.progress_analytics import DownloadAnalytics
 from app.pubmed.download import DownloadTempFile
 from config import PUBMED_ACCESS_EMAIL, PUBMED_FTP_DEBUG
 

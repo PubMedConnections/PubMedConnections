@@ -5,9 +5,8 @@ import sys
 import time
 
 from app import app as application
-from app.pubmed.analytics import DownloadAnalytics
-from app.pubmed.model import PubmedCacheConn
-from app.pubmed.sink_db import add_to_pubmed_cache
+from app.pubmed.progress_analytics import DownloadAnalytics
+from app.pubmed.sink_db import PubmedCacheConn
 from app.pubmed.source_ftp import PubMedFTP
 from app.pubmed.source_files import list_downloaded_pubmed_files, read_all_pubmed_files
 from app.utils import format_minutes
@@ -46,7 +45,7 @@ def run_sync(*, target_directory="./data"):
         f.write(example_file_contents.decode("utf8"))
 
 
-def run_extract(*, target_directory="./data", report_every=60, commit_every=10):
+def run_extract(*, target_directory="./data", report_every=60):
     """
     Extracts data from the synchronized PubMed data files.
     """
@@ -77,7 +76,7 @@ def run_extract(*, target_directory="./data", report_every=60, commit_every=10):
             if file.articles is None:
                 break  # Marks that there are no more files.
 
-            add_to_pubmed_cache(conn, file.articles)
+            conn.insert_article_batch(file.articles)
 
             duration = time.time() - start
 
