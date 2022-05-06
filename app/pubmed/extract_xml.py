@@ -3,7 +3,7 @@ Contains functions to extract PubMed data from XML files.
 """
 import traceback
 from lxml import etree
-from app.pubmed.model import PubmedCacheConn, Author, Article, ArticleAuthor
+from app.pubmed.model import Author, Article
 
 
 def extract_single_node_by_tag(node, tag: str):
@@ -23,7 +23,7 @@ def extract_article(article_node) -> Article:
         elif tag == "VernacularTitle":
             original_title = node.text
 
-    return Article(
+    return Article.generate(
         english_title,
         original_title
     )

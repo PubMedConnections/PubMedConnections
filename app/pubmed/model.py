@@ -41,6 +41,7 @@ class PubmedCacheConn:
         # Create a connection to the database to create its constraints.
         with self.new_session() as session:
             Author.create_constraints(session)
+            Article.create_constraints(session)
 
         return self
 
@@ -143,16 +144,42 @@ class Article:
     id_counter: Final[IdCounter] = IdCounter()
 
     def __init__(self,
-                 english_title: str = None,
-                 original_title: str = None,
+                 title: str = None,
                  *,
                  article_id: int = None):
 
         self.article_id = article_id
-        self.english_title = english_title
-        self.original_title = original_title
-        self.title = self.generate_title()
+        self.title = title
         self._authors = None
+
+    @staticmethod
+    def generate(english_title: str, original_title: str):
+        """
+        Generates an article entry given its information from PubMed.
+        """
+        return Article(Article.generate_title(english_title, original_title))
+
+    @staticmethod
+    def generate_title(english_title: str, original_title: str):
+        """
+        Generates a title without formatting information.
+        """
+        if english_title is None:
+            return original_title if original_title is not None else "<Unknown Title>"
+
+        result = ""
+        brackets = 0
+        for ch in english_title:
+            if ch == "[" or ch == "]":
+                continue
+            if ch == "(":
+                brackets += 1
+            elif ch == ")":
+                brackets -= 1
+            elif brackets <= 0:
+                result += ch
+
+        return result
 
     @property
     def authors(self) -> list[Author]:
@@ -166,37 +193,54 @@ class Article:
         """ Sets the Authors of this article. """
         self._authors = authors
 
-    def generate_title(self):
-        """
-        Generates a title without formatting information.
-        """
-        if self.english_title is None:
-            return self.original_title if self.original_title is not None else "<Unknown Title>"
+    @staticmethod
+    def create_constraints(session: neo4j.Session):
+        # Uniqueness constraints implicitly create an index for the constraint as well.
+        session.run(
+            "CREATE CONSTRAINT unique_article_ids IF NOT EXISTS "
+            "FOR (a:Article) REQUIRE a.id IS UNIQUE"
+        ).consume()
 
-        result = ""
-        brackets = 0
-        for ch in self.english_title:
-            if ch == "[" or ch == "]":
-                continue
-            if ch == "(":
-                brackets += 1
-            elif ch == ")":
-                brackets -= 1
-            elif brackets <= 0:
-                result += ch
+    @staticmethod
+    def insert_many(tx: neo4j.Transaction, articles: list['Article']):
+        articles_data = []
+        for article in articles:
+            authors_data = []
+            for author in article.authors:
+                authors_data.append({
+                    "id": Author.id_counter.next(),
+                    "full_name": author.full_name,
+                    "is_collective": author.is_collective
+                })
 
-        return result
-
-    def insert(self, conn: PubmedCacheConn) -> int:
-        cursor = conn.cursor()
-        cursor.execute(
+            articles_data.append({
+                "id": Article.id_counter.next(),
+                "title": article.title,
+                "authors": authors_data
+            })
+        tx.run(
             """
-                INSERT INTO articles (english_title, original_title)
-                VALUES (?, ?)
-            """, (self.english_title, self.original_title)
-        )
-        self.article_id = cursor.lastrowid
-        return self.article_id
+            UNWIND $articles AS article
+                CALL {
+                    WITH article
+                    CREATE (a:Article {id: article.id, title: article.title})
+                    RETURN a
+                }
+
+            UNWIND article.authors AS author
+                CALL {
+                    WITH author
+                    MERGE (b:Author {full_name: author.full_name})
+                    ON CREATE
+                        SET
+                            b.id = author.id,
+                            b.is_collective = author.is_collective
+                    RETURN b
+                }
+                CREATE (b)-[:AUTHOR_OF]->(a)
+            """,
+            articles=articles_data
+        ).consume()
 
     def __str__(self):
         if self.article_id is not None:
@@ -208,35 +252,3 @@ class Article:
 
     def __repr__(self):
         return "<Article {}>".format(str(self))
-
-
-class ArticleAuthor:
-    """
-    Relates authors to articles.
-    """
-    def __init__(self, article_id: int, author_id: int):
-        self.article_id = article_id
-        self.author_id = author_id
-
-    @staticmethod
-    def select_by_article(conn: PubmedCacheConn, article_id: int) -> list['ArticleAuthor']:
-        cursor = conn.cursor()
-        cursor.execute("SELECT author_id FROM article_authors WHERE article_id=?", (article_id,))
-        for row in cursor:
-            yield ArticleAuthor(article_id, row[0])
-
-    @staticmethod
-    def select_by_author(conn: PubmedCacheConn, author_id: int) -> list['ArticleAuthor']:
-        cursor = conn.cursor()
-        cursor.execute("SELECT article_id FROM article_authors WHERE author_id=?", (author_id,))
-        for row in cursor:
-            yield ArticleAuthor(row[0], author_id)
-
-    @staticmethod
-    def insert_many(conn: PubmedCacheConn, article_and_author_id_pairs: Iterable[tuple[int, int]]):
-        conn.cursor().executemany(
-            """
-            INSERT INTO article_authors (article_id, author_id)
-            VALUES (?, ?)
-            """, article_and_author_id_pairs
-        )
