@@ -5,7 +5,7 @@ It outlines how the data can be extracted from the XML, as well as how to then c
 
 ## Features to extract from XML
 Article ID
-* `<ArticleID IdType=”PubMed”>` value
+* `<ArticleID IdType='PubMed'>` value
 
 Journal title
 * `Article` -> `Journal` -> `Title`
@@ -30,7 +30,7 @@ All MeshHeadings
 * Record all `DescriptorName` values under `<MeshHeading>`
 
 Citations to other papers
-* based on `<ArticleID IdType=”PubMed”>` value, `ReferenceList` -> `Reference` -> `ArticleIdList` -> `ArticleId`
+* based on `<ArticleID IdType='PubMed'>` value, `ReferenceList` -> `Reference` -> `ArticleIdList` -> `ArticleId`
 
 ## Neo4J structure
 
@@ -66,7 +66,7 @@ Citations to other papers
 * `REFERENCES`: `Article` --> `Article`
 
 
-### Cypher query examples
+### Cypher creation query examples
 
 #### Creating nodes
 
@@ -74,14 +74,14 @@ Articles
 ```
 CREATE (article7:Article {
 ID: 7,
-articleTitle: “Maturation of the adrenal medulla--IV. Effects of morphine.”,
-publicationDate: date({year: 1975, month: 8, day: 15}),
+articleTitle: 'Maturation of the adrenal medulla--IV. Effects of morphine.',
+publicationDate: date({year: 1975, month: 8, day: 15})
 })
 
 CREATE (article999:Article {
 ID: 999,
-articleTitle: “Referenced Article”
-publicationDate: date({year: 1975, month: 1, day: 1}),
+articleTitle: 'Referenced Article',
+publicationDate: date({year: 1975, month: 1, day: 1})
 })
 ```
 
@@ -89,13 +89,13 @@ Authors
 ```
 CREATE (author1:Author {
 ID: 1,
-name: “TR Anderson”,
+name: 'TR Anderson'
 })
 
 
 CREATE (author2:Author {
 ID: 2,
-name: “TA Slotkin”,
+name: 'TA Slotkin'
 })
 ```
 
@@ -103,7 +103,7 @@ Journals
 ```
 CREATE (journal1:Journal {
 ID: 1,
-name: “Biochemical pharmacology”,
+name: 'Biochemical pharmacology'
 })
 ```
 
@@ -111,15 +111,15 @@ MeshHeadings
 ```
 CREATE (heading1:MeshHeading {
 ID: 1,
-name: “Adrenal Medulla”,
+name: 'Adrenal Medulla'
 })
 CREATE (heading2:MeshHeading {
 ID: 2,
-Name: “Aging”,
+name: 'Aging'
 })
-CREATE (heading2:MeshHeading {
-ID: 2,
-name: “Animals”,
+CREATE (heading3:MeshHeading {
+ID: 3,
+name: 'Animals'
 })
 ```
 
@@ -127,7 +127,7 @@ Institutions
 ```
 CREATE (institution1:Institution {
 ID: 1,
-name: “Example University”,
+name: 'Example University'
 })
 ```
 
@@ -146,9 +146,9 @@ CREATE (author2)-[:AUTHOR_OF]->(article7)
 
 MESH Heading categorisation
 ```
-CREATE (article7)-[:CATEGORISED_BY-{qualifiers: [“enzymology”, “growth”, “metabolism”]}]->(heading1)
-CREATE (article7)-[:CATEGORISED_BY-{qualifiers: []}]->(heading2)
-CREATE (article7)-[:CATEGORISED_BY-{qualifiers: []}]->(heading3)
+CREATE (article7)-[:CATEGORISED_BY {qualifiers: ['enzymology', 'growth', 'metabolism']}]->(heading1)
+CREATE (article7)-[:CATEGORISED_BY {qualifiers: []}]->(heading2)
+CREATE (article7)-[:CATEGORISED_BY {qualifiers: []}]->(heading3)
 ```
 
 Author affiliation
@@ -159,4 +159,27 @@ CREATE (author1)-[:AFFILIATED_WITH]->(institution1)
 Article reference
 ```
 CREATE (article7)-[:REFERENCES]->(article999)
+```
+
+### Indexes
+```
+CREATE INDEX mesh_heading_index FOR (h:MeshHeading) ON (h.name)
+
+CREATE INDEX institution_index FOR (i:Institution) ON (i.name)
+
+CREATE INDEX publication_date_index FOR (a:Article) ON (a.publicationDate)
+```
+
+### Unique constraints
+```
+CREATE CONSTRAINT unique_article_id FOR (article:Article) REQUIRE article.ID IS UNIQUE
+
+CREATE CONSTRAINT unique_author_id FOR (author:Author) REQUIRE author.ID IS UNIQUE
+
+CREATE CONSTRAINT unique_journal_id FOR (journal:Journal) REQUIRE journal.ID IS UNIQUE
+
+CREATE CONSTRAINT unique_mesh_id FOR (meshHeading:MeshHeading) REQUIRE meshHeading.ID IS UNIQUE
+
+CREATE CONSTRAINT unique_institution_id FOR (institution:Institution) REQUIRE institution.ID IS UNIQUE
+
 ```
