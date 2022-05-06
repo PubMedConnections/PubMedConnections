@@ -2,127 +2,65 @@
 This package contains the database models for the
 PubMed cache database.
 """
-import sqlite3
-from typing import Iterable
-from config import PUBMED_DB_FILE
+import atomics
+import neo4j
+from typing import Iterable, Optional, Final
+from config import NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD, NEO4J_DATABASE
+
+
+class IdCounter:
+    """ Increments IDs to use for database nodes. """
+    id: atomics.atomic = atomics.atomic(width=4, atype=atomics.INT)
+
+    def next(self) -> int:
+        return self.id.fetch_inc()
 
 
 class PubmedCacheConn:
     """
-    Can be used to connect to the pubmed cache SQLite database.
+    Can be used to connect to the pubmed cache Neo4J database.
     """
-    def __init__(self, *, safe=True):
-        self.conn = None
-        self.safe = safe
+    def __init__(self, database: Optional[str] = None, *, reset_on_connect: bool = False):
+        self.database: str = database if database is not None else NEO4J_DATABASE
+        self.driver: Optional[neo4j.Driver] = None
+        self.reset_on_connect: bool = reset_on_connect
 
     def __enter__(self):
-        if self.conn is not None:
+        if self.driver is not None:
             raise ValueError("Already created connection!")
 
-        self.conn = sqlite3.connect(PUBMED_DB_FILE, isolation_level=None)
-        cursor = self.conn.cursor()
+        self.driver = neo4j.GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
 
-        # Parameters to optimise for bulk data.
-        # cursor.execute("PRAGMA cache_size = -524288")  # 512 MB in KBs
-        # cursor.execute("PRAGMA mmap_size = 536870912")  # 512 MB in bytes
+        # Create a default connection first to create the database.
+        with self.driver.session() as session:
+            if self.reset_on_connect:
+                session.run("CREATE OR REPLACE DATABASE {}".format(self.database)).consume()
+            else:
+                session.run("CREATE DATABASE {} IF NOT EXISTS".format(self.database)).consume()
 
-        # Turns off some safety measures to speed up performance.
-        if not self.safe:
-            cursor.execute("PRAGMA synchronous = OFF")
-            cursor.execute("PRAGMA journal_mode = OFF")
-        else:
-            cursor.execute("PRAGMA synchronous = ON")
-            cursor.execute("PRAGMA journal_mode = WAL")
+        # Create a connection to the database to create its constraints.
+        with self.new_session() as session:
+            Author.create_constraints(session)
 
-        # We manage the transactions ourselves.
-        cursor.execute("BEGIN TRANSACTION")
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if self.conn is None:
+        if self.driver is None:
             return
 
-        cursor = self.conn.cursor()
-        cursor.execute("COMMIT")
+        self.driver.close()
+        self.driver = None
 
-        self.conn.close()
-        self.conn = None
-
-    def commit_transaction(self):
-        """ Commits the current transaction and starts a new one. """
-        cursor = self.conn.cursor()
-        cursor.execute("COMMIT")
-        cursor.execute("BEGIN TRANSACTION")
-
-    def __getattr__(self, attr):
-        """ Delegate accesses to the cursor object. """
-        return getattr(self.conn, attr)
-
-    def check_connected(self):
-        if self.conn is None:
-            raise ValueError("This connection has not been opened!")
-
-    def create_all_tables(self):
-        self.check_connected()
-        Article.create_table(self)
-        Author.create_table(self)
-        ArticleAuthor.create_table(self)
-
-
-class ArticleAuthor:
-    """
-    Relates authors to articles.
-    """
-    def __init__(self, article_id: int, author_id: int):
-        self.article_id = article_id
-        self.author_id = author_id
-
-    @staticmethod
-    def create_table(conn: PubmedCacheConn):
-        conn.cursor().execute("""
-        CREATE TABLE IF NOT EXISTS article_authors (
-            article_id INTEGER NOT NULL,
-            author_id INTEGER NOT NULL,
-            PRIMARY KEY (article_id, author_id),
-            FOREIGN KEY (article_id)
-                REFERENCES articles (article_id)
-                    ON DELETE CASCADE
-                    ON UPDATE NO ACTION,
-            FOREIGN KEY (author_id)
-                REFERENCES authors (author_id)
-                    ON DELETE CASCADE
-                    ON UPDATE NO ACTION
-        )
-        """)
-
-    @staticmethod
-    def select_by_article(conn: PubmedCacheConn, article_id: int) -> list['ArticleAuthor']:
-        cursor = conn.cursor()
-        cursor.execute("SELECT author_id FROM article_authors WHERE article_id=?", (article_id,))
-        for row in cursor:
-            yield ArticleAuthor(article_id, row[0])
-
-    @staticmethod
-    def select_by_author(conn: PubmedCacheConn, author_id: int) -> list['ArticleAuthor']:
-        cursor = conn.cursor()
-        cursor.execute("SELECT article_id FROM article_authors WHERE author_id=?", (author_id,))
-        for row in cursor:
-            yield ArticleAuthor(row[0], author_id)
-
-    @staticmethod
-    def insert_many(conn: PubmedCacheConn, article_and_author_id_pairs: Iterable[tuple[int, int]]):
-        conn.cursor().executemany(
-            """
-            INSERT INTO article_authors (article_id, author_id)
-            VALUES (?, ?)
-            """, article_and_author_id_pairs
-        )
+    def new_session(self) -> neo4j.Session:
+        return self.driver.session(database=self.database)
 
 
 class Author:
     """
     An author of a PubMed article.
     """
+    id_counter: Final[IdCounter] = IdCounter()
+
     def __init__(self,
                  full_name: str = None,
                  is_collective: bool = False,
@@ -156,34 +94,37 @@ class Author:
         return Author(full_name, False)
 
     @staticmethod
-    def create_table(conn: PubmedCacheConn):
-        conn.cursor().execute("""
-            CREATE TABLE IF NOT EXISTS authors (
-                author_id INTEGER PRIMARY KEY NOT NULL,
-                full_name VARCHAR UNIQUE NOT NULL,
-                is_collective BOOLEAN NOT NULL
-            )
-        """)
+    def create_constraints(session: neo4j.Session):
+        # Uniqueness constraints implicitly create an index for the constraint as well.
+        session.run(
+            "CREATE CONSTRAINT unique_author_names IF NOT EXISTS "
+            "FOR (a:Author) REQUIRE a.full_name IS UNIQUE"
+        ).consume()
+        session.run(
+            "CREATE CONSTRAINT unique_author_ids IF NOT EXISTS "
+            "FOR (a:Author) REQUIRE a.id IS UNIQUE"
+        ).consume()
 
-    def insert(self, conn: PubmedCacheConn) -> int:
-        cursor = conn.cursor()
-
-        # This query is made to add more information to the author if possible
-        # when a duplicate author is found.
-        cursor.execute(
+    @staticmethod
+    def insert_many(tx: neo4j.Transaction, authors: list['Author']):
+        rows = []
+        for author in authors:
+            rows.append({
+                "id": Author.id_counter.next(),
+                "full_name": author.full_name,
+                "is_collective": author.is_collective
+            })
+        tx.run(
             """
-            INSERT OR IGNORE INTO
-                authors (full_name, is_collective)
-                VALUES (?, ?)
+            UNWIND $rows AS row
+            MERGE (a:Author {full_name: row.full_name})
+            ON CREATE
+                SET
+                    a.id = row.id,
+                    a.is_collective = row.is_collective
             """,
-            (self.full_name, self.is_collective)
-        )
-        cursor.execute("SELECT author_id FROM authors WHERE full_name=?", (self.full_name,))
-        for author_id, in cursor:
-            self.author_id = author_id
-            return author_id
-
-        raise ValueError("Unable to find author_id")
+            rows=rows
+        ).consume()
 
     def __str__(self):
         return self.full_name
@@ -199,6 +140,8 @@ class Article:
     """
     A PubMed article.
     """
+    id_counter: Final[IdCounter] = IdCounter()
+
     def __init__(self,
                  english_title: str = None,
                  original_title: str = None,
@@ -244,16 +187,6 @@ class Article:
 
         return result
 
-    @staticmethod
-    def create_table(conn: PubmedCacheConn):
-        conn.cursor().execute("""
-            CREATE TABLE IF NOT EXISTS articles (
-                article_id INTEGER PRIMARY KEY NOT NULL,
-                english_title VARCHAR,
-                original_title VARCHAR
-            )
-        """)
-
     def insert(self, conn: PubmedCacheConn) -> int:
         cursor = conn.cursor()
         cursor.execute(
@@ -275,3 +208,35 @@ class Article:
 
     def __repr__(self):
         return "<Article {}>".format(str(self))
+
+
+class ArticleAuthor:
+    """
+    Relates authors to articles.
+    """
+    def __init__(self, article_id: int, author_id: int):
+        self.article_id = article_id
+        self.author_id = author_id
+
+    @staticmethod
+    def select_by_article(conn: PubmedCacheConn, article_id: int) -> list['ArticleAuthor']:
+        cursor = conn.cursor()
+        cursor.execute("SELECT author_id FROM article_authors WHERE article_id=?", (article_id,))
+        for row in cursor:
+            yield ArticleAuthor(article_id, row[0])
+
+    @staticmethod
+    def select_by_author(conn: PubmedCacheConn, author_id: int) -> list['ArticleAuthor']:
+        cursor = conn.cursor()
+        cursor.execute("SELECT article_id FROM article_authors WHERE author_id=?", (author_id,))
+        for row in cursor:
+            yield ArticleAuthor(row[0], author_id)
+
+    @staticmethod
+    def insert_many(conn: PubmedCacheConn, article_and_author_id_pairs: Iterable[tuple[int, int]]):
+        conn.cursor().executemany(
+            """
+            INSERT INTO article_authors (article_id, author_id)
+            VALUES (?, ?)
+            """, article_and_author_id_pairs
+        )
