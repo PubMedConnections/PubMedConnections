@@ -46,7 +46,7 @@ def run_sync(*, target_directory="./data"):
         f.write(example_file_contents.decode("utf8"))
 
 
-def run_extract(*, target_directory="./data", report_every=0, commit_every=10):
+def run_extract(*, target_directory="./data", report_every=60, commit_every=10):
     """
     Extracts data from the synchronized PubMed data files.
     """

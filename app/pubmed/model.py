@@ -106,27 +106,6 @@ class Author:
             "FOR (a:Author) REQUIRE a.id IS UNIQUE"
         ).consume()
 
-    @staticmethod
-    def insert_many(tx: neo4j.Transaction, authors: list['Author']):
-        rows = []
-        for author in authors:
-            rows.append({
-                "id": Author.id_counter.next(),
-                "full_name": author.full_name,
-                "is_collective": author.is_collective
-            })
-        tx.run(
-            """
-            UNWIND $rows AS row
-            MERGE (a:Author {full_name: row.full_name})
-            ON CREATE
-                SET
-                    a.id = row.id,
-                    a.is_collective = row.is_collective
-            """,
-            rows=rows
-        ).consume()
-
     def __str__(self):
         return self.full_name
 
