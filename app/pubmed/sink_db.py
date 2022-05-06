@@ -15,11 +15,7 @@ from app.pubmed.model import PubmedCacheConn, Article, Author
 
 def write_article_batch_to_neo4j(tx: neo4j.Transaction, articles: list[Article]):
     """ Writes the given article to the Neo4J transaction. """
-    authors = []
-    for article in articles:
-        authors.extend(article.authors)
-
-    Author.insert_many(tx, authors)
+    Article.insert_many(tx, articles)
 
 
 def add_to_pubmed_cache(conn: PubmedCacheConn, articles: list[Article]):
