@@ -38,16 +38,16 @@ Citations to other papers
 
 `Article`
 * ID
-* articleTitle
-* publicationDate
+* title
 
 `Author`
 * ID
-* name
+* full_name
 
 `Journal`
 * ID
 * name
+* publication_date
 
 `MeshHeading`
 * ID
@@ -74,14 +74,12 @@ Articles
 ```
 CREATE (article7:Article {
 ID: 7,
-articleTitle: 'Maturation of the adrenal medulla--IV. Effects of morphine.',
-publicationDate: date({year: 1975, month: 8, day: 15})
+title: 'Maturation of the adrenal medulla--IV. Effects of morphine.',
 })
 
 CREATE (article999:Article {
 ID: 999,
-articleTitle: 'Referenced Article',
-publicationDate: date({year: 1975, month: 1, day: 1})
+title: 'Referenced Article',
 })
 ```
 
@@ -89,13 +87,13 @@ Authors
 ```
 CREATE (author1:Author {
 ID: 1,
-name: 'TR Anderson'
+full_name: 'TR Anderson'
 })
 
 
 CREATE (author2:Author {
 ID: 2,
-name: 'TA Slotkin'
+full_name: 'TA Slotkin'
 })
 ```
 
@@ -103,7 +101,8 @@ Journals
 ```
 CREATE (journal1:Journal {
 ID: 1,
-name: 'Biochemical pharmacology'
+name: 'Biochemical pharmacology',
+publication_date: date({year: 1975, month: 8, day: 15})
 })
 ```
 
