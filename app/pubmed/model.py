@@ -23,7 +23,6 @@ class PubmedCacheConn:
     def __init__(self, database: Optional[str] = None, *, reset_on_connect: bool = False):
         self.database: str = database if database is not None else NEO4J_DATABASE
         self.driver: Optional[neo4j.Driver] = None
-        self.conn: Optional[neo4j.Session] = None
         self.reset_on_connect: bool = reset_on_connect
 
     def __enter__(self):
@@ -33,37 +32,27 @@ class PubmedCacheConn:
         self.driver = neo4j.GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
 
         # Create a default connection first to create the database.
-        with self.driver.session() as conn:
+        with self.driver.session() as session:
             if self.reset_on_connect:
-                conn.run("CREATE OR REPLACE DATABASE {}".format(self.database))
+                session.run("CREATE OR REPLACE DATABASE {}".format(self.database)).consume()
             else:
-                conn.run("CREATE DATABASE {} IF NOT EXISTS".format(self.database))
+                session.run("CREATE DATABASE {} IF NOT EXISTS".format(self.database)).consume()
 
-            conn.run("CREATE INDEX author_names IF NOT EXISTS FOR (a:Author) ON (a.full_name)")
+        # Create a connection to the database to create its constraints.
+        with self.new_session() as session:
+            Author.create_constraints(session)
 
-        # Connect to the database.
-        self.conn = self.driver.session(database=self.database)
-        self.conn.__enter__()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         if self.driver is None:
             return
 
-        try:
-            self.conn.__exit__(exc_type, exc_val, exc_tb)
-            self.conn = None
-        finally:
-            self.driver.close()
-            self.driver = None
+        self.driver.close()
+        self.driver = None
 
-    def check_connected(self):
-        if self.conn is None:
-            raise ValueError("This connection has not been opened!")
-
-    def new_transaction(self):
-        self.check_connected()
-        return self.conn.begin_transaction()
+    def new_session(self) -> neo4j.Session:
+        return self.driver.session(database=self.database)
 
 
 class Author:
@@ -104,18 +93,38 @@ class Author:
 
         return Author(full_name, False)
 
-    def insert(self, tx: neo4j.Transaction):
-        author_id = Author.id_counter.next()
+    @staticmethod
+    def create_constraints(session: neo4j.Session):
+        # Uniqueness constraints implicitly create an index for the constraint as well.
+        session.run(
+            "CREATE CONSTRAINT unique_author_names IF NOT EXISTS "
+            "FOR (a:Author) REQUIRE a.full_name IS UNIQUE"
+        ).consume()
+        session.run(
+            "CREATE CONSTRAINT unique_author_ids IF NOT EXISTS "
+            "FOR (a:Author) REQUIRE a.id IS UNIQUE"
+        ).consume()
+
+    @staticmethod
+    def insert_many(tx: neo4j.Transaction, authors: list['Author']):
+        rows = []
+        for author in authors:
+            rows.append({
+                "id": Author.id_counter.next(),
+                "full_name": author.full_name,
+                "is_collective": author.is_collective
+            })
         tx.run(
             """
-            MERGE (a:Author {full_name: $full_name})
+            UNWIND $rows AS row
+            MERGE (a:Author {full_name: row.full_name})
             ON CREATE
                 SET
-                    a.id = $id,
-                    a.is_collective = $is_collective
+                    a.id = row.id,
+                    a.is_collective = row.is_collective
             """,
-            id=author_id, full_name=self.full_name, is_collective=self.is_collective
-        )
+            rows=rows
+        ).consume()
 
     def __str__(self):
         return self.full_name

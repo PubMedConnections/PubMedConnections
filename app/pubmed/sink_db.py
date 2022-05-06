@@ -2,31 +2,29 @@
 Allows dumping data into SQLite to speed up iteration
 over the ~33 million records.
 """
+import queue
+import threading
 import time
+from queue import Queue
 
-from app.pubmed.model import PubmedCacheConn, Author, Article, ArticleAuthor
+import atomics
+import neo4j
+
+from app.pubmed.model import PubmedCacheConn, Article, Author
+
+
+def write_article_batch_to_neo4j(tx: neo4j.Transaction, articles: list[Article]):
+    """ Writes the given article to the Neo4J transaction. """
+    authors = []
+    for article in articles:
+        authors.extend(article.authors)
+
+    Author.insert_many(tx, authors)
 
 
 def add_to_pubmed_cache(conn: PubmedCacheConn, articles: list[Article]):
     """
-    Takes in a parsed PubMed data file object, and adds information
-    from it to the PubMed cache db.
+    Writes the given list of articles read from a PubMed data file to the database.
     """
-    last_report_time = time.time()
-    for index, article in enumerate(articles):
-        with conn.new_transaction() as tx:
-            # Create the article.
-            # article_id = article.insert(conn)
-
-            # Create its authors. Some articles can contain duplicate authors, hence the set.
-            # author_relationships = []
-            for author in article.authors:
-                author.insert(tx)
-                # author_relationships.append((article_id, author_id))
-
-            # Link the authors to the article.
-            # ArticleAuthor.insert_many(conn, author_relationships)
-
-        if index % 100 == 0:
-            print("{} / {}:  {:.3f} seconds".format(index, len(articles), time.time() - last_report_time))
-            last_report_time = time.time()
+    with conn.new_session() as session:
+        session.write_transaction(write_article_batch_to_neo4j, articles)

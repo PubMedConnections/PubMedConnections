@@ -79,10 +79,6 @@ def run_extract(*, target_directory="./data", report_every=60, commit_every=10):
 
             add_to_pubmed_cache(conn, file.articles)
 
-            # If the transactions get too big, then SQLite slows to a crawl.
-            if (file.index + 1) % commit_every == 0:
-                conn.commit_transaction()
-
             duration = time.time() - start
 
             analytics.update(duration, pubmed_file_sizes[file.index])
