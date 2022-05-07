@@ -4,6 +4,17 @@ PubMed cache database.
 """
 
 
+class DBMetadata:
+    """
+    Stores metadata about the data within the database.
+    """
+    def __init__(self, version: int):
+        self.version = version
+
+    def __repr__(self):
+        return "<DBMetadata v{}>".format(self.version)
+
+
 class Author:
     """
     An author of a PubMed article.
@@ -19,8 +30,8 @@ class Author:
         self.is_collective = is_collective
 
     @staticmethod
-    def generate_from_name_pieces(last_name: str, fore_name: str, suffix: str,
-                                  initials: str, collective_name: str) -> 'Author':
+    def generate_from_name_pieces(last_name: str, fore_name: str, initials: str,
+                                  suffix: str, collective_name: str) -> 'Author':
 
         if collective_name is not None:
             return Author(collective_name, True)

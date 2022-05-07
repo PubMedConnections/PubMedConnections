@@ -52,6 +52,10 @@ def run_extract(*, target_directory="./data", report_every=60):
     overall_start = time.time()
 
     pubmed_files = list_downloaded_pubmed_files(target_directory)
+
+    # TODO : REMOVE ME, just for testing
+    pubmed_files = pubmed_files[:10]
+
     pubmed_file_sizes = []
     for pubmed_file in pubmed_files:
         pubmed_file_sizes.append(os.path.getsize(pubmed_file))
@@ -114,7 +118,7 @@ if __name__ == "__main__":
             sys.exit(1)
         run_sync()
 
-    if mode == "extract":
+    elif mode == "extract":
         if len(args) != 2:
             print("Expected no arguments to extract", file=sys.stderr)
             sys.exit(1)
