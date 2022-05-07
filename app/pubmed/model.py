@@ -2,6 +2,7 @@
 This package contains the database models for the
 PubMed cache database.
 """
+import datetime
 
 
 class DBMetadata:
@@ -66,20 +67,28 @@ class Article:
     A PubMed article.
     """
     def __init__(self,
-                 title: str = None,
+                 pmid: int,
+                 date: datetime.date,
+                 title: str,
                  *,
                  article_id: int = None):
 
+        self.pmid = pmid
+        self.date = date
         self.article_id = article_id
         self.title = title
         self._authors = None
 
     @staticmethod
-    def generate(english_title: str, original_title: str):
+    def generate(pmid: int, date: datetime.date, english_title: str, original_title: str):
         """
         Generates an article entry given its information from PubMed.
         """
-        return Article(Article.generate_title(english_title, original_title))
+        return Article(
+            pmid=pmid,
+            date=date,
+            title=Article.generate_title(english_title, original_title)
+        )
 
     @staticmethod
     def generate_title(english_title: str, original_title: str):
