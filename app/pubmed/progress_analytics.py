@@ -18,6 +18,10 @@ class DownloadAnalytics:
         self.prediction_size_bias = prediction_size_bias
         self.history_for_prediction = history_for_prediction
 
+    @property
+    def num_processed(self):
+        return len(self.download_sizes)
+
     def update_remaining(self, remaining_file_sizes):
         """
         Updates the list of remaining files.
@@ -54,6 +58,6 @@ class DownloadAnalytics:
         estimated_remaining = (1 - bias) * estimated_remaining_by_files + bias * estimated_remaining_by_size
 
         print(prefix + "{} {} of {} files. Estimated {} remaining ({:.2f} MB/s)\n".format(
-            verb, len(self.download_sizes), self.total_files,
+            verb, self.num_processed, self.total_files,
             format_minutes(estimated_remaining / 60), avg_mb_per_sec
         ))

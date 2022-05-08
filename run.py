@@ -54,7 +54,7 @@ def run_extract(*, target_directory="./data", report_every=60):
     pubmed_files = list_downloaded_pubmed_files(target_directory)
 
     # TODO : REMOVE ME, just for testing
-    pubmed_files = pubmed_files[:3]
+    pubmed_files = pubmed_files[1252:]
 
     pubmed_file_sizes = []
     for pubmed_file in pubmed_files:
@@ -80,7 +80,11 @@ def run_extract(*, target_directory="./data", report_every=60):
             if file.articles is None:
                 break  # Marks that there are no more files.
 
-            conn.insert_article_batch(file.articles)
+            try:
+                conn.insert_article_batch(file.articles)
+            except Exception as e:
+                print("Error occurred in file {}".format(analytics.num_processed + 1))
+                raise e
 
             duration = time.time() - start
 

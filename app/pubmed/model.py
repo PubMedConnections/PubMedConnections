@@ -26,15 +26,43 @@ class Author:
                  *,
                  author_id: int = None):
 
+        if len(full_name) > 1024:
+            raise Exception("Name is too long! {}".format(full_name))
+
         self.author_id = author_id
         self.full_name = full_name
         self.is_collective = is_collective
 
     @staticmethod
-    def generate_from_name_pieces(last_name: str, fore_name: str, initials: str,
-                                  suffix: str, collective_name: str) -> 'Author':
+    def generate_from_name_pieces(
+            last_name: str, fore_name: str, initials: str,
+            suffix: str, collective_name: str,
+            *, max_name_length: int = 512
+    ) -> 'Author':
 
         if collective_name is not None:
+            # Some consortium names are ridiculous...
+            if len(collective_name) > max_name_length:
+                truncated_suffix = "... <Truncated Name>"
+                truncated = collective_name[:(max_name_length - len(truncated_suffix))]
+
+                def find_break(find: str):
+                    try:
+                        return truncated.rindex(find)
+                    except ValueError:
+                        return -1
+
+                # Attempt to truncate at punctuation if possible.
+                nice_break_index = max(find_break(", "), find_break(": "), find_break("; "))
+                if nice_break_index < 0:
+                    nice_break_index = max(find_break(","), find_break(":"), find_break(";"))
+                if nice_break_index < 0:
+                    nice_break_index = find_break(" ")
+                if nice_break_index >= max_name_length // 2:
+                    truncated = truncated[:nice_break_index]
+
+                collective_name = truncated + truncated_suffix
+
             return Author(collective_name, True)
 
         last = " {}".format(last_name) if last_name is not None else ""
@@ -49,6 +77,10 @@ class Author:
         full_name = first + last + suffix
         if len(full_name) == 0:
             raise ValueError("No name pieces supplied")
+
+        # I don't think there are any author names that hit this, but just in case...
+        if len(full_name) > max_name_length:
+            full_name = full_name[:(max_name_length - 3)] + "..."
 
         return Author(full_name, False)
 
