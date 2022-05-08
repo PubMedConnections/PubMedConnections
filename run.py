@@ -54,7 +54,7 @@ def run_extract(*, target_directory="./data", report_every=60):
     pubmed_files = list_downloaded_pubmed_files(target_directory)
 
     # TODO : REMOVE ME, just for testing
-    pubmed_files = pubmed_files[1252:]
+    # pubmed_files = pubmed_files[1252:]
 
     pubmed_file_sizes = []
     for pubmed_file in pubmed_files:
