@@ -2,7 +2,7 @@
 from flask import request
 from flask_restplus import Namespace, Resource, fields
 
-ns = Namespace('Authentication', description='user authentication')
+ns = Namespace('auth', description='user authentication')
 
 
 @ns.route('/login')

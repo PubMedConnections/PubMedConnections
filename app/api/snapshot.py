@@ -3,7 +3,7 @@ from flask import request
 from flask_restplus import Namespace, Resource, fields
 from app.controller.snapshot_controller import query_by_filters
 
-ns = Namespace('Snapshot', description='snapshot related operations')
+ns = Namespace('snapshot', description='snapshot related operations')
 
 publication_date = ns.model('publication_date', {'published_before': fields.String,
                                                  'published_after': fields.String})
@@ -15,15 +15,16 @@ filters = ns.model('filters',
                     'limit': fields.Integer, 'mesh_heading': fields.String})
 
 
-@ns.route('/snapshot/visualise/<string:graph_type>')
+@ns.route('/visualise/<string:graph_type>')
 class VisualiseSnapshot(Resource):
     @staticmethod
     @ns.expect(filters)
-    def get(graph_type):
-        return query_by_filters(graph_type, request.form())
+    def post(graph_type):
+        filters = request.json
+        return query_by_filters(graph_type, filters)
 
 
-@ns.route('/snapshot/analyse')
+@ns.route('/analyse')
 class AnalyseSnapshot(Resource):
     @staticmethod
     def get():
