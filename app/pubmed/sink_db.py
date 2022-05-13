@@ -81,6 +81,12 @@ class PubmedCacheConn:
         Uniqueness constraints implicitly create an index for the constraint as well.
         """
 
+        # MeSH Headings.
+        session.run(
+            "CREATE CONSTRAINT unique_mesh_heading_ids IF NOT EXISTS "
+            "FOR (h:MeSHHeading) REQUIRE h.id IS UNIQUE"
+        ).consume()
+
         # Authors.
         session.run(
             "CREATE CONSTRAINT unique_author_names IF NOT EXISTS "
@@ -263,7 +269,7 @@ class PubmedCacheConn:
         tx.run(
             """
             UNWIND $headings AS heading
-            MERGE (heading_node:MeshHeading {id: heading.id})
+            MERGE (heading_node:MeSHHeading {id: heading.id})
             ON CREATE
                 SET
                     heading_node.name = heading.name,
