@@ -195,7 +195,7 @@ def _do_parse_pubmed_xml(target_directory: str, path: str, return_queue: multipr
     Parses the contents of the given file and returns the result.
     """
     parser = create_pubmed_xml_parser(target_directory)
-    tree = etree.parse(path, parser)
+    tree: etree.ElementTree = etree.parse(path, parser)
     return_queue.put(extract_articles(tree))
 
 
@@ -218,6 +218,6 @@ def parse_pubmed_xml(target_directory: str, path: str) -> list[Article]:
         daemon=True
     )
     process.start()
-    result = return_queue.get()
+    result: list[Article] = return_queue.get()
     process.terminate()
     return result

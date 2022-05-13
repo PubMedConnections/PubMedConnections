@@ -3,7 +3,6 @@ This package contains the database models for the
 PubMed cache database.
 """
 import datetime
-from enum import Enum
 from typing import Optional
 
 
@@ -147,13 +146,14 @@ class Article:
             self,
             pmid: int,
             date: datetime.date,
-            title: str,):
+            title: str):
 
-        self.pmid = pmid
-        self.date = date
-        self.title = title
+        self.pmid: int = pmid
+        self.date: datetime.date = date
+        self.title: str = title
         self._journal: Optional[Journal] = None
         self._authors: Optional[list[Author]] = None
+        self._reference_pmids: Optional[list[int]] = None
 
     @staticmethod
     def generate(pmid: int, date: datetime.date, english_title: str, original_title: str):
@@ -211,6 +211,18 @@ class Article:
     def journal(self, journal: Journal):
         """ Sets the Journal of this article. """
         self._journal = journal
+
+    @property
+    def reference_pmids(self) -> list[int]:
+        """ Returns a list of all the PMIDs of the articles that this article references. """
+        if self._reference_pmids is None:
+            raise ValueError("The reference PMIDs of this article have not been read from the database")
+        return self._reference_pmids
+
+    @reference_pmids.setter
+    def reference_pmids(self, reference_pmids: list[int]):
+        """ Sets the list of all the PMIDs of the articles that this article references. """
+        self._reference_pmids = reference_pmids
 
     def __str__(self):
         return "{}: {}".format(self.pmid, self.title)

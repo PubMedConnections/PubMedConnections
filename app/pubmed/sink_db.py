@@ -2,18 +2,21 @@
 Allows dumping data into SQLite to speed up iteration
 over the ~33 million records.
 """
-import math
 from typing import Optional
 
 import atomics
 import neo4j
 from app.pubmed.model import Article, DBMetadata
-from app.utils import or_else
 from config import NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD, NEO4J_DATABASE
 
 
 class IdCounter:
-    """ Increments IDs to use for database nodes. """
+    """
+    Increments IDs to use for database nodes. This is a bit dodgy,
+    but we only ever add to the database from one process, so it
+    should be fine. This is required as Neo4J does not have its
+    own auto-incrementing IDs.
+    """
     id: atomics.atomic = atomics.atomic(width=4, atype=atomics.INT)
 
     def __init__(self, initial_id: int = None):
@@ -167,7 +170,8 @@ class PubmedCacheConn:
                     "issue": journal.issue,
                     "date": journal.date
                 },
-                "authors": authors_data
+                "authors": authors_data,
+                "refs": article.reference_pmids
             })
 
         tx.run(
@@ -197,6 +201,13 @@ class PubmedCacheConn:
                         issue: journal.issue,
                         date: journal.date
                     }]->(journal_node)
+                }
+                CALL {
+                    WITH article_node, article
+                    UNWIND article.refs as ref_pmid
+                    MATCH (ref_node:Article)
+                    WHERE ref_node.pmid = ref_pmid
+                    CREATE (article_node)-[:REFERENCES]->(ref_node)
                 }
 
             UNWIND authors AS author

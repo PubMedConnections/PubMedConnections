@@ -28,7 +28,7 @@ ABBREV_MONTH_NAMES_LOWER = [abbrev for abbrev, _ in MONTHS]
 MAX_DAYS_IN_MONTH = [max_days for _, max_days in MONTHS]
 
 
-def extract_single_node_by_tag(node, tag: str):
+def extract_single_node_by_tag(node: etree.Element, tag: str):
     for child in node:
         if child.tag == tag:
             return child
@@ -108,7 +108,7 @@ def parse_medline_date(medline_date: str) -> datetime.date:
     return datetime.date(year, month, day)
 
 
-def extract_date(date_node) -> datetime.date:
+def extract_date(date_node: etree.Element) -> datetime.date:
     """
     Extracts a date from one of <DateCreated>, <DateCompleted>, or <DateRevised>.
     """
@@ -140,7 +140,7 @@ def extract_date(date_node) -> datetime.date:
     return datetime.date(year, month, day)
 
 
-def extract_author(author_node) -> Author:
+def extract_author(author_node: etree.Element) -> Author:
     """
     Extracts an author's information from an <Author> node.
     This does its best to canonicalize the names of authors into a standard format.
@@ -166,7 +166,7 @@ def extract_author(author_node) -> Author:
     return Author.generate_from_name_pieces(last_name, fore_name, initials, suffix, collective_name)
 
 
-def extract_authors(author_list_node) -> list[Author]:
+def extract_authors(author_list_node: etree.Element) -> list[Author]:
     """
     Reads all the authors from an <AuthorList>.
     """
@@ -194,7 +194,7 @@ def canonicalize_issn(issn: str) -> str:
     raise Exception("Unrecognised ISSN: {}".format(issn))
 
 
-def extract_journal_issue(journal_issue_node):
+def extract_journal_issue(journal_issue_node: etree.Element):
     """
     Extracts the volume and issue from a <JournalIssue>
     """
@@ -217,7 +217,7 @@ def extract_journal_issue(journal_issue_node):
     return volume, issue, date
 
 
-def extract_journal(journal_node) -> Journal:
+def extract_journal(journal_node: etree.Element) -> Journal:
     """
     Extracts a journal from <Journal>.
     """
@@ -250,7 +250,7 @@ def extract_journal(journal_node) -> Journal:
     return Journal.generate(iso_abbrev, issn, title, volume, issue, date)
 
 
-def extract_article(pmid: int, date: datetime.date, article_node):
+def extract_article(pmid: int, date: datetime.date, article_node: etree.Element):
     """
     Extracts the details of an article from an <Article> node.
     """
@@ -288,7 +288,7 @@ def extract_article(pmid: int, date: datetime.date, article_node):
     return article
 
 
-def extract_citation(citation_node) -> Optional[Article]:
+def extract_citation(citation_node: etree.Element) -> Optional[Article]:
     """
     Extracts the details of an article from a <MedlineCitation> node.
     """
@@ -329,20 +329,56 @@ def extract_citation(citation_node) -> Optional[Article]:
     return extract_article(pmid, date, article_node)
 
 
-def extract_articles(tree) -> list[Article]:
+def extract_article_id_list(id_list_node: etree.Element) -> Optional[int]:
+    """ Extracts the PMID of an article from an <ArticleIdList> node. """
+    for node in id_list_node:
+        if node.tag != "ArticleId":
+            continue
+
+        attrib = node.attrib
+        if "IdType" in attrib and attrib["IdType"] == "pubmed":
+            return int(node.text)
+
+    return None
+
+
+def extract_pubmed_data(pubmed_data_node: etree.Element, article: Article):
+    """ Extracts information from a <PubmedData> node to add into the given article. """
+    reference_pmids: list[int] = []
+
+    reference_list_node = extract_single_node_by_tag(pubmed_data_node, "ReferenceList")
+    if reference_list_node is not None:
+        for reference_node in reference_list_node:
+            pmid = extract_article_id_list(extract_single_node_by_tag(reference_node, "ArticleIdList"))
+            if pmid is not None:
+                reference_pmids.append(pmid)
+
+    article.reference_pmids = reference_pmids
+
+
+def extract_articles(tree: etree.ElementTree) -> list[Article]:
     """
     Takes in a parsed PubMed data file object, and extracts
     the data that we are interested in from it.
     """
-    root = tree.getroot()
+    root: etree.Element = tree.getroot()
     articles = []
     for index, pubmed_article_node in enumerate(root):
         if pubmed_article_node.tag != "PubmedArticle":
             continue
 
         try:
-            citation_node = extract_single_node_by_tag(pubmed_article_node, "MedlineCitation")
+            citation_node = None
+            pubmed_data_node = None
+            for node in pubmed_article_node:
+                tag = node.tag
+                if tag == "MedlineCitation":
+                    citation_node = node
+                elif tag == "PubmedData":
+                    pubmed_data_node = node
+
             article = extract_citation(citation_node)
+            extract_pubmed_data(pubmed_data_node, article)
             if article is None:
                 continue
 
