@@ -135,14 +135,15 @@ class DTDResolver(etree.Resolver):
     lock: threading.Lock = threading.Lock()
     dtd_cache: dict[str, str] = {}
 
-    def __init__(self, target_directory: str):
+    def __init__(self, target_directory: str, start_url: str):
         super().__init__()
         self.target_directory = target_directory
         self.cache_dir = os.path.join(target_directory, "pubmed", "dtd")
         os.makedirs(self.cache_dir, exist_ok=True)
+        self.start_url = start_url
 
     def resolve(self, system_url, public_id, context):
-        if system_url.startswith("http://dtd.nlm.nih.gov/"):
+        if system_url.startswith(self.start_url):
             if system_url in DTDResolver.dtd_cache:
                 return self.resolve_string(self.dtd_cache[system_url], context)
 
@@ -186,7 +187,7 @@ def create_pubmed_xml_parser(target_directory: str) -> etree.XMLParser:
         dtd_validation=False,
         attribute_defaults=False
     )
-    parser.resolvers.add(DTDResolver(target_directory))
+    parser.resolvers.add(DTDResolver(target_directory, "http://dtd.nlm.nih.gov/"))
     return parser
 
 

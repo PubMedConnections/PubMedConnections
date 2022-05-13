@@ -1,6 +1,6 @@
 # from app.api import bp
 from flask import request
-from flask_restplus import Namespace, Resource, fields
+from flask_restx import Namespace, Resource, fields
 from app.controller.snapshot_controller import query_by_filters
 
 ns = Namespace('snapshot', description='snapshot related operations')
