@@ -1,20 +1,22 @@
 # from app.api import bp
 from flask import request
-from flask_restplus import Namespace, Resource, fields
+from flask_restplus import Namespace, Resource, fields, abort
+
 
 ns = Namespace('auth', description='user authentication')
+user = ns.model('user', {'username': fields.String, 'password': fields.String})
 
 
 @ns.route('/login')
 class Login(Resource):
     @staticmethod
+    @ns.expect(user)
     def post():
         data = request.get_json()
         username = data.get('username')
         password = data.get('password')
-        if not password:
-            # TODO return error
-            pass
+        if not password or username:
+            return abort(400, "bad request!")
         # TODO authenticate
         return "TODO implement user login"
 
@@ -22,11 +24,13 @@ class Login(Resource):
 @ns.route('/register')
 class Register(Resource):
     @staticmethod
-    def get():
+    @ns.expect(user)
+    def post():
         data = request.get_json()
         username = data.get('username')
         password = data.get('password')
         if not password or username:
+            return abort(400, "bad request!")
             # TODO return error
             pass
         # TODO create user account
