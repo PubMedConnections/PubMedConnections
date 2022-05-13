@@ -154,6 +154,7 @@ class Article:
         self._journal: Optional[Journal] = None
         self._authors: Optional[list[Author]] = None
         self._reference_pmids: Optional[list[int]] = None
+        self._mesh_descriptor_ids: Optional[list[int]] = None
 
     @staticmethod
     def generate(pmid: int, date: datetime.date, english_title: str, original_title: str):
@@ -224,6 +225,18 @@ class Article:
         """ Sets the list of all the PMIDs of the articles that this article references. """
         self._reference_pmids = reference_pmids
 
+    @property
+    def mesh_descriptor_ids(self) -> list[int]:
+        """ Returns a list of all the MeSH descriptor IDs for this article. """
+        if self._mesh_descriptor_ids is None:
+            raise ValueError("The MeSH descriptor IDs for this article have not been read from the database")
+        return self._mesh_descriptor_ids
+
+    @mesh_descriptor_ids.setter
+    def mesh_descriptor_ids(self, reference_pmids: list[int]):
+        """ Sets the list of all the MeSH descriptor IDs for this article. """
+        self._mesh_descriptor_ids = reference_pmids
+
     def __str__(self):
         return "{}: {}".format(self.pmid, self.title)
 
@@ -233,7 +246,7 @@ class Article:
 
 class MeshHeading:
     """
-    A MESH Heading from the NLM database
+    A MeSH Heading from the NLM database
     https://www.nlm.nih.gov/databases/download/mesh.html
     """
     def __init__(self, descriptor_id: int, name: str, tree_numbers: list[str]):

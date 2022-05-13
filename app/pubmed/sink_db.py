@@ -84,7 +84,7 @@ class PubmedCacheConn:
         # MeSH Headings.
         session.run(
             "CREATE CONSTRAINT unique_mesh_heading_ids IF NOT EXISTS "
-            "FOR (h:MeSHHeading) REQUIRE h.id IS UNIQUE"
+            "FOR (h:MeshHeading) REQUIRE h.id IS UNIQUE"
         ).consume()
 
         # Authors.
@@ -178,7 +178,8 @@ class PubmedCacheConn:
                     "date": journal.date
                 },
                 "authors": authors_data,
-                "refs": article.reference_pmids
+                "refs": article.reference_pmids,
+                "mesh_desc_ids": article.mesh_descriptor_ids
             })
 
         tx.run(
@@ -215,6 +216,13 @@ class PubmedCacheConn:
                     MATCH (ref_node:Article)
                     WHERE ref_node.pmid = ref_pmid
                     CREATE (article_node)-[:REFERENCES]->(ref_node)
+                }
+                CALL {
+                    WITH article_node, article
+                    UNWIND article.mesh_desc_ids as mesh_id
+                    MATCH (mesh_node:MeshHeading)
+                    WHERE mesh_node.id = mesh_id
+                    CREATE (article_node)-[:CATEGORISED_BY]->(mesh_node)
                 }
 
             UNWIND authors AS author
@@ -269,7 +277,7 @@ class PubmedCacheConn:
         tx.run(
             """
             UNWIND $headings AS heading
-            MERGE (heading_node:MeSHHeading {id: heading.desc_id})
+            MERGE (heading_node:MeshHeading {id: heading.desc_id})
             ON CREATE
                 SET
                     heading_node.name = heading.name,

@@ -287,6 +287,22 @@ def extract_article(pmid: int, date: datetime.date, article_node: etree.Element)
     return article
 
 
+def extract_mesh_heading_list(heading_list_node: etree.Element):
+    """
+    Extracts the list of MeSH headings listed within a <MeshHeadingList> node.
+    """
+    descriptor_ids = []
+    for heading_node in heading_list_node:
+        if heading_node.tag != "MeshHeading":
+            continue
+
+        descriptor_node = extract_single_node_by_tag(heading_node, "DescriptorName")
+        descriptor_id_str = descriptor_node.attrib["UI"]
+        descriptor_ids.append(extract_mesh_descriptor_id(descriptor_id_str))
+
+    return descriptor_ids
+
+
 def extract_citation(citation_node: etree.Element) -> Optional[Article]:
     """
     Extracts the details of an article from a <MedlineCitation> node.
@@ -296,6 +312,7 @@ def extract_citation(citation_node: etree.Element) -> Optional[Article]:
     date_completed_node = None
     date_revised_node = None
     article_node = None
+    mesh_descriptor_ids = None
     for node in citation_node:
         tag = node.tag
         if tag == "PMID":
@@ -309,6 +326,8 @@ def extract_citation(citation_node: etree.Element) -> Optional[Article]:
             date_completed_node = node
         elif tag == "DateRevised":
             date_revised_node = node
+        elif tag == "MeshHeadingList":
+            mesh_descriptor_ids = extract_mesh_heading_list(node)
 
     # We want the earliest date we have available.
     date_node = date_created_node
@@ -325,7 +344,9 @@ def extract_citation(citation_node: etree.Element) -> Optional[Article]:
         raise Exception("Citation does not contain a <DateCreated>, <DateCompleted>, nor a <DateRevised>")
 
     date = extract_date(date_node)
-    return extract_article(pmid, date, article_node)
+    article = extract_article(pmid, date, article_node)
+    article.mesh_descriptor_ids = mesh_descriptor_ids
+    return article
 
 
 def extract_article_id_list(id_list_node: etree.Element) -> Optional[int]:
