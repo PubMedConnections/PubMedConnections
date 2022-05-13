@@ -6,7 +6,8 @@ from typing import Optional
 
 import atomics
 import neo4j
-from app.pubmed.model import Article, DBMetadata
+from app.pubmed.model import Article, DBMetadata, MeshHeading
+from app.utils import or_else
 from config import NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD, NEO4J_DATABASE
 
 
@@ -223,4 +224,50 @@ class PubmedCacheConn:
                 CREATE (author_node)-[:AUTHOR_OF]->(article_node)
             """,
             articles=articles_data
+        ).consume()
+
+    def insert_mesh_heading_batch(self, headings: list[MeshHeading], *, max_batch_size=500):
+        """
+        Inserts a batch of headings into the database.
+        """
+        if len(headings) == 0:
+            return
+
+        # We batch the articles as otherwise we can hit maximum memory issues with Neo4J...
+        required_batches = (len(headings) + max_batch_size - 1) // max_batch_size
+        headings_per_batch = (len(headings) + required_batches - 1) // required_batches
+        total_headings_inserted = 0
+        for batch_no in range(required_batches):
+            start_index = batch_no * headings_per_batch
+            end_index = len(headings) if batch_no == required_batches - 1 else (batch_no + 1) * headings_per_batch
+            batch = headings[start_index:end_index]
+            total_headings_inserted += len(batch)
+            with self.new_session() as session:
+                session.write_transaction(self._insert_mesh_heading_batch, batch)
+
+        # Just to be sure...
+        assert total_headings_inserted == len(headings)
+
+    def _insert_mesh_heading_batch(self, tx: neo4j.Transaction, headings: list[MeshHeading]):
+        """
+        Inserts a batch of headings into the database.
+        """
+        headings_data = []
+        for heading in headings:
+            headings_data.append({
+                "id": heading.id,
+                "name": heading.name,
+                "tree_numbers": heading.tree_numbers
+            })
+
+        tx.run(
+            """
+            UNWIND $headings AS heading
+            MERGE (heading_node:MeshHeading {id: heading.id})
+            ON CREATE
+                SET
+                    heading_node.name = heading.name,
+                    heading_node.tree_numbers = heading.tree_numbers
+            """,
+            headings=headings_data
         ).consume()

@@ -7,8 +7,7 @@ from typing import Optional
 
 from lxml import etree
 
-from app.pubmed.model import Author, Article, Journal
-
+from app.pubmed.model import Author, Article, Journal, MeshHeading
 
 MONTHS = [
     ("jan", 31),
@@ -403,3 +402,28 @@ def extract_articles(tree: etree.ElementTree) -> list[Article]:
                 traceback.print_exc()
 
     return articles
+
+
+def extract_mesh_headings(tree) -> list[MeshHeading]:
+    """
+    Extracts a list of mesh headings from the XML tree.
+    """
+    root = tree.getroot()
+    headings = []
+    for index, mesh_heading_node in enumerate(root):
+        id = extract_single_node_by_tag(mesh_heading_node, "DescriptorUI").text
+        descriptor = extract_single_node_by_tag(mesh_heading_node, "DescriptorName")
+        descriptor_name = extract_single_node_by_tag(descriptor, "String").text
+        if descriptor_name is None:
+            print(f"Error, no descriptor found for {id}")
+
+        tree_list = extract_single_node_by_tag(mesh_heading_node, "TreeNumberList")
+        tree_numbers = []
+        if tree_list is not None:
+            for child in tree_list:
+                if child.tag == "TreeNumber":
+                    tree_numbers.append(child.text)
+
+        headings.append(MeshHeading(id, descriptor_name, tree_numbers))
+
+    return headings

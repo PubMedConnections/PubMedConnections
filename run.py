@@ -11,6 +11,7 @@ from app.pubmed.source_ftp import PubMedFTP
 from app.pubmed.source_files import list_downloaded_pubmed_files, read_all_pubmed_files
 from app.utils import format_minutes
 from config import PUBMED_DB_FILE, NEO4J_DATABASE
+from app.pubmed.mesh import process_mesh_headings
 
 
 def print_valid_modes():
@@ -60,10 +61,6 @@ def run_extract(*, target_directory="./data", report_every=60):
     for pubmed_file in pubmed_files:
         pubmed_file_sizes.append(os.path.getsize(pubmed_file))
 
-    print("PubMedExtract: Extracting data from {} PubMed files".format(len(pubmed_files)))
-    print()
-
-    file_queue = read_all_pubmed_files(target_directory, pubmed_files)
 
     db_name = "{}.extract".format(NEO4J_DATABASE)
     with PubmedCacheConn(database=db_name, reset_on_connect=True) as conn:
@@ -73,6 +70,14 @@ def run_extract(*, target_directory="./data", report_every=60):
             prediction_size_bias=0.4,
             history_for_prediction=150
         )
+        # MESH headings first
+        process_mesh_headings(target_directory, conn)
+
+        print("PubMedExtract: Extracting data from {} PubMed files".format(len(pubmed_files)))
+        print()
+
+        file_queue = read_all_pubmed_files(target_directory, pubmed_files)
+
         last_report_time = time.time()
         while True:
             start = time.time()
