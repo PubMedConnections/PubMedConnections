@@ -3,6 +3,21 @@ This file contains general utility functions that don't
 really fit anywhere else.
 """
 from multiprocessing.pool import ThreadPool
+from typing import TypeVar
+
+
+T = TypeVar('T')
+
+
+def or_else(value: T, default_value: T) -> T:
+    """
+    Returns value if it is not None, or else returns default_value.
+    """
+    if value is not None:
+        return value
+    if default_value is None:
+        raise Exception("default_value should not be None when value is None")
+    return default_value
 
 
 def format_minutes(mins):
