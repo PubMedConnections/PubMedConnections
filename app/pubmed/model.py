@@ -236,13 +236,13 @@ class MeshHeading:
     A MESH Heading from the NLM database
     https://www.nlm.nih.gov/databases/download/mesh.html
     """
-    def __init__(self, id, name, tree_numbers):
-        self.id = id
+    def __init__(self, descriptor_id: int, name: str, tree_numbers: list[str]):
+        self.descriptor_id: int = descriptor_id
         self.name = name
         self.tree_numbers = tree_numbers
 
     def __str__(self):
-        return f"{self.id}: {self.name} ({self.tree_numbers})"
+        return f"{self.descriptor_id}: {self.name} ({self.tree_numbers})"
 
     def __repr__(self):
-        return f"<MeshHeading {self.id}>"
+        return f"<MeshHeading {self.descriptor_id}>"

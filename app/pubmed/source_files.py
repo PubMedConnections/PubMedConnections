@@ -187,7 +187,7 @@ def create_pubmed_xml_parser(target_directory: str) -> etree.XMLParser:
         dtd_validation=False,
         attribute_defaults=False
     )
-    parser.resolvers.add(DTDResolver(os.path.join(target_directory, "pubmed"), "https://dtd.nlm.nih.gov/"))
+    parser.resolvers.add(DTDResolver(os.path.join(target_directory, "pubmed"), "http://dtd.nlm.nih.gov/"))
     return parser
 
 

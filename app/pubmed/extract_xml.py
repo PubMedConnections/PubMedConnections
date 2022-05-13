@@ -404,6 +404,16 @@ def extract_articles(tree: etree.ElementTree) -> list[Article]:
     return articles
 
 
+def extract_mesh_descriptor_id(descriptor_id_str: str) -> int:
+    """ Converts descriptor ID strings (e.g. 'D000016') into a number ID (e.g. 16). """
+    if len(descriptor_id_str) == 0:
+        raise Exception("Empty descriptor ID")
+    if descriptor_id_str[0] != "D":
+        raise Exception("Expected descriptor ID to start with 'D', {}".format(descriptor_id_str))
+
+    return int(descriptor_id_str[1:])
+
+
 def extract_mesh_headings(tree) -> list[MeshHeading]:
     """
     Extracts a list of mesh headings from the XML tree.
@@ -411,19 +421,21 @@ def extract_mesh_headings(tree) -> list[MeshHeading]:
     root = tree.getroot()
     headings = []
     for index, mesh_heading_node in enumerate(root):
-        id = extract_single_node_by_tag(mesh_heading_node, "DescriptorUI").text
+        if mesh_heading_node.tag != "DescriptorRecord":
+            continue
+
+        descriptor_id_str = extract_single_node_by_tag(mesh_heading_node, "DescriptorUI").text
+        descriptor_id = extract_mesh_descriptor_id(descriptor_id_str)
         descriptor = extract_single_node_by_tag(mesh_heading_node, "DescriptorName")
         descriptor_name = extract_single_node_by_tag(descriptor, "String").text
-        if descriptor_name is None:
-            print(f"Error, no descriptor found for {id}")
 
         tree_list = extract_single_node_by_tag(mesh_heading_node, "TreeNumberList")
-        tree_numbers = []
+        tree_numbers: list[str] = []
         if tree_list is not None:
             for child in tree_list:
                 if child.tag == "TreeNumber":
                     tree_numbers.append(child.text)
 
-        headings.append(MeshHeading(id, descriptor_name, tree_numbers))
+        headings.append(MeshHeading(descriptor_id, descriptor_name, tree_numbers))
 
     return headings

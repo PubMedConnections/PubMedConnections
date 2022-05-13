@@ -261,7 +261,7 @@ class PubmedCacheConn:
         headings_data = []
         for heading in headings:
             headings_data.append({
-                "id": heading.id,
+                "desc_id": heading.descriptor_id,
                 "name": heading.name,
                 "tree_numbers": heading.tree_numbers
             })
@@ -269,7 +269,7 @@ class PubmedCacheConn:
         tx.run(
             """
             UNWIND $headings AS heading
-            MERGE (heading_node:MeSHHeading {id: heading.id})
+            MERGE (heading_node:MeSHHeading {id: heading.desc_id})
             ON CREATE
                 SET
                     heading_node.name = heading.name,
