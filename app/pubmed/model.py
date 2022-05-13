@@ -3,6 +3,8 @@ This package contains the database models for the
 PubMed cache database.
 """
 import datetime
+from enum import Enum
+from typing import Optional
 
 
 class DBMetadata:
@@ -94,22 +96,64 @@ class Author:
         return "<Author {}>".format(self.full_name)
 
 
+class Journal:
+    """
+    A journal within which an article was published.
+    """
+    def __init__(
+            self,
+            identifier: str,
+            title: str,
+            volume: str,
+            issue: str,
+            date: datetime.date):
+
+        self.identifier = identifier
+        self.title = title
+        self.volume = volume
+        self.issue = issue
+        self.date = date
+
+    @staticmethod
+    def generate(
+            iso_abbrev: Optional[str],
+            issn: Optional[str],
+            title: str,
+            volume: Optional[str],
+            issue: Optional[str],
+            date: datetime.date):
+
+        identifier = issn if issn is not None else "[{}]".format(iso_abbrev)
+        return Journal(identifier, title, volume, issue, date)
+
+    def __str__(self):
+        if self.volume is None and self.issue is None:
+            return self.title
+        if self.volume is None:
+            return "{}, Issue {}".format(self.identifier, self.title, self.issue)
+        if self.issue is None:
+            return "{}, Vol. {}".format(self.identifier, self.title, self.volume)
+        return "{}, Vol. {} Issue {}".format(self.identifier, self.title, self.volume, self.issue)
+
+    def __repr__(self):
+        return "<Journal {}: {}>".format(self.identifier, str(self))
+
+
 class Article:
     """
-    A PubMed article.
+    An article in PubMed.
     """
-    def __init__(self,
-                 pmid: int,
-                 date: datetime.date,
-                 title: str,
-                 *,
-                 article_id: int = None):
+    def __init__(
+            self,
+            pmid: int,
+            date: datetime.date,
+            title: str,):
 
         self.pmid = pmid
         self.date = date
-        self.article_id = article_id
         self.title = title
-        self._authors = None
+        self._journal: Optional[Journal] = None
+        self._authors: Optional[list[Author]] = None
 
     @staticmethod
     def generate(pmid: int, date: datetime.date, english_title: str, original_title: str):
@@ -156,13 +200,20 @@ class Article:
         """ Sets the Authors of this article. """
         self._authors = authors
 
-    def __str__(self):
-        if self.article_id is not None:
-            prefix = "{}: ".format(self.article_id)
-        else:
-            prefix = ""
+    @property
+    def journal(self) -> Journal:
+        """ Returns all the Authors of this article. """
+        if self._journal is None:
+            raise ValueError("The journal of this article have not been read from the database")
+        return self._journal
 
-        return prefix + self.title
+    @journal.setter
+    def journal(self, journal: Journal):
+        """ Sets the Journal of this article. """
+        self._journal = journal
+
+    def __str__(self):
+        return "{}: {}".format(self.pmid, self.title)
 
     def __repr__(self):
         return "<Article {}>".format(str(self))

@@ -8,6 +8,7 @@ from typing import Optional
 import atomics
 import neo4j
 from app.pubmed.model import Article, DBMetadata
+from app.utils import or_else
 from config import NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD, NEO4J_DATABASE
 
 
@@ -79,11 +80,17 @@ class PubmedCacheConn:
         # Authors.
         session.run(
             "CREATE CONSTRAINT unique_author_names IF NOT EXISTS "
-            "FOR (a:Author) REQUIRE a.full_name IS UNIQUE"
+            "FOR (a:Author) REQUIRE a.name IS UNIQUE"
         ).consume()
         session.run(
             "CREATE CONSTRAINT unique_author_ids IF NOT EXISTS "
             "FOR (a:Author) REQUIRE a.id IS UNIQUE"
+        ).consume()
+
+        # Journals.
+        session.run(
+            "CREATE CONSTRAINT unique_journal_ids IF NOT EXISTS "
+            "FOR (j:Journal) REQUIRE j.id IS UNIQUE"
         ).consume()
 
         # Articles.
@@ -144,20 +151,36 @@ class PubmedCacheConn:
             for author in article.authors:
                 authors_data.append({
                     "id": self.author_id_counter.next(),
-                    "full_name": author.full_name,
+                    "name": author.full_name,
                     "is_collective": author.is_collective
                 })
 
+            journal = article.journal
             articles_data.append({
                 "pmid": article.pmid,
                 "date": article.date,
                 "title": article.title,
+                "journal": {
+                    "id": journal.identifier,
+                    "title": journal.title,
+                    "volume": journal.volume,
+                    "issue": journal.issue,
+                    "date": journal.date
+                },
                 "authors": authors_data
             })
 
         tx.run(
             """
-            UNWIND $articles AS article
+            UNWIND $articles AS article WITH article, article.journal as journal, article.authors as authors
+                CALL {
+                    WITH journal
+                    MERGE (journal_node:Journal {id: journal.id})
+                    ON CREATE
+                        SET
+                            journal_node.title = journal.title
+                    RETURN journal_node
+                }
                 CALL {
                     WITH article
                     MERGE (article_node:Article {pmid: article.pmid})
@@ -167,11 +190,19 @@ class PubmedCacheConn:
                             article_node.date = article.date
                     RETURN article_node
                 }
+                CALL {
+                    WITH article_node, journal_node, journal
+                    CREATE (article_node)-[:PUBLISHED_IN {
+                        volume: journal.volume,
+                        issue: journal.issue,
+                        date: journal.date
+                    }]->(journal_node)
+                }
 
-            UNWIND article.authors AS author
+            UNWIND authors AS author
                 CALL {
                     WITH author
-                    MERGE (author_node:Author {full_name: author.full_name})
+                    MERGE (author_node:Author {name: author.name})
                     ON CREATE
                         SET
                             author_node.id = author.id,
