@@ -1,7 +1,6 @@
 # from app.api import bp
 from flask import request
-from flask_restplus import Namespace, Resource, fields, abort
-
+from flask_restx import Namespace, Resource, fields, abort
 
 ns = Namespace('auth', description='user authentication')
 user = ns.model('user', {'username': fields.String, 'password': fields.String})
