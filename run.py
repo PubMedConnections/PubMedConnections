@@ -54,9 +54,6 @@ def run_extract(*, target_directory="./data", report_every=60):
 
     pubmed_files = list_downloaded_pubmed_files(target_directory)
 
-    # TODO : REMOVE ME, just for testing
-    pubmed_files = pubmed_files[:3]
-
     pubmed_file_sizes = []
     for pubmed_file in pubmed_files:
         pubmed_file_sizes.append(os.path.getsize(pubmed_file))
@@ -67,7 +64,6 @@ def run_extract(*, target_directory="./data", report_every=60):
         analytics = DownloadAnalytics(
             pubmed_file_sizes,
             no_threads=1,
-            prediction_size_bias=0.4,
             history_for_prediction=150
         )
         # MESH headings first

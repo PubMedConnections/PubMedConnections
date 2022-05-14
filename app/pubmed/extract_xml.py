@@ -2,6 +2,7 @@
 Contains functions to extract PubMed data from XML files.
 """
 import datetime
+import sys
 import traceback
 from typing import Optional
 
@@ -9,6 +10,7 @@ from lxml import etree
 
 from app.pubmed.model import Author, Article, Journal, MeshHeading
 
+SEASONS = ["winter", "spring", "summer", "autumn", "fall"]
 MONTHS = [
     ("jan", 31),
     ("feb", 29),
@@ -34,6 +36,10 @@ def extract_single_node_by_tag(node: etree.Element, tag: str):
     return None
 
 
+class MedlineDateParseException(Exception):
+    pass
+
+
 def parse_month(text: str) -> int:
     """
     Parses either a number in the range [1, 12], or a 3-letter month
@@ -42,7 +48,7 @@ def parse_month(text: str) -> int:
     try:
         month = int(text)
         if month < 1 or month > 12:
-            raise Exception("Unknown month: {}".format(text))
+            raise MedlineDateParseException(f"Unknown month: {text}")
 
         return month
     except ValueError:
@@ -51,7 +57,7 @@ def parse_month(text: str) -> int:
     try:
         return ABBREV_MONTH_NAMES_LOWER.index(text.lower()) + 1
     except ValueError:
-        raise Exception("Unknown month: {}".format(text))
+        raise MedlineDateParseException(f"Unknown month: {text}")
 
 
 def parse_medline_date(medline_date: str) -> datetime.date:
@@ -61,50 +67,67 @@ def parse_medline_date(medline_date: str) -> datetime.date:
     Therefore, we can only try our best based on example values.
     """
 
-    # Take left-hand side from date ranges such as:
-    #   * 1998 Dec-1999 Jan   ->  1998 Dec
-    #   * 2000 Spring-Summer  ->  2000 Spring
-    #   * 2000 Nov-Dec        ->  2000 Nov
-    #   * 2000 Dec 23- 30     ->  2000 Dec 23
+    # Since these dates don't follow a standard, we want to fail with extra information to help update this function.
     try:
-        dash_index = medline_date.index("-")
-        return parse_medline_date(medline_date[:dash_index])
-    except ValueError:
-        pass
+        # Take left-hand side from date ranges such as:
+        #   * 1998 Dec-1999 Jan   ->  1998 Dec
+        #   * 2000 Spring-Summer  ->  2000 Spring
+        #   * 2000 Nov-Dec        ->  2000 Nov
+        #   * 2000 Dec 23- 30     ->  2000 Dec 23
+        try:
+            dash_index = medline_date.index("-")
+        except ValueError:
+            dash_index = None
 
-    # Split the date into parts.
-    parts = medline_date.split()
+        if dash_index is not None:
+            try:
+                # First try parse the left-hand side.
+                return parse_medline_date(medline_date[:dash_index])
+            except MedlineDateParseException:
+                # If it fails, try parse the right-hand side. (e.g. Spring-Summer 2000 -> Summer 2000)
+                return parse_medline_date(medline_date[dash_index + 1:])
 
-    # We always expect YYYY to start.
-    year = int(parts[0])
-    if len(parts) == 1:
-        return datetime.date(year, 1, 1)
+        # Split the date into parts.
+        parts = medline_date.split()
 
-    # Next, we expect a month or season.
-    try:
-        month = parse_month(parts[1])
-        if len(parts) == 2:
-            return datetime.date(year, month, 1)
-    except Exception as e:
-        # Probably a season, ignore the rest and just use the year.
-        # We would have to know whether the date was from the northern
-        # or southern hemisphere to make sense of seasons...
-        return datetime.date(year, 1, 1)
+        # The first part may be a season... which are really unhelpful.
+        if parts[0].lower() in SEASONS:
+            parts = parts[1:]
+            if len(parts) == 0:
+                raise MedlineDateParseException("Date was only a season name...")
 
-    # Next, we expect a day.
-    try:
-        day = int(parts[2])
-        max_days = MAX_DAYS_IN_MONTH[month - 1]
-        if day < 1 or day > max_days:
+        # We always expect YYYY to start.
+        year = int(parts[0])
+        if len(parts) == 1:
+            return datetime.date(year, 1, 1)
+
+        # Next, we expect a month or season.
+        try:
+            month = parse_month(parts[1])
+            if len(parts) == 2:
+                return datetime.date(year, month, 1)
+        except MedlineDateParseException:
+            # Probably a season, ignore the rest and just use the year.
+            # We would have to know whether the date was from the northern
+            # or southern hemisphere to make sense of seasons...
+            return datetime.date(year, 1, 1)
+
+        # Next, we expect a day.
+        try:
+            day = int(parts[2])
+            max_days = MAX_DAYS_IN_MONTH[month - 1]
+            if day < 1 or day > max_days:
+                # Ignore invalid days.
+                return datetime.date(year, month, 1)
+
+        except ValueError:
             # Ignore invalid days.
             return datetime.date(year, month, 1)
 
-    except ValueError:
-        # Ignore invalid days.
-        return datetime.date(year, month, 1)
-
-    # Ignore anything else in the string, and just use what we have gathered so far.
-    return datetime.date(year, month, day)
+        # Ignore anything else in the string, and just use what we have gathered so far.
+        return datetime.date(year, month, day)
+    except Exception as e:
+        raise MedlineDateParseException(f"Unable to parse Medline date: \"{medline_date}\"") from e
 
 
 def extract_date(date_node: etree.Element) -> datetime.date:
@@ -296,7 +319,11 @@ def extract_mesh_heading_list(heading_list_node: etree.Element):
         if heading_node.tag != "MeshHeading":
             continue
 
+        # We only want to keep MeSH headings that are a major topic of the article.
         descriptor_node = extract_single_node_by_tag(heading_node, "DescriptorName")
+        if descriptor_node is None or descriptor_node.attrib["MajorTopicYN"] != "Y":
+            continue
+
         descriptor_id_str = descriptor_node.attrib["UI"]
         descriptor_ids.append(extract_mesh_descriptor_id(descriptor_id_str))
 
@@ -312,7 +339,7 @@ def extract_citation(citation_node: etree.Element) -> Optional[Article]:
     date_completed_node = None
     date_revised_node = None
     article_node = None
-    mesh_descriptor_ids = None
+    mesh_descriptor_ids: list[int] = []
     for node in citation_node:
         tag = node.tag
         if tag == "PMID":
@@ -349,7 +376,7 @@ def extract_citation(citation_node: etree.Element) -> Optional[Article]:
     return article
 
 
-def extract_article_id_list(id_list_node: etree.Element) -> Optional[int]:
+def extract_article_pmid_from_list(id_list_node: etree.Element) -> Optional[int]:
     """ Extracts the PMID of an article from an <ArticleIdList> node. """
     for node in id_list_node:
         if node.tag != "ArticleId":
@@ -357,7 +384,16 @@ def extract_article_id_list(id_list_node: etree.Element) -> Optional[int]:
 
         attrib = node.attrib
         if "IdType" in attrib and attrib["IdType"] == "pubmed":
-            return int(node.text)
+            value: Optional[str] = node.text
+            if value is None or "NOT_FOUND" in value or "INVALID_JOURNAL" in value:
+                continue
+
+            try:
+                return int(value)
+            except ValueError:
+                # At least one reference has a DOI string marked as a PMID...
+                print(f"Invalid PMID detected: {value}", file=sys.stderr)
+                continue
 
     return None
 
@@ -369,7 +405,11 @@ def extract_pubmed_data(pubmed_data_node: etree.Element, article: Article):
     reference_list_node = extract_single_node_by_tag(pubmed_data_node, "ReferenceList")
     if reference_list_node is not None:
         for reference_node in reference_list_node:
-            pmid = extract_article_id_list(extract_single_node_by_tag(reference_node, "ArticleIdList"))
+            id_list_node = extract_single_node_by_tag(reference_node, "ArticleIdList")
+            if id_list_node is None:
+                continue
+
+            pmid = extract_article_pmid_from_list(id_list_node)
             if pmid is not None:
                 reference_pmids.append(pmid)
 
