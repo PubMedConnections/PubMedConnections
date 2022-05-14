@@ -183,3 +183,10 @@ CREATE CONSTRAINT unique_mesh_id FOR (meshHeading:MeshHeading) REQUIRE meshHeadi
 CREATE CONSTRAINT unique_institution_id FOR (institution:Institution) REQUIRE institution.ID IS UNIQUE
 
 ```
+
+## Testing data extraction
+1. Create a directory `data/` at the root level of the repository.
+2. Download Pub Med files to be processed and place them at `data/pubmed/updatefiles/`. 
+Each file should be a `.xml.gz` file and should come with a corresponding `.xml.gz.md5` file.
+3. Download MeSH heading description file from <https://www.nlm.nih.gov/databases/download/mesh.html> and place the `.xml` file under `data/mesh/`.
+4. Run the extraction script with `python3 run.py extract`
