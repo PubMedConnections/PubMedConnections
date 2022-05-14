@@ -51,7 +51,7 @@ def process_mesh_headings(target_directory: str, conn: PubmedCacheConn):
         raise Exception("No MESH heading XML file found in the format desc*.xml")
 
     # Parse the XML
-    print(f"Parsing MeSH headings from {latest_file}...")
+    print(f"PubMedExtract: Parsing MeSH headings from {latest_file}...")
     parser = create_mesh_parser(directory)
     tree = etree.parse(latest_file, parser)
 
@@ -59,7 +59,7 @@ def process_mesh_headings(target_directory: str, conn: PubmedCacheConn):
     headings = extract_mesh_headings(tree)
 
     # Add to the database
-    print(f"Adding {len(headings)} MeSH headings to the database...")
+    print(f"PubMedExtract: Adding {len(headings)} MeSH headings to the database...")
     conn.insert_mesh_heading_batch(headings)
 
-    print(f"Successfully added {len(headings)} MESH headings to database.\n")
+    print(f"PubMedExtract: Successfully added {len(headings)} MESH headings to database.\n")

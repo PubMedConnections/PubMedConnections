@@ -109,6 +109,9 @@ class PubmedCacheConn:
             "FOR (a:Article) REQUIRE a.pmid IS UNIQUE"
         ).consume()
 
+        # We don't want to start inserting data until the indices are created.
+        session.run("CALL db.awaitIndexes").consume()
+
     def _fetch_metadata(self, session: neo4j.Session):
         """
         Fetches the values to use for the author and article counters from the database.
@@ -129,7 +132,7 @@ class PubmedCacheConn:
         # If there are no nodes, then None will be returned.
         return 0 if result is None else result
 
-    def insert_article_batch(self, articles: list[Article], *, max_batch_size=16000):
+    def insert_article_batch(self, articles: list[Article], *, max_batch_size=10000):
         """
         Inserts a batch of articles into the database, including their authors.
         """
@@ -174,8 +177,7 @@ class PubmedCacheConn:
                     "id": journal.identifier,
                     "title": journal.title,
                     "volume": journal.volume,
-                    "issue": journal.issue,
-                    "date": journal.date
+                    "issue": journal.issue
                 },
                 "authors": authors_data,
                 "refs": article.reference_pmids,
@@ -184,32 +186,42 @@ class PubmedCacheConn:
 
         tx.run(
             """
+            // Loop through all the articles we want to insert.
             UNWIND $articles AS article WITH article, article.journal as journal, article.authors as authors
+
+                // Make sure the journal exists.
                 CALL {
                     WITH journal
                     MERGE (journal_node:Journal {id: journal.id})
                     ON CREATE
-                        SET
-                            journal_node.title = journal.title
+                        SET journal_node.title = journal.title
+                    ON MATCH
+                        SET journal_node.title = journal.title
                     RETURN journal_node
                 }
+
+                // Delete any old version of the current article.
                 CALL {
                     WITH article
-                    MERGE (article_node:Article {pmid: article.pmid})
-                    ON CREATE
-                        SET
-                            article_node.title = article.title,
-                            article_node.date = article.date
+                    MATCH (article_node:Article {pmid: article.pmid})
+                    DETACH DELETE article_node
+                }
+
+                // Insert the article and its relationship to the journal.
+                CALL {
+                    WITH article, journal, journal_node
+                    CREATE (article_node:Article {
+                        pmid: article.pmid,
+                        title: article.title,
+                        date: article.date
+                    })-[:PUBLISHED_IN {
+                        volume: journal.volume,
+                        issue: journal.issue
+                    }]->(journal_node)
                     RETURN article_node
                 }
-                CALL {
-                    WITH article_node, journal_node, journal
-                    CREATE (article_node)-[:PUBLISHED_IN {
-                        volume: journal.volume,
-                        issue: journal.issue,
-                        date: journal.date
-                    }]->(journal_node)
-                }
+
+                // Add the references from this article to other articles.
                 CALL {
                     WITH article_node, article
                     UNWIND article.refs as ref_pmid
@@ -217,6 +229,8 @@ class PubmedCacheConn:
                     WHERE ref_node.pmid = ref_pmid
                     CREATE (article_node)-[:REFERENCES]->(ref_node)
                 }
+
+                // Add the mesh headings of the article.
                 CALL {
                     WITH article_node, article
                     UNWIND article.mesh_desc_ids as mesh_id
@@ -225,6 +239,7 @@ class PubmedCacheConn:
                     CREATE (article_node)-[:CATEGORISED_BY]->(mesh_node)
                 }
 
+            // Add all of the authors of the article.
             UNWIND authors AS author
                 CALL {
                     WITH author

@@ -64,13 +64,15 @@ def run_extract(*, target_directory="./data", report_every=60):
         analytics = DownloadAnalytics(
             pubmed_file_sizes,
             no_threads=1,
+            prediction_size_bias=0.6,
             history_for_prediction=150
         )
-        # MESH headings first
+
+        # First, we need to add all the MESH headings to the database.
         process_mesh_headings(target_directory, conn)
 
-        print("PubMedExtract: Extracting data from {} PubMed files".format(len(pubmed_files)))
-        print()
+        # Then, we get started on the data files...
+        print(f"PubMedExtract: Extracting data from {len(pubmed_files)} PubMed files\n")
 
         file_queue = read_all_pubmed_files(target_directory, pubmed_files)
 
@@ -84,7 +86,7 @@ def run_extract(*, target_directory="./data", report_every=60):
             try:
                 conn.insert_article_batch(file.articles)
             except Exception as e:
-                print("Error occurred in file {}:".format(analytics.num_processed + 1), file=sys.stderr)
+                print(f"Error occurred in file {analytics.num_processed + 1}:", file=sys.stderr)
                 raise e
 
             duration = time.time() - start
