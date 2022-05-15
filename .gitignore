@@ -1,5 +1,6 @@
 # Project-Specific
 data/
+logs/
 data-backup/
 config.py
 error.node.txt

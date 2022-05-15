@@ -10,6 +10,7 @@ from lxml import etree
 
 from app.pubmed.medline_dates import parse_month, parse_medline_date
 from app.pubmed.model import Author, Article, Journal, MeshHeading
+from app.pubmed.warning_log import WarningLog
 
 
 def extract_single_node_by_tag(node: etree.Element, tag: str):
@@ -219,7 +220,7 @@ def extract_mesh_heading_list(heading_list_node: etree.Element):
     return descriptor_ids
 
 
-def extract_citation(citation_node: etree.Element) -> Optional[Article]:
+def extract_citation(citation_node: etree.Element) -> Article:
     """
     Extracts the details of an article from a <MedlineCitation> node.
     """
@@ -265,7 +266,7 @@ def extract_citation(citation_node: etree.Element) -> Optional[Article]:
     return article
 
 
-def extract_article_pmid_from_list(id_list_node: etree.Element) -> Optional[int]:
+def extract_article_pmid_from_list(log: WarningLog, id_list_node: etree.Element) -> Optional[int]:
     """ Extracts the PMID of an article from an <ArticleIdList> node. """
     for node in id_list_node:
         if node.tag != "ArticleId":
@@ -281,13 +282,13 @@ def extract_article_pmid_from_list(id_list_node: etree.Element) -> Optional[int]
                 return int(value)
             except ValueError:
                 # At least one reference has a DOI string marked as a PMID...
-                print(f"Invalid PMID detected: {value}", file=sys.stderr)
+                log.append(f"Invalid PMID detected: {value}")
                 continue
 
     return None
 
 
-def extract_pubmed_data(pubmed_data_node: etree.Element, article: Article):
+def extract_pubmed_data(log: WarningLog, pubmed_data_node: etree.Element, article: Article):
     """ Extracts information from a <PubmedData> node to add into the given article. """
     reference_pmids: list[int] = []
 
@@ -298,14 +299,46 @@ def extract_pubmed_data(pubmed_data_node: etree.Element, article: Article):
             if id_list_node is None:
                 continue
 
-            pmid = extract_article_pmid_from_list(id_list_node)
+            pmid = extract_article_pmid_from_list(log, id_list_node)
             if pmid is not None:
                 reference_pmids.append(pmid)
 
     article.reference_pmids = reference_pmids
 
 
-def extract_articles(tree: etree.ElementTree) -> list[Article]:
+def extract_pubmed_article(log: WarningLog, pubmed_article_node: etree.Element) -> Optional[Article]:
+    """ Tries to extract an article from the given <PubmedArticle> node. """
+    citation_node = None
+    pubmed_data_node = None
+    for node in pubmed_article_node:
+        tag = node.tag
+        if tag == "MedlineCitation":
+            citation_node = node
+        elif tag == "PubmedData":
+            pubmed_data_node = node
+
+    if citation_node is None:
+        raise Exception("<PubmedArticle> is missing a <MedlineCitation>")
+    if pubmed_data_node is None:
+        raise Exception("<PubmedArticle> is missing a <PubmedData>")
+
+    if "Status" not in citation_node.attrib:
+        raise Exception("<MedlineCitation> is missing a Status attribute")
+
+    # Skip articles that are not indexed in PubMed.
+    status = citation_node.attrib["Status"].lower()
+    if status in ["in-data-review", "publisher"]:
+        log.append(f"Skipped due to Status value, {status}")
+        return None
+    elif status not in ["in-process", "medline", "oldmedline", "pubmed-not-medline", "completed"]:
+        raise Exception(f"Unrecognised Status value, {status}")
+
+    article = extract_citation(citation_node)
+    extract_pubmed_data(log, pubmed_data_node, article)
+    return article
+
+
+def extract_articles(log: WarningLog, tree: etree.ElementTree) -> list[Article]:
     """
     Takes in a parsed PubMed data file object, and extracts
     the data that we are interested in from it.
@@ -317,36 +350,22 @@ def extract_articles(tree: etree.ElementTree) -> list[Article]:
             continue
 
         try:
-            citation_node = None
-            pubmed_data_node = None
-            for node in pubmed_article_node:
-                tag = node.tag
-                if tag == "MedlineCitation":
-                    citation_node = node
-                elif tag == "PubmedData":
-                    pubmed_data_node = node
+            article = extract_pubmed_article(log.group(f"index={index}"), pubmed_article_node)
+            if article is not None:
+                articles.append(article)
 
-            article = extract_citation(citation_node)
-            extract_pubmed_data(pubmed_data_node, article)
-            if article is None:
-                continue
-
-            articles.append(article)
         except Exception as e:
             traceback.print_exc()
             try:
                 with open("error.node.txt", "wt") as f:
-                    f.write("{} occurred while extracting data around:\n{}".format(
-                        type(e).__name__,
+                    f.write("{}: {}\n\nOccurred while extracting data around:\n{}".format(
+                        type(e).__name__, str(e),
                         etree.tostring(
                             pubmed_article_node,
                             pretty_print=True,
                             encoding="utf8"
                         ).decode("utf8")
                     ))
-
-                    # TODO : REMOVE
-                    break
 
             except Exception as e2:
                 traceback.print_exc()

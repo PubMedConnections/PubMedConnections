@@ -15,6 +15,7 @@ from lxml import etree
 
 from app.pubmed.extract_xml import extract_articles
 from app.pubmed.model import Article
+from app.pubmed.warning_log import WarningLog, LogFile
 
 
 def list_pubmed_files_in_dir(d: str) -> list[str]:
@@ -63,6 +64,7 @@ class ReadPubMedItem:
 
 
 def read_all_pubmed_files(
+        log_dir: str,
         target_directory: str,
         file_paths: list[str],
         *,
@@ -93,7 +95,7 @@ def read_all_pubmed_files(
             except queue.Empty:
                 break
 
-            articles = parse_pubmed_xml(target_directory, process_file)
+            articles = parse_pubmed_xml(log_dir, target_directory, process_file)
             output = ReadPubMedItem(process_index, articles)
             with unordered_queue_lock:
                 unordered_output_queue.put(output)
@@ -191,16 +193,27 @@ def create_pubmed_xml_parser(target_directory: str) -> etree.XMLParser:
     return parser
 
 
-def _do_parse_pubmed_xml(target_directory: str, path: str, return_queue: multiprocessing.Queue):
+def _do_parse_pubmed_xml(log_dir: str, target_directory: str, path: str, return_queue: multiprocessing.Queue):
     """
     Parses the contents of the given file and returns the result.
     """
     parser = create_pubmed_xml_parser(target_directory)
     tree: etree.ElementTree = etree.parse(path, parser)
-    return_queue.put(extract_articles(tree))
+
+    # Remove directories and all extensions from filename (i.e. removes .xml.gz)
+    filename = os.path.basename(path)
+    try:
+        filename = filename[:filename.index(".", 1)]
+    except ValueError:
+        pass
+
+    # Open the log file for warnings about the extraction of the articles.
+    log_file: str = os.path.join(log_dir, f"warnings.{filename}.txt")
+    with LogFile(log_file) as log:
+        return_queue.put(extract_articles(WarningLog(log), tree))
 
 
-def parse_pubmed_xml(target_directory: str, path: str) -> list[Article]:
+def parse_pubmed_xml(log_dir: str, target_directory: str, path: str) -> list[Article]:
     """
     Parses the contents of the file at the given path into a Python object.
     A new process is started to perform the parsing due to repeated calls
@@ -215,7 +228,7 @@ def parse_pubmed_xml(target_directory: str, path: str) -> list[Article]:
     process = multiprocessing.Process(
         name="parse_pubmed_xml",
         target=_do_parse_pubmed_xml,
-        args=(target_directory, path, return_queue),
+        args=(log_dir, target_directory, path, return_queue),
         daemon=True
     )
     process.start()

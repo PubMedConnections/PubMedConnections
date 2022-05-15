@@ -46,18 +46,19 @@ def run_sync(*, target_directory="./data"):
         f.write(example_file_contents.decode("utf8"))
 
 
-def run_extract(*, target_directory="./data", report_every=60):
+def run_extract(*, log_dir="./logs", target_directory="./data", report_every=60):
     """
     Extracts data from the synchronized PubMed data files.
     """
     overall_start = time.time()
 
     pubmed_files = list_downloaded_pubmed_files(target_directory)
-
     pubmed_file_sizes = []
     for pubmed_file in pubmed_files:
         pubmed_file_sizes.append(os.path.getsize(pubmed_file))
 
+    if not os.path.isdir(log_dir):
+        os.mkdir(log_dir)
 
     db_name = "{}.extract".format(NEO4J_DATABASE)
     with PubmedCacheConn(database=db_name, reset_on_connect=True) as conn:
@@ -74,7 +75,7 @@ def run_extract(*, target_directory="./data", report_every=60):
         # Then, we get started on the data files...
         print(f"PubMedExtract: Extracting data from {len(pubmed_files)} PubMed files\n")
 
-        file_queue = read_all_pubmed_files(target_directory, pubmed_files)
+        file_queue = read_all_pubmed_files(log_dir, target_directory, pubmed_files)
 
         last_report_time = time.time()
         while True:
