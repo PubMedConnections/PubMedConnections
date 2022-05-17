@@ -266,6 +266,25 @@ def extract_citation(citation_node: etree.Element) -> Article:
     return article
 
 
+def extract_pmid_node(log: WarningLog, id_node: etree.Element, context: str) -> Optional[int]:
+    """
+    Attempts to extract a PMID from an <ArticleId> or <PMID> node.
+    If the PMID takes a special value such as "NOT_FOUND", then
+    None will be returned. If parsing the PMID fails, then None
+    is returned and a warning is added to the log.
+    """
+    value: Optional[str] = id_node.text
+    if value is None or "NOT_FOUND" in value or "INVALID_JOURNAL" in value:
+        return None
+
+    try:
+        return int(value)
+    except ValueError:
+        # At least one reference has a DOI string marked as a PMID...
+        log.append(f"Invalid PMID detected while {context}: {value}")
+        return None
+
+
 def extract_article_pmid_from_list(log: WarningLog, id_list_node: etree.Element) -> Optional[int]:
     """ Extracts the PMID of an article from an <ArticleIdList> node. """
     for node in id_list_node:
@@ -274,16 +293,9 @@ def extract_article_pmid_from_list(log: WarningLog, id_list_node: etree.Element)
 
         attrib = node.attrib
         if "IdType" in attrib and attrib["IdType"] == "pubmed":
-            value: Optional[str] = node.text
-            if value is None or "NOT_FOUND" in value or "INVALID_JOURNAL" in value:
-                continue
-
-            try:
-                return int(value)
-            except ValueError:
-                # At least one reference has a DOI string marked as a PMID...
-                log.append(f"Invalid PMID detected: {value}")
-                continue
+            pmid = extract_pmid_node(log, node, "parsing PMID from ID list")
+            if pmid is not None:
+                return pmid
 
     return None
 
@@ -328,10 +340,58 @@ def extract_pubmed_article(log: WarningLog, pubmed_article_node: etree.Element) 
     # Skip articles that are not indexed in PubMed.
     status = citation_node.attrib["Status"].lower()
     if status in ["in-data-review", "publisher"]:
-        log.append(f"Skipped due to Status value, {status}")
         return None
     elif status not in ["in-process", "medline", "oldmedline", "pubmed-not-medline", "completed"]:
         raise Exception(f"Unrecognised Status value, {status}")
+
+    # Check for information contained in the comment corrections about this article.
+    is_retraction: bool = False
+    retracted_pmid: Optional[int] = None
+
+    is_update: bool = False
+    updated_pmids: list[int] = []
+    cited_pmids: list[int] = []
+    related_pmids: list[int] = []
+
+    comments_list_node = extract_single_node_by_tag(citation_node, "CommentsCorrectionsList")
+    if comments_list_node is not None:
+        for comment_node in comments_list_node:
+            if comment_node.tag != "CommentsCorrections":
+                continue
+            if "RefType" not in comment_node.attrib:
+                log.append("<CommentsCorrections> node is missing a RefType")
+                continue
+
+            ref_type = comment_node.attrib["RefType"].lower()
+            comment_is_retraction: bool = False
+            comment_is_update: bool = False
+            comment_is_citation: bool = False
+            if ref_type == "retractionof":
+                comment_is_retraction = True
+            elif ref_type in ["reprintof", "updateof", "republishedfrom", "erratumfor"]:
+                comment_is_update = True
+            elif ref_type in ["reprintof", "updateof", "republishedfrom", "erratumfor"]:
+                comment_is_citation = True
+
+            is_retraction = is_retraction or comment_is_retraction
+            is_update = is_update or comment_is_update
+
+            pmid_node = extract_single_node_by_tag(comment_node, "PMID")
+            if pmid_node is None:
+                continue
+
+            pmid = extract_pmid_node(log, pmid_node, "parsing comment corrections")
+            if pmid is None:
+                continue
+
+            if comment_is_retraction:
+                retracted_pmid = pmid
+
+    # TODO : Use the content of the comment corrections
+
+    # Retractions should not be saved as their own articles.
+    if is_retraction:
+        return None
 
     article = extract_citation(citation_node)
     extract_pubmed_data(log, pubmed_data_node, article)
