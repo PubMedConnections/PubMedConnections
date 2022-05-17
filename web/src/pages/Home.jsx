@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Home_Navigation } from "./components/Navigation";
 import { Header } from "./components/Header";
 import { Team } from "./components/Team";
-import JsonData from "../data/data.json";
+import JsonData from "./components/Team.json";
 import SmoothScroll from "smooth-scroll";
 
 export const scroll = new SmoothScroll('a[href*="#"]', {
@@ -21,7 +21,7 @@ function Home() {
     return (
         <div>
             <Home_Navigation />
-            <Header data={landingPageData.Header} />
+            <Header />
             <Team data={landingPageData.Team} />
         </div>
     );
