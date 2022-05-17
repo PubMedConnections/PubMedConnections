@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Home_Navigation } from "./components/Navigation";
 import { Header } from "./components/Header";
 import { Team } from "./components/Team";
-import JsonData from "./components/Team.json";
+import JsonData from "../json/data.json";
 import SmoothScroll from "smooth-scroll";
 
 export const scroll = new SmoothScroll('a[href*="#"]', {
