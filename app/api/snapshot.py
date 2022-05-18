@@ -27,7 +27,7 @@ class VisualiseSnapshot(Resource):
 @ns.route('/analyse/<int:snapshot_id>')
 class AnalyseSnapshot(Resource):
     @staticmethod
-    def get(snapshot_id):
+    def get(snapshot_id: int):
         return retrieve_analytics(snapshot_id)
 
 # @bp.route('/snapshot/visualise/<string:graph_type>', methods=['GET'])
