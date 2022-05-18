@@ -27,8 +27,8 @@ MATCH (institution:Institution)<-[:AFFILIATED_WITH]-(author:Author)-[:AUTHOR_OF]
 WHERE author.full_name =~ ".*" + $author + ".*"
 AND institution.name =~ ".*" + $institution + ".*"
 AND journal.name =~ ".*" + $journal + ".*"
-AND journal.publication_date >= date({year: $published_after.year, month:$published_after.month, day:$published_after.day}
-AND journal.publication_date <= date({year: $published_before.year, month:$published_abeforemonth, day:$published_before.day}
+AND article.date >= date({year: $published_after.year, month:$published_after.month, day:$published_after.day}
+AND article.date <= date({year: $published_before.year, month:$published_before.month, day:$published_before.day}
 RETURN article, author, institution, journal, heading
 LIMIT $limit
 ```

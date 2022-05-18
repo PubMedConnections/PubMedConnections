@@ -39,6 +39,7 @@ Citations to other papers
 `Article`
 * ID
 * title
+* Date
 
 `Author`
 * ID
@@ -47,8 +48,7 @@ Citations to other papers
 `Journal`
 * ID
 * name
-* publication_date
-
+* 
 `MeshHeading`
 * ID
 * name
@@ -61,7 +61,8 @@ Citations to other papers
 ### Relationships between nodes
 * `AUTHOR_OF`: `Author` --> `Article`
 * `PUBLISHED_IN`: `Article` --> `Journal`
-* `AFFILATED_WITH`: `Author` --> `University`
+  * Properties: `publication_date`
+* `AFFILATED_WITH`: `Author` --> `Institution`
 * `CATEGORISED_BY`: `Article` --> `MeshHeading`
   * Properties: `qualifiers`
 * `REFERENCES`: `Article` --> `Article`
