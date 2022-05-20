@@ -191,3 +191,29 @@ CREATE CONSTRAINT unique_institution_id FOR (institution:Institution) REQUIRE in
 Each file should be a `.xml.gz` file and should come with a corresponding `.xml.gz.md5` file.
 3. Download MeSH heading description file from <https://www.nlm.nih.gov/databases/download/mesh.html> and place the `.xml` file under `data/mesh/`.
 4. Run the extraction script with `python3 run.py extract`
+
+
+## Prototype demonstration - database queries
+
+Relationships:
+1. Author relationships: `MATCH p=()-[r:AUTHOR_OF]->() RETURN p LIMIT 25`
+2. MeshHeading categories: `MATCH p=()-[r:CATEGORISED_BY]->() RETURN p LIMIT 25`
+3. Journal publications: `MATCH p=()-[r:PUBLISHED_IN]->() RETURN p LIMIT 25`
+4. Article references: `MATCH p=()-[r:REFERENCES]->() RETURN p LIMIT 25
+`
+
+Filter query as per what happens in the backend prototype:
+```
+MATCH (author:Author {name:"Annalisa Patrizi"})
+MATCH (author)-[r:AUTHOR_OF]-(article:Article)
+OPTIONAL MATCH (article)<--(coauthor:Author) WHERE coauthor <> author
+RETURN DISTINCT author.name AS author_name, 
+article.title AS article_title, 
+COLLECT(DISTINCT coauthor.name) AS coauthors
+LIMIT 3
+```
+
+Query to show relationship between Authors, Articles, Journals and Mesh headings:
+```
+MATCH p=(m:MeshHeading)-[*]-(j:Journal) RETURN p LIMIT 10
+```
