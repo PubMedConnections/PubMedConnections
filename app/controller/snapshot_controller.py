@@ -10,14 +10,13 @@ import threading
 
 
 class AnalyticsThreading(object):
-    def __init__(self, graph_type: str, filters):
-        thread = threading.Thread(target=run_analytics, args=(graph_type, filters))
+    def __init__(self, graph_type: str, snapshot_id: int, filters):
+        thread = threading.Thread(target=run_analytics, args=(graph_type, snapshot_id, filters))
         thread.daemon = True
         thread.start()
 
 
 def query_by_filters(graph_type: str, filters):
-    AnalyticsThreading(graph_type=graph_type, filters=filters)
 
     def get_author(tx):
         return list(tx.run(
@@ -55,7 +54,17 @@ def query_by_filters(graph_type: str, filters):
                 i += 1
                 source = i
             rels.append({"source": source, "target": article_target})
-    return jsonify({"nodes": nodes, "edges": rels})
+    
+    # create snapshot
+    snapshot = Snapshot()
+    db.session.add(snapshot)
+    db.session.commit()
+
+    print("snapshot id: {}".format(snapshot.id))
+
+    AnalyticsThreading(graph_type=graph_type, filters=filters, snapshot_id=snapshot.id)
+
+    return jsonify({"snapshot_id": snapshot.id, "nodes": nodes, "edges": rels})
 
 
 def _map_centrality_results(centrality_res: list[DegreeCentrality]):
@@ -76,7 +85,7 @@ def _map_centrality_results(centrality_res: list[DegreeCentrality]):
     return top_nodes
 
 
-def run_analytics(graph_type: str, filters):
+def run_analytics(graph_type: str, snapshot_id: int, filters):
     """
     Runs analytics on the graph returned by the query. The graph is either author-author
     or MeSH-MeSH.
@@ -117,12 +126,12 @@ def run_analytics(graph_type: str, filters):
                 relationship_query
             )
 
-            # create snapshot
-            snapshot = Snapshot()
-            db.session.add(snapshot)
-            db.session.commit()
+            # # create snapshot
+            # snapshot = Snapshot()
+            # db.session.add(snapshot)
+            # db.session.commit()
 
-            print("snapshot id: {}".format(snapshot.id))
+            # print("snapshot id: {}".format(snapshot.id))
 
             # compute degree centrality
             res = gds.degree.stream(G)
@@ -133,7 +142,7 @@ def run_analytics(graph_type: str, filters):
             for row in res.head(5).itertuples():
                 node_degree_centrality = \
                     DegreeCentrality(
-                        snapshot_id=snapshot.id,
+                        snapshot_id=snapshot_id,
                         rank=row.Index,
                         node_id=row.nodeId,
                         node_name=gds.util.asNode(row.nodeId).get('name'),
