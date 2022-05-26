@@ -29,8 +29,8 @@ export const HomeNavigation = (props) => {
           <ul className='nav navbar-nav navbar-right'>
             <li><a href='#page-top' className='page-scroll'>Home</a></li>
             <li><a href='#team' className='page-scroll'>Team</a></li>
-            <li><Link to="/connections">Get Started</Link></li>
-            <li><Link to="/login">Login</Link></li>
+            <li><Link to="/connections">Connections</Link></li>
+            {/* <li><Link to="/login">Login</Link></li> */}
           </ul>
         </div>
       </div>
