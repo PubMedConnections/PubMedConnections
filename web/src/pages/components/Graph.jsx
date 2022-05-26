@@ -8,9 +8,12 @@
  */
 
 import React, { useEffect, useRef } from 'react';
-import { DataSet, Network} from 'vis-network';
+import { Network } from 'vis-network';
+import { DataSet } from 'vis-network/standalone/esm/vis-network';
+import { world_cup_nodes, world_cup_edges } from "../../json/world_cup"
 
-export const Graph = () => {
+
+export const GraphBasic = () => {
   // A reference to the div rendered by this component
   const domNode = useRef(null);
 
@@ -68,6 +71,68 @@ export const Graph = () => {
         min: 5,
         max: 150,
       },
+    },
+  };
+
+  useEffect(
+    () => {
+      network.current = new Network(domNode.current, data, options);
+    },
+    [domNode, network, data, options]
+  );
+
+  return (
+    <div ref = { domNode } />
+  );
+};
+
+
+export const GraphExtreme = () => {
+  // A reference to the div rendered by this component
+  const domNode = useRef(null);
+
+  // A reference to the vis network instance
+  const network = useRef(null);
+
+  // An array of nodes
+	// create people.	
+  // value corresponds with the age of the person
+
+	const nodesDataset = new DataSet(world_cup_nodes); // these come from WorldCup2014.js
+	const edgesDataset = new DataSet(world_cup_edges); // these come from WorldCup2014.js
+
+	const data = { nodes: nodesDataset, edges: edgesDataset };
+
+  var options = {
+    nodes: {
+      shape: "dot",
+      scaling: {
+        min: 10,
+        max: 30,
+        label: {
+          min: 8,
+          max: 30,
+          drawThreshold: 12,
+          maxVisible: 20,
+        },
+      },
+      font: {
+        size: 12,
+        face: "Tahoma",
+      },
+    },
+    edges: {
+      width: 0.15,
+      color: { inherit: "from" },
+      smooth: {
+        type: "continuous",
+      },
+    },
+    physics: false,
+    interaction: {
+      tooltipDelay: 200,
+      hideEdgesOnDrag: false,
+      hideEdgesOnZoom: false,
     },
   };
 
