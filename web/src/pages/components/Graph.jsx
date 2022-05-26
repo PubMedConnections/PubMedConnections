@@ -122,7 +122,7 @@ export const GraphMedium = () => {
 		{id: 22, value: 1, label: 'Dianne Ross'},
 		{id: 23, value: 3, label: 'Padddy Lamont'},
 		{id: 24, value: 2, label: 'Patrick Roe'},
-		{id: 25, value: 3, label: 'Jai Castly'},
+		{id: 25, value: 3, label: 'Jai Castle'},
 		{id: 26, value: 1, label: 'Hadi Navabi'},
 		{id: 27, value: 1, label: 'Wenxiao Zhang'},
 		{id: 28, value: 3, label: 'Aaron Norrish'},
