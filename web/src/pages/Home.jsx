@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Home_Navigation } from "./components/Navigation";
+import { HomeNavigation } from "./components/Navigation";
 import { Header } from "./components/Header";
 import { Team } from "./components/Team";
 import JsonData from "../json/data.json";
@@ -20,7 +20,7 @@ function Home() {
 
     return (
         <div>
-            <Home_Navigation />
+            <HomeNavigation />
             <Header />
             <Team data={landingPageData.Team} />
         </div>

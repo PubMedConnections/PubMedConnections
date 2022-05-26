@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom"
 
-export const Home_Navigation = (props) => {
+export const HomeNavigation = (props) => {
   return (
     <nav id='menu' className='navbar navbar-default navbar-fixed-top'>
       <div className='container'>
@@ -39,7 +39,7 @@ export const Home_Navigation = (props) => {
 }
 
 
-export const Other_Navigation = (props) => {
+export const OtherNavigation = (props) => {
   return (
     <nav id='menu' className='navbar navbar-default navbar-fixed-top'>
       <div className='container'>
