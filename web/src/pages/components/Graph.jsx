@@ -24,16 +24,16 @@ export const GraphBasic = () => {
 	// create people.	
   // value corresponds with the age of the person
   const nodes = [
-    { id: 1, value: 2, label: "Algie" },
-    { id: 2, value: 31, label: "Alston" },
-    { id: 3, value: 12, label: "Barney" },
-    { id: 4, value: 16, label: "Coley" },
-    { id: 5, value: 17, label: "Grant" },
-    { id: 6, value: 15, label: "Langdon" },
-    { id: 7, value: 6, label: "Lee" },
-    { id: 8, value: 5, label: "Merlin" },
-    { id: 9, value: 30, label: "Mick" },
-    { id: 10, value: 18, label: "Tod" },
+    {id: 1, value: 13, label: 'Wenxiao Zhang'},
+    {id: 2, value: 12, label: 'Ernest Hemingway'},
+    {id: 3, value: 10, label: 'J.R.R. Tolkien'},
+    {id: 4, value: 11, label: 'Hadi Navabi'},
+    {id: 5, value: 1, label: 'Patrick Roe'},
+    {id: 6, value: 3, label: 'Marc Tennet'},
+    {id: 7, value: 3, label: 'Atif Mansoor'},
+    {id: 8, value: 1, label: 'Paddy Lamont'},
+    {id: 9, value: 1, label: 'Aaron Norrish'},
+    {id: 10, value: 1, label: 'Jai Castle'},
   ];
 
 
@@ -42,18 +42,20 @@ export const GraphBasic = () => {
 	// create connections between people
   // value corresponds with the amount of contact between two people
   const edges = [
-    { from: 2, to: 8, value: 3 },
-    { from: 2, to: 9, value: 5 },
-    { from: 2, to: 10, value: 1 },
-    { from: 4, to: 6, value: 8 },
-    { from: 5, to: 7, value: 2 },
-    { from: 4, to: 5, value: 1 },
-    { from: 9, to: 10, value: 2 },
-    { from: 2, to: 3, value: 6 },
-    { from: 3, to: 9, value: 4 },
-    { from: 5, to: 3, value: 1 },
-    { from: 2, to: 7, value: 4 },
+    { from: 2, to: 8, value: 3, title: "" },
+    { from: 2, to: 9, value: 5, title: "" },
+    { from: 2, to: 10, value: 1, title: "" },
+    { from: 4, to: 6, value: 8, title: "" },
+    { from: 5, to: 7, value: 2, title: "" },
+    { from: 4, to: 5, value: 1, title: "" },
+    { from: 9, to: 10, value: 2, title: "" },
+    { from: 2, to: 3, value: 6, title: "" },
+    { from: 3, to: 9, value: 4, title: "" },
+    { from: 5, to: 3, value: 1, title: "" },
+    { from: 2, to: 7, value: 4, title: "" },
   ];
+  
+  
 
 
   const data = {
