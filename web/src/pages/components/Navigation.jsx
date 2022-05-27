@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom"
 
-export const Home_Navigation = (props) => {
+export const HomeNavigation = (props) => {
   return (
     <nav id='menu' className='navbar navbar-default navbar-fixed-top'>
       <div className='container'>
@@ -29,8 +29,8 @@ export const Home_Navigation = (props) => {
           <ul className='nav navbar-nav navbar-right'>
             <li><a href='#page-top' className='page-scroll'>Home</a></li>
             <li><a href='#team' className='page-scroll'>Team</a></li>
-            <li><Link to="/connections">Get Started</Link></li>
-            <li><Link to="/login">Login</Link></li>
+            <li><Link to="/connections">Connections</Link></li>
+            {/* <li><Link to="/login">Login</Link></li> */}
           </ul>
         </div>
       </div>
@@ -39,7 +39,7 @@ export const Home_Navigation = (props) => {
 }
 
 
-export const Other_Navigation = (props) => {
+export const OtherNavigation = (props) => {
   return (
     <nav id='menu' className='navbar navbar-default navbar-fixed-top'>
       <div className='container'>

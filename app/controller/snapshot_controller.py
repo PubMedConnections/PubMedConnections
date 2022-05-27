@@ -1,13 +1,12 @@
-from neo4j import GraphDatabase, basic_auth
+from neo4j import GraphDatabase
 from graphdatascience import GraphDataScience
-from config import NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD
+from config import NEO4J_DATABASE, NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD
 from flask import jsonify
 
 from app import db
 from app.snapshot_models import Snapshot, DegreeCentrality
 
 import threading
-
 
 class AnalyticsThreading(object):
     def __init__(self, graph_type: str, snapshot_id: int, filters):
@@ -66,7 +65,6 @@ def query_by_filters(graph_type: str, filters):
 
     return jsonify({"snapshot_id": snapshot.id, "nodes": nodes, "edges": rels})
 
-
 def _map_centrality_results(centrality_res: list[DegreeCentrality]):
     """
     Helper function which maps centrality results retrieved from the db into the required
@@ -118,7 +116,7 @@ def run_analytics(graph_type: str, snapshot_id: int, filters):
             RETURN id(a1) as source, id(a2) as target, apoc.create.vRelationship(a1, "COAUTHOR", {{count: c}}, a2) as rel
             """.format(author_name=filters['author'], min_colaborations=0)
 
-        with driver.session() as session:
+        with driver.session(database=NEO4J_DATABASE) as session:
             # project graph into memory
             G, _ = gds.graph.project.cypher(
                 graph_name,
@@ -153,12 +151,13 @@ def run_analytics(graph_type: str, snapshot_id: int, filters):
 
             print("analytics completed")
 
-            # TODO
+            # TODO 
             # other centrality measures
             # deal with when can't find a match
+            # deal with unconnected graph
 
             G.drop()
-
+        
         driver.close()
 
 
@@ -168,11 +167,19 @@ def retrieve_analytics(snapshot_id: int):
     """
     # get degree centrality scores
     res = DegreeCentrality.query.filter_by(snapshot_id=snapshot_id)
-    top5_degree = _map_centrality_results(res)
 
-    # construct response
-    analytics_response = {
-        "principle_connectors": top5_degree
-    }
+    if res.count() != 0:
+        top5_degree = _map_centrality_results(res)
 
-    return jsonify(analytics_response)
+        # construct response
+        analytics_response = {
+            "principle_connectors": top5_degree
+        }
+
+        return jsonify(analytics_response)
+
+    else:
+        if Snapshot.query.filter_by(id=snapshot_id).first() is None:
+            return "ERROR: snapshot does not exist"
+        else:
+            return "analytics have not completed yet"
