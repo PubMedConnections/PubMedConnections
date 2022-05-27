@@ -9,20 +9,61 @@ from app.snapshot_models import Snapshot, DegreeCentrality
 import threading
 
 class AnalyticsThreading(object):
-    def __init__(self, graph_type: str, filters):
-        thread = threading.Thread(target=run_analytics, args=(graph_type, filters))
+    def __init__(self, graph_type: str, snapshot_id: int, filters):
+        thread = threading.Thread(target=run_analytics, args=(graph_type, snapshot_id, filters))
         thread.daemon = True
         thread.start()
-    
+
+
 def query_by_filters(graph_type: str, filters):
-    # TODO verify inputs,
-    #  Query Neo4j,
-    #  transform data,
-    #  return results
 
-    t = AnalyticsThreading(graph_type=graph_type, filters=filters)
+    def get_author(tx):
+        return list(tx.run(
+            '''
+            MATCH (author:Author {name:$author_name})
+            MATCH (author)-[r:AUTHOR_OF]-(article:Article)
+            OPTIONAL MATCH (article)<--(coauthor:Author) WHERE coauthor <> author
+            RETURN DISTINCT author.name AS author_name, 
+            article.title AS article_title, 
+            COLLECT(DISTINCT coauthor.name) AS coauthors
+            LIMIT $limit
+            ''',
+            {"author_name": filters["author"], "limit": filters["limit"]}
+        ))
 
-    return "TODO return {} snapshot".format(graph_type)
+    driver = GraphDatabase.driver(uri=NEO4J_URI, auth=basic_auth(NEO4J_USER, NEO4J_PASSWORD))
+    session = driver.session()
+    results = session.read_transaction(get_author)
+    nodes = []
+    rels = []
+    i = 0
+    nodes.append({"value": results[0]["author_name"], "label": "author"})
+    for record in results:
+        nodes.append({"value": record["article_title"], "label": "article"})
+        i += 1
+        article_target = i
+        rels.append({"source": 0, "target": article_target})
+
+        for coauthor_name in record["coauthors"]:
+            coauthor = {"value": coauthor_name, "label": "coauthor"}
+            try:
+                source = nodes.index(coauthor)
+            except ValueError:
+                nodes.append(coauthor)
+                i += 1
+                source = i
+            rels.append({"source": source, "target": article_target})
+    
+    # create snapshot
+    snapshot = Snapshot()
+    db.session.add(snapshot)
+    db.session.commit()
+
+    print("snapshot id: {}".format(snapshot.id))
+
+    AnalyticsThreading(graph_type=graph_type, filters=filters, snapshot_id=snapshot.id)
+
+    return jsonify({"snapshot_id": snapshot.id, "nodes": nodes, "edges": rels})
 
 def _map_centrality_results(centrality_res: list[DegreeCentrality]):
     """
@@ -30,7 +71,7 @@ def _map_centrality_results(centrality_res: list[DegreeCentrality]):
     response format.
     """
     top_nodes = []
-    
+
     # TODO might need to sort by rank if not returned by order
     for db_node in centrality_res:
         node = {}
@@ -38,12 +79,13 @@ def _map_centrality_results(centrality_res: list[DegreeCentrality]):
         node['name'] = db_node.node_name
         node['centrality'] = db_node.node_score
         top_nodes.append(node)
-    
+
     return top_nodes
 
-def run_analytics(graph_type: str, filters):
+
+def run_analytics(graph_type: str, snapshot_id: int, filters):
     """
-    Runs analytics on the graph returned by the query. The graph is either author-author 
+    Runs analytics on the graph returned by the query. The graph is either author-author
     or MeSH-MeSH.
     """
     driver = GraphDatabase.driver(uri=NEO4J_URI)
@@ -52,7 +94,7 @@ def run_analytics(graph_type: str, filters):
     if graph_type == "authors":
         graph_name = "coauthors"
 
-        # return all authors within a 3 hop neighbourhood of a specific author 
+        # return all authors within a 3 hop neighbourhood of a specific author
         # in the projected author-author graph
         node_query = \
             """
@@ -82,12 +124,12 @@ def run_analytics(graph_type: str, filters):
                 relationship_query
             )
 
-            # create snapshot
-            snapshot = Snapshot()
-            db.session.add(snapshot)
-            db.session.commit()
-            
-            print("snapshot id: {}".format(snapshot.id))
+            # # create snapshot
+            # snapshot = Snapshot()
+            # db.session.add(snapshot)
+            # db.session.commit()
+
+            # print("snapshot id: {}".format(snapshot.id))
 
             # compute degree centrality
             res = gds.degree.stream(G)
@@ -98,11 +140,11 @@ def run_analytics(graph_type: str, filters):
             for row in res.head(5).itertuples():
                 node_degree_centrality = \
                     DegreeCentrality(
-                        snapshot_id = snapshot.id,
-                        rank = row.Index,
-                        node_id = row.nodeId,
-                        node_name = gds.util.asNode(row.nodeId).get('name'),
-                        node_score = int(row.score)
+                        snapshot_id=snapshot_id,
+                        rank=row.Index,
+                        node_id=row.nodeId,
+                        node_name=gds.util.asNode(row.nodeId).get('name'),
+                        node_score=int(row.score)
                     )
                 db.session.add(node_degree_centrality)
                 db.session.commit()

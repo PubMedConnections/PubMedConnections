@@ -10,7 +10,7 @@ class Snapshot(db.Model):
 
 class DegreeCentrality(db.Model):
     """
-    Stores the degree centrality of a specific node in a snapshot. Additionally records 
+    Stores the degree centrality of a specific node in a snapshot. Additionally records
     the node's id in the graph, the node's name and it's rank in terms of degree centrality
     for the snapshot.
     """

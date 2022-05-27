@@ -24,4 +24,5 @@ app.register_blueprint(api_bp, url_prefix='/api')
 app.register_blueprint(controller_bp)
 
 # Register the routes
+
 from app.routes import *
