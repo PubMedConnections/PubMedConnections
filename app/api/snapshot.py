@@ -1,7 +1,7 @@
 # from app.api import bp
 from flask import request
 from flask_restx import Namespace, Resource, fields
-from app.controller.snapshot_controller import query_by_filters
+from app.controller.snapshot_controller import query_by_filters, retrieve_analytics
 
 ns = Namespace('snapshot', description='snapshot related operations')
 
@@ -24,11 +24,11 @@ class VisualiseSnapshot(Resource):
         return query_by_filters(graph_type, filters)
 
 
-@ns.route('/analyse')
+@ns.route('/analyse/<int:snapshot_id>')
 class AnalyseSnapshot(Resource):
     @staticmethod
-    def get():
-        return "TODO return analytics for snapshot"
+    def get(snapshot_id: int):
+        return retrieve_analytics(snapshot_id)
 
 # @bp.route('/snapshot/visualise/<string:graph_type>', methods=['GET'])
 # def visualise_snapshot(graph_type):
