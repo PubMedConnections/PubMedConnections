@@ -4,14 +4,35 @@ PubMed cache database.
 """
 import datetime
 from typing import Optional
+from enum import Enum
+
+
+class DatabaseStatus(Enum):
+    NORMAL = 'normal'
+    UPDATING = 'updating'
 
 
 class DBMetadata:
     """
     Stores metadata about the data within the database.
     """
-    def __init__(self, version: int):
+
+    def __init__(self, version: int,
+                 update_time: float,
+                 finish_time: float,
+                 status: DatabaseStatus,
+                 file_names: list,
+                 file_hashes: list):
+
         self.version = version
+        self.update_time = update_time
+        self.finish_time = finish_time
+        self.status = status
+        self.file_names = file_names
+        self.file_hashes = file_hashes
+
+    def __str__(self):
+        return f"DBMetadata ({self.update_time}): {self.file_names}"
 
     def __repr__(self):
         return "<DBMetadata v{}>".format(self.version)

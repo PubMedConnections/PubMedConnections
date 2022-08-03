@@ -58,6 +58,14 @@ Citations to other papers
 * ID
 * name
 
+`DBMetadata`
+* version: The database version number (integer).
+* update_time: The time the update commenced.
+* finish_time: The time the update finished (if finished, else this will be -1).
+* status: Either 'updating' or 'normal' when the update is finished.
+* file_names: The list of file names that was used or will be used to perform the update.
+* file_hashes: The hashes of the files used in the update, in the same order as the file_names list. This will only be populated once the update has finished.
+
 ### Relationships between nodes
 * `AUTHOR_OF`: `Author` --> `Article`
 * `PUBLISHED_IN`: `Article` --> `Journal`
