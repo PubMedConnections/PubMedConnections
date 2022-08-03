@@ -195,12 +195,15 @@ Each file should be a `.xml.gz` file and should come with a corresponding `.xml.
 
 ## Prototype demonstration - database queries
 
+Counts of all node types
+`CALL apoc.meta.stats() YIELD labels RETURN labels;`
+
 Relationships:
 1. Author relationships: `MATCH p=()-[r:AUTHOR_OF]->() RETURN p LIMIT 25`
 2. MeshHeading categories: `MATCH p=()-[r:CATEGORISED_BY]->() RETURN p LIMIT 25`
 3. Journal publications: `MATCH p=()-[r:PUBLISHED_IN]->() RETURN p LIMIT 25`
-4. Article references: `MATCH p=()-[r:REFERENCES]->() RETURN p LIMIT 25
-`
+4. Article references: `MATCH p=()-[r:REFERENCES]->() RETURN p LIMIT 25`
+
 
 Filter query as per what happens in the backend prototype:
 ```
@@ -217,3 +220,19 @@ Query to show relationship between Authors, Articles, Journals and Mesh headings
 ```
 MATCH p=(m:MeshHeading)-[*]-(j:Journal) RETURN p LIMIT 10
 ```
+
+Coauthor graph
+```
+CALL {
+MATCH (a:Author)-[r:AUTHOR_OF*1..3]-(ar:Article)<--(target:Author)
+WHERE a.name =~ ".*Annalisa Patrizi.*"
+RETURN ar
+}
+
+MATCH (a1:Author)-[:AUTHOR_OF]->(ar:Article)<-[:AUTHOR_OF]-(a2:Author)
+
+WITH a1, a2, count(*) AS c
+
+RETURN a1, a2, apoc.create.vRelationship(a1, "COAUTHOR", {count: c}, a2) as rel
+```
+
