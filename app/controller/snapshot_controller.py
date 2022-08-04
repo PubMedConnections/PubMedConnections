@@ -1,4 +1,4 @@
-from neo4j import GraphDatabase
+from neo4j import GraphDatabase, basic_auth
 from graphdatascience import GraphDataScience
 from config import NEO4J_DATABASE, NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD
 from flask import jsonify
@@ -7,6 +7,7 @@ from app import db
 from app.snapshot_models import Snapshot, DegreeCentrality
 
 import threading
+
 
 class AnalyticsThreading(object):
     def __init__(self, graph_type: str, snapshot_id: int, filters):
@@ -17,53 +18,96 @@ class AnalyticsThreading(object):
 
 def query_by_filters(graph_type: str, filters):
 
+    """
+    cypher for querying authors
+    """
     def get_author(tx):
         return list(tx.run(
             '''
-            MATCH (author:Author {name:$author_name})
-            MATCH (author)-[r:AUTHOR_OF]-(article:Article)
+            MATCH (author:Author) 
+                WHERE SIZE($author_name) = 0 OR toLower(author.name) CONTAINS toLower($author_name)
+
+            MATCH (author)-[r:AUTHOR_OF]-(article:Article) 
+                WHERE SIZE($article_title) = 0 OR toLower(article.title) CONTAINS toLower($article_title)
+        
+            
+            
+            //MATCH (institution:Institution)<-[:AFFILIATED_WITH]-(author:Author) 
+                //WHERE SIZE($institution) = 0 OR toLower(institution.name) CONTAINS toLower($institution)
+            
+            MATCH (article)-[:PUBLISHED_IN]->(journal:Journal)
+                WHERE SIZE($journal) = 0 OR toLower(journal.title) CONTAINS toLower($journal)
+                //AND article.date >= date({year: $published_after.year, month:$published_after.month, day:$published_after.day}
+                //AND article.date <= date({year: $published_before.year, month:$published_before.month, day:$published_before.day}
+            
+            
             OPTIONAL MATCH (article)<--(coauthor:Author) WHERE coauthor <> author
-            RETURN DISTINCT author.name AS author_name, 
-            article.title AS article_title, 
-            COLLECT(DISTINCT coauthor.name) AS coauthors
+            
+            WITH
+            author,
+            {
+                article: properties(article),
+                coauthors: collect(DISTINCT properties(coauthor))
+            } AS articles
+            
+            
+            WITH 
+            {
+                author: properties(author),
+                articles:  collect(DISTINCT properties(articles))
+            } AS authors
+            
+
+            RETURN authors
             LIMIT $limit
             ''',
-            {"author_name": filters["author"], "limit": filters["limit"]}
+            {'author_name': filters['author'], 'article_title': filters['article_title'],
+             'institution': filters['institution'], 'journal': filters['journal'],
+             'published_before': filters['published_before'],
+             'published_after': filters['published_after'],
+             'mesh_heading': filters['mesh_heading'],
+             'limit': filters['limit']}
         ))
 
+    """
+    set up a graph database connection session
+    """
     driver = GraphDatabase.driver(uri=NEO4J_URI, auth=basic_auth(NEO4J_USER, NEO4J_PASSWORD))
     session = driver.session()
     results = session.read_transaction(get_author)
+    print(results)
     nodes = []
-    rels = []
+    edges = []
     i = 0
-    nodes.append({"value": results[0]["author_name"], "label": "author"})
     for record in results:
-        nodes.append({"value": record["article_title"], "label": "article"})
-        i += 1
-        article_target = i
-        rels.append({"source": 0, "target": article_target})
+        '''
+        author-author graph
+        
+        author -> a set of articles
+        article -> a set of coauthors
+        '''
+        for author_prop in record:
+            # append author node
+            author = author_prop['author']
+            author_node = {'id': author['id'], 'value': author['name'], 'label': 'author'}
+            nodes.append(author_node)
 
-        for coauthor_name in record["coauthors"]:
-            coauthor = {"value": coauthor_name, "label": "coauthor"}
-            try:
-                source = nodes.index(coauthor)
-            except ValueError:
-                nodes.append(coauthor)
-                i += 1
-                source = i
-            rels.append({"source": source, "target": article_target})
-    
-    # create snapshot
-    snapshot = Snapshot()
-    db.session.add(snapshot)
-    db.session.commit()
+            for article_prop in author_prop['articles']:
+                # append article node
+                article = article_prop['article']
+                article_node = {'id': article['pmid'], 'value': article['title'], 'label': 'article'}
+                nodes.append(article_node)
+                edges.append({'source': article_node['id'], 'target': author_node['id']})
 
-    print("snapshot id: {}".format(snapshot.id))
+                coauthors = article_prop['coauthors']
+                for coauthor in coauthors:
+                    # append coauthor node
+                    coauthor_node = {'id': coauthor['id'], 'value': coauthor['name'], 'label': 'coauthor'}
+                    nodes.append(coauthor_node)
+                    edges.append({'source': coauthor_node['id'], 'target': article_node['id']})
 
-    AnalyticsThreading(graph_type=graph_type, filters=filters, snapshot_id=snapshot.id)
+    return jsonify({"nodes": nodes, "edges": edges, 'counts': {'nodes num': len(nodes), 'edges num': len(edges)}})
 
-    return jsonify({"snapshot_id": snapshot.id, "nodes": nodes, "edges": rels})
 
 def _map_centrality_results(centrality_res: list[DegreeCentrality]):
     """
@@ -151,13 +195,13 @@ def run_analytics(graph_type: str, snapshot_id: int, filters):
 
             print("analytics completed")
 
-            # TODO 
+            # TODO
             # other centrality measures
             # deal with when can't find a match
             # deal with unconnected graph
 
             G.drop()
-        
+
         driver.close()
 
 
