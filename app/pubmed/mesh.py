@@ -33,8 +33,7 @@ def extract_desc_file_year(desc_file_name: str):
 
     return int(desc_file_name[len("desc"):-len(".xml")])
 
-
-def process_mesh_headings(target_directory: str, conn: PubmedCacheConn):
+def get_latest_mesh_desc_file(target_directory: str) -> [str, str]:
     directory = os.path.join(target_directory, "mesh")
 
     # Find the XML file under /data/mesh/
@@ -50,6 +49,9 @@ def process_mesh_headings(target_directory: str, conn: PubmedCacheConn):
     if latest_file is None:
         raise Exception("No MESH heading XML file found in the format desc*.xml")
 
+    return directory, latest_file
+
+def process_mesh_headings(directory:str , latest_file: str, conn: PubmedCacheConn):
     # Parse the XML
     print(f"PubMedExtract: Parsing MeSH headings from {latest_file}...")
     parser = create_mesh_parser(directory)

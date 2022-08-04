@@ -9,9 +9,11 @@ from app.pubmed.progress_analytics import DownloadAnalytics
 from app.pubmed.sink_db import PubmedCacheConn
 from app.pubmed.source_ftp import PubMedFTP
 from app.pubmed.source_files import list_downloaded_pubmed_files, read_all_pubmed_files
+from app.pubmed.update_metadata import set_updating, set_done_updating
 from app.utils import format_minutes
 from config import PUBMED_DB_FILE, NEO4J_DATABASE
-from app.pubmed.mesh import process_mesh_headings
+from app.pubmed.mesh import process_mesh_headings, get_latest_mesh_desc_file
+import hashlib
 
 
 def print_valid_modes():
@@ -60,6 +62,8 @@ def run_extract(*, log_dir="./logs", target_directory="./data", report_every=60)
     if not os.path.isdir(log_dir):
         os.mkdir(log_dir)
 
+    mesh_directory, mesh_heading_file = get_latest_mesh_desc_file(target_directory)
+
     db_name = "{}.extract".format(NEO4J_DATABASE)
     with PubmedCacheConn(database=db_name, reset_on_connect=True) as conn:
         analytics = DownloadAnalytics(
@@ -69,8 +73,11 @@ def run_extract(*, log_dir="./logs", target_directory="./data", report_every=60)
             history_for_prediction=150
         )
 
+        file_names = pubmed_files + [mesh_heading_file]
+        set_updating(conn, overall_start, file_names)
+
         # First, we need to add all the MESH headings to the database.
-        process_mesh_headings(target_directory, conn)
+        process_mesh_headings(mesh_directory, mesh_heading_file, conn)
 
         # Then, we get started on the data files...
         print(f"PubMedExtract: Extracting data from {len(pubmed_files)} PubMed files\n")
@@ -98,6 +105,10 @@ def run_extract(*, log_dir="./logs", target_directory="./data", report_every=60)
             if time.time() - last_report_time >= report_every:
                 last_report_time = time.time()
                 analytics.report(prefix="PubMedExtract: ", verb="Processed")
+
+        finish_time = time.time()
+        file_hashes = [hashlib.md5(open(f, 'rb').read()).hexdigest() for f in file_names]
+        set_done_updating(conn, overall_start, finish_time, file_names, file_hashes)
 
     overall_duration = time.time() - overall_start
     print("PubMedExtract: Completed extraction of {} data files in {}".format(

@@ -300,3 +300,43 @@ class PubmedCacheConn:
             """,
             headings=headings_data
         ).consume()
+
+    def fetch_db_metadata_version(self):
+        result = self.new_session().run(
+            """
+            MATCH (m:DBMetadata)
+            RETURN max(m.version)
+            """
+        ).single()[0]
+
+        # If there are no nodes, then None will be returned.
+        return 0 if result is None else result
+
+    def write_db_metadata(self, metadata: DBMetadata):
+        data = {
+            'version': metadata.version,
+            'update_time': metadata.update_time,
+            'finish_time': metadata.finish_time,
+            'status': metadata.status.value,
+            'file_names': metadata.file_names,
+            'file_hashes': metadata.file_hashes,
+        }
+
+        with self.new_session() as session:
+            session.write_transaction(self._write_db_metadata, data)
+
+    def _write_db_metadata(self, tx: neo4j.Transaction, data_dict):
+        tx.run(
+            """
+            CREATE(m: DBMetadata {
+            version: $data.version,
+            update_time: $data.update_time,
+            finish_time: $data.finish_time,
+            status: $data.status,
+            file_names: $data.file_names,
+            file_hashes: $data.file_hashes
+            })
+            """,
+            data=data_dict
+        ).consume()
+

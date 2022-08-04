@@ -1,4 +1,7 @@
-<img src="/app/static/logo-with-name.png" height=180 />
+<p align="center">
+  <img src="/app/static/logo-with-name.png" alt="PubMed Connections Logo" height="200" width="525" />
+</p>
+
 
 PubMed Connections is a web application that facilitates
 the analysis of the relationships between authors in the
