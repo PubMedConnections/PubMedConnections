@@ -6,7 +6,7 @@ ns = Namespace('snapshot', description='snapshot related operations')
 
 
 filters = ns.model('filters',
-                   {'author': fields.String(required=False, default="Annalisa Patrizi"),
+                   {'author': fields.String(required=False, default="cook"),
                     'article_title': fields.String(required=False, default=""),
                     'published_before': fields.String(required=False, default=""),
                     'published_after': fields.String(required=False, default=""),

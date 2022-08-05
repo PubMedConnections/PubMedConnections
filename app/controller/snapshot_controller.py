@@ -17,48 +17,32 @@ class AnalyticsThreading(object):
 
 
 def query_by_filters(graph_type: str, filters):
-
     """
     cypher for querying authors
     """
+
     def get_author(tx):
         return list(tx.run(
             '''
-            MATCH (author:Author) 
-                WHERE SIZE($author_name) = 0 OR toLower(author.name) CONTAINS toLower($author_name)
-
-            MATCH (author)-[r:AUTHOR_OF]-(article:Article) 
-                WHERE SIZE($article_title) = 0 OR toLower(article.title) CONTAINS toLower($article_title)
+            // author - article - citation - coauthor
+            MATCH (author: Author)-[:AUTHOR_OF]->(article:Article)-[:REFERENCES] -> 
+            (citation:Article) <-- (coauthor: Author)
+                WHERE (SIZE($author_name) = 0 OR toLower(author.name) CONTAINS toLower($author_name))
+                AND (SIZE($article_title) = 0 OR toLower(article.title) CONTAINS toLower($article_title))
+                AND citation <> article
+                AND coauthor <> author
+                //AND (SIZE($published_after) = 0 OR article.date >= date($published_after))
+                //AND (SIZE($published_before) = 0 OR article.date <= date($published_before))  
+            
+            // article - journal, citation - journal
+            MATCH (article)-[:PUBLISHED_IN]->(journal:Journal)<--(citation)
+                WHERE SIZE($journal) = 0 OR toLower(journal.title) CONTAINS toLower($journal)                
+            
+            WITH properties(author) AS author, properties(coauthor) AS coauthor, 
+            properties(article) AS article, properties(citation) AS citation
         
             
-            
-            //MATCH (institution:Institution)<-[:AFFILIATED_WITH]-(author:Author) 
-                //WHERE SIZE($institution) = 0 OR toLower(institution.name) CONTAINS toLower($institution)
-            
-            MATCH (article)-[:PUBLISHED_IN]->(journal:Journal)
-                WHERE SIZE($journal) = 0 OR toLower(journal.title) CONTAINS toLower($journal)
-                //AND article.date >= date({year: $published_after.year, month:$published_after.month, day:$published_after.day}
-                //AND article.date <= date({year: $published_before.year, month:$published_before.month, day:$published_before.day}
-            
-            
-            OPTIONAL MATCH (article)<--(coauthor:Author) WHERE coauthor <> author
-            
-            WITH
-            author,
-            {
-                article: properties(article),
-                coauthors: collect(DISTINCT properties(coauthor))
-            } AS articles
-            
-            
-            WITH 
-            {
-                author: properties(author),
-                articles:  collect(DISTINCT properties(articles))
-            } AS authors
-            
-
-            RETURN authors
+            RETURN author, coauthor, article, citation
             LIMIT $limit
             ''',
             {'author_name': filters['author'], 'article_title': filters['article_title'],
@@ -75,36 +59,50 @@ def query_by_filters(graph_type: str, filters):
     driver = GraphDatabase.driver(uri=NEO4J_URI, auth=basic_auth(NEO4J_USER, NEO4J_PASSWORD))
     session = driver.session()
     results = session.read_transaction(get_author)
+
     print(results)
+
     nodes = []
     edges = []
     i = 0
+
     for record in results:
-        '''
-        author-author graph
-        
-        author -> a set of articles
-        article -> a set of coauthors
-        '''
-        for author_prop in record:
-            # append author node
-            author = author_prop['author']
-            author_node = {'id': author['id'], 'value': author['name'], 'label': 'author'}
-            nodes.append(author_node)
+        author = {'id': record['author']['id'], 'label': record['author']['name'], 'value': 0}
+        coauthor = {'id': record['coauthor']['id'], 'label': record['coauthor']['name'], 'value': 1}
+        article = {'id': record['article']['pmid'], 'title': record['article']['title']}
+        citation = {'id': record['citation']['pmid'], 'title': record['citation']['title']}
+        edge = {'from': author['id'], 'to': coauthor['id'], 'value': 1, 'label': [(article, citation)]}
 
-            for article_prop in author_prop['articles']:
-                # append article node
-                article = article_prop['article']
-                article_node = {'id': article['pmid'], 'value': article['title'], 'label': 'article'}
-                nodes.append(article_node)
-                edges.append({'source': article_node['id'], 'target': author_node['id']})
+        # check if author in node list
+        if not any(node['id'] == author['id'] for node in nodes):
+            nodes.append(author)
 
-                coauthors = article_prop['coauthors']
-                for coauthor in coauthors:
-                    # append coauthor node
-                    coauthor_node = {'id': coauthor['id'], 'value': coauthor['name'], 'label': 'coauthor'}
-                    nodes.append(coauthor_node)
-                    edges.append({'source': coauthor_node['id'], 'target': article_node['id']})
+        # check if coauthor in node list
+        if len(nodes) == 0:
+            nodes.append(coauthor)
+        else:
+            node_flag = False
+            for i in range(len(nodes)):
+                if nodes[i]['id'] == coauthor['id']:
+                    nodes[i]['value'] += 1
+                    flag = True
+                    break
+            if not node_flag:
+                nodes.append(coauthor)
+
+        # check if edge in edge list
+        if len(edges) == 0:
+            edges.append(edge)
+        else:
+            edge_flag = False
+            for i in range(len(edges)):
+                if edges[i]['from'] == author['id'] and edges[i]['to'] == coauthor['id']:
+                    edges[i]['value'] += 1
+                    edges[i]['label'].append(edge['label'][0])
+                    edge_flag = True
+                    break
+            if not edge_flag:
+                edges.append(edge)
 
     return jsonify({"nodes": nodes, "edges": edges, 'counts': {'nodes num': len(nodes), 'edges num': len(edges)}})
 
