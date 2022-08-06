@@ -1,6 +1,7 @@
 from flask import request
 from flask_restx import Namespace, Resource, fields
-from app.controller.snapshot_controller import query_by_filters, retrieve_analytics
+from app.controller.snapshot_visualise import query_by_filters
+from app.controller.snapshot_analyse import retrieve_analytics
 
 ns = Namespace('snapshot', description='snapshot related operations')
 
