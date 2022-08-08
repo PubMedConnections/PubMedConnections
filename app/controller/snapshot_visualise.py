@@ -1,7 +1,9 @@
 from neo4j import GraphDatabase, basic_auth
 from config import NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD
 from flask import jsonify
-
+from app import db
+from app.snapshot_models import Snapshot
+from app.controller.snapshot_analyse import AnalyticsThreading
 
 def query_by_filters(graph_type: str, filters):
     """
@@ -46,6 +48,15 @@ def query_by_filters(graph_type: str, filters):
     driver = GraphDatabase.driver(uri=NEO4J_URI, auth=basic_auth(NEO4J_USER, NEO4J_PASSWORD))
     session = driver.session()
     results = session.read_transaction(get_author)
+
+    # create snapshot
+    snapshot = Snapshot()
+    db.session.add(snapshot)
+    db.session.commit()
+
+    print("snapshot id: {}".format(snapshot.id))
+
+    AnalyticsThreading(graph_type=graph_type, filters=filters, snapshot_id=snapshot.id)
 
     print(results)
 
