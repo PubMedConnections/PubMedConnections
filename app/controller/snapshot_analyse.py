@@ -70,15 +70,9 @@ def run_analytics(graph_type: str, snapshot_id: int, filters):
             G, _ = gds.graph.project.cypher(
                 graph_name,
                 node_query,
-                relationship_query
+                relationship_query,
+                validateRelationships=False
             )
-
-            # # create snapshot
-            # snapshot = Snapshot()
-            # db.session.add(snapshot)
-            # db.session.commit()
-
-            # print("snapshot id: {}".format(snapshot.id))
 
             # compute degree centrality
             res = gds.degree.stream(G)
@@ -104,6 +98,8 @@ def run_analytics(graph_type: str, snapshot_id: int, filters):
             # other centrality measures
             # deal with when can't find a match
             # deal with unconnected graph
+            #   neo4j.exceptions.ClientError: {code: Neo.ClientError.Procedure.ProcedureCallFailed} {message: Failed to invoke procedure `gds.graph.project.cypher`: Caused by: java.lang.IllegalArgumentException: Failed to load a relationship because its source-node with id 268269 is not part of the node query or projection. To ignore the relationship, set the configuration parameter `validateRelationships` to false.}
+            # add more complicated filters
 
             G.drop()
 
