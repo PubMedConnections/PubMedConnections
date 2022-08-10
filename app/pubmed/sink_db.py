@@ -200,25 +200,39 @@ class PubmedCacheConn:
                     RETURN journal_node
                 }
 
-                // Delete any old version of the current article.
+                // If there is already an old version of the article,
+                // then delete any relationships that it has.
+                // We can't just DETACH DELETE the article itself, as
+                // it doesn't get applied before we insert the article
+                // in the next step.
                 CALL {
                     WITH article
-                    MATCH (article_node:Article {pmid: article.pmid})
-                    DETACH DELETE article_node
+                    MATCH (article_node:Article {pmid: article.pmid}) -[r]->()
+                    DELETE r
                 }
 
                 // Insert the article and its relationship to the journal.
                 CALL {
-                    WITH article, journal, journal_node
-                    CREATE (article_node:Article {
-                        pmid: article.pmid,
-                        title: article.title,
-                        date: article.date
-                    })-[:PUBLISHED_IN {
+                    WITH article
+                    MERGE (article_node:Article {pmid: article.pmid})
+                    ON MATCH
+                        SET
+                            article_node.title = article.title,
+                            article_node.date = article.date
+                    ON CREATE
+                        SET
+                            article_node.title = article.title,
+                            article_node.date = article.date
+                    RETURN article_node
+                }
+
+                // Add the journal of the article.
+                CALL {
+                    WITH article_node, journal_node, journal
+                    CREATE (article_node)-[:PUBLISHED_IN {
                         volume: journal.volume,
                         issue: journal.issue
                     }]->(journal_node)
-                    RETURN article_node
                 }
 
                 // Add the references from this article to other articles.
@@ -227,7 +241,7 @@ class PubmedCacheConn:
                     UNWIND article.refs as ref_pmid
                     MATCH (ref_node:Article)
                     WHERE ref_node.pmid = ref_pmid
-                    CREATE (article_node)-[:REFERENCES]->(ref_node)
+                    CREATE (article_node)-[:CITES]->(ref_node)
                 }
 
                 // Add the mesh headings of the article.
