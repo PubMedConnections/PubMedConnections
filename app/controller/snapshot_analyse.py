@@ -1,9 +1,11 @@
 from neo4j import GraphDatabase
+from neo4j.exceptions import ClientError
 from graphdatascience import GraphDataScience
 from config import NEO4J_DATABASE, NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD
 from app import db
 from app.snapshot_models import Snapshot, DegreeCentrality
 from flask import jsonify
+
 
 import threading
 
@@ -66,42 +68,52 @@ def run_analytics(graph_type: str, snapshot_id: int, filters):
             """.format(author_name=filters['author'], min_colaborations=0)
 
         with driver.session(database=NEO4J_DATABASE) as session:
-            # project graph into memory
-            G, _ = gds.graph.project.cypher(
-                graph_name,
-                node_query,
-                relationship_query,
-                validateRelationships=False
-            )
+            # try project graph into memory
+            try:
+                G, _ = gds.graph.project.cypher(
+                    graph_name,
+                    node_query,
+                    relationship_query,
+                    validateRelationships=False
+                )
 
-            # compute degree centrality
-            res = gds.degree.stream(G)
+                # compute degree centrality
+                res = gds.degree.stream(G)
 
-            # save top 5 nodes by degree to db
-            res = res.sort_values(by=['score'], ascending=False, ignore_index=True)
+                # save top 5 nodes by degree to db
+                res = res.sort_values(by=['score'], ascending=False, ignore_index=True)
 
-            for row in res.head(5).itertuples():
-                node_degree_centrality = \
-                    DegreeCentrality(
-                        snapshot_id=snapshot_id,
-                        rank=row.Index,
-                        node_id=row.nodeId,
-                        node_name=gds.util.asNode(row.nodeId).get('name'),
-                        node_score=int(row.score)
-                    )
-                db.session.add(node_degree_centrality)
+                for row in res.head(5).itertuples():
+                    node_degree_centrality = \
+                        DegreeCentrality(
+                            snapshot_id=snapshot_id,
+                            rank=row.Index,
+                            node_id=row.nodeId,
+                            node_name=gds.util.asNode(row.nodeId).get('name'),
+                            node_score=int(row.score)
+                        )
+                    db.session.add(node_degree_centrality)
+                    db.session.commit()
+
+                print("analytics completed")
+
+                # TODO
+                # other centrality measures
+                # add more complicated filters
+
+                G.drop()
+
+            # unable to project the graph into memory because there is no matches for the given filters
+            except ClientError as err:
+                # print(err)
+
+                # remove snapshot
+                # TODO need to make sure this is consistent behaviour with adding the filters to the snapshot
+                snapshot = Snapshot.query.filter_by(id=snapshot_id).first()
+                db.session.delete(snapshot)
                 db.session.commit()
 
-            print("analytics completed")
-
-            # TODO
-            # other centrality measures
-            # deal with when can't find a match
-            # deal with unconnected graph
-            #   neo4j.exceptions.ClientError: {code: Neo.ClientError.Procedure.ProcedureCallFailed} {message: Failed to invoke procedure `gds.graph.project.cypher`: Caused by: java.lang.IllegalArgumentException: Failed to load a relationship because its source-node with id 268269 is not part of the node query or projection. To ignore the relationship, set the configuration parameter `validateRelationships` to false.}
-            # add more complicated filters
-
-            G.drop()
+                print("Successfully removed snapshot {} from the database".format(snapshot_id))
 
         driver.close()
 
