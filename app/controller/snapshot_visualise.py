@@ -5,41 +5,59 @@ from app import db
 from app.snapshot_models import Snapshot
 from app.controller.snapshot_analyse import AnalyticsThreading
 
-def query_by_filters(graph_type: str, filters):
+
+def query_by_filters(snapshot_id):
     """
     cypher for querying authors
     """
 
-    def get_author(tx):
+    def visualise_snapshot(tx):
         return list(tx.run(
             '''
-            // author - article - citation - coauthor
-            MATCH (author: Author)-[:AUTHOR_OF]->(article:Article)-[:REFERENCES] -> 
-            (citation:Article) <-- (coauthor: Author)
-                WHERE (SIZE($author_name) = 0 OR toLower(author.name) CONTAINS toLower($author_name))
-                AND (SIZE($article_title) = 0 OR toLower(article.title) CONTAINS toLower($article_title))
-                AND citation <> article
-                AND coauthor <> author
-                //AND (SIZE($published_after) = 0 OR article.date >= date($published_after))
-                //AND (SIZE($published_before) = 0 OR article.date <= date($published_before))  
+            // mesh - author - coauthor
+            CALL {
+            MATCH (s:Snapshot)
+            WHERE ID(s) = $snapshot_id 
+            //-- (v:DBMetadata)
+            RETURN s
+            //,v.version
+            }
             
-            // article - journal, citation - journal
-            MATCH (article)-[:PUBLISHED_IN]->(journal:Journal)<--(citation)
-                WHERE SIZE($journal) = 0 OR toLower(journal.title) CONTAINS toLower($journal)                
+            MATCH (mesh_heading: MeshHeading) <-[:CATEGORISED_BY]- (article: Article)
+            WHERE SIZE(s.mesh_heading) = 0 OR toLower(mesh_heading.name) = toLower(s.mesh_heading) 
             
-            WITH properties(author) AS author, properties(coauthor) AS coauthor, 
-            properties(article) AS article, properties(citation) AS citation
-        
+            MATCH (author:Author) - [: AUTHOR_OF] - (article) <- [:AUTHOR_OF]- (coauthor: Author)
+            WHERE (SIZE(s.author) = 0 OR toLower(author.name) CONTAINS toLower(s.author))
+            AND coauthor <> author
             
-            RETURN author, coauthor, article, citation
-            LIMIT $limit
+            MATCH (article) - [: PUBLISHED_IN] - (journal : Journal)
+            WHERE (SIZE(s.published_after) = 0 OR article.date >= s.published_after)
+            AND (SIZE(s.published_before) = 0 OR article.date <= s.published_before) 
+            AND (SIZE(s.journal) = 0 OR toLower(journal.title) CONTAINS toLower(s.journal))
+            AND (SIZE(s.article) = 0 OR toLower(article.title) CONTAINS toLower(s.article))
+            
+            WITH
+            author,
+            {
+                article: article.title,
+                coauthors: COLLECT(DISTINCT properties(coauthor))
+            } AS articles
+                        
+            RETURN DISTINCT properties(author) AS author,
+            COLLECT (DISTINCT properties(articles)) AS articles
+            LIMIT 100
             ''',
-            {'author_name': filters['author'], 'article_title': filters['article_title'],
-             'institution': filters['institution'], 'journal': filters['journal'],
-             'published_before': filters['published_before'],
-             'published_after': filters['published_after'],
-             'mesh_heading': filters['mesh_heading'],
-             'limit': filters['limit']}
+        {'snapshot_id': snapshot_id}
+        ))
+
+    def get_mesh(tx):
+        return list(tx.run(
+            '''
+           // mesh - mesh
+           MATCH (mesh_heading: MeshHeading) 
+           RETURN mesh_heading
+           LIMIT s.limit
+           ''',
         ))
 
     """
@@ -47,8 +65,7 @@ def query_by_filters(graph_type: str, filters):
     """
     driver = GraphDatabase.driver(uri=NEO4J_URI, auth=basic_auth(NEO4J_USER, NEO4J_PASSWORD))
     session = driver.session()
-    results = session.read_transaction(get_author)
-
+    results = session.read_transaction(visualise_snapshot)
     # create snapshot
     snapshot = Snapshot()
     db.session.add(snapshot)
@@ -56,7 +73,7 @@ def query_by_filters(graph_type: str, filters):
 
     print("snapshot id: {}".format(snapshot.id))
 
-    AnalyticsThreading(graph_type=graph_type, filters=filters, snapshot_id=snapshot.id)
+    # AnalyticsThreading(graph_type=graph_type, filters=filters, snapshot_id=snapshot.id)
 
     print(results)
 
@@ -64,42 +81,33 @@ def query_by_filters(graph_type: str, filters):
     edges = []
     i = 0
 
-    for record in results:
-        author = {'id': record['author']['id'], 'label': record['author']['name'], 'value': 0}
-        coauthor = {'id': record['coauthor']['id'], 'label': record['coauthor']['name'], 'value': 1}
-        article = {'id': record['article']['pmid'], 'title': record['article']['title']}
-        citation = {'id': record['citation']['pmid'], 'title': record['citation']['title']}
-        edge = {'from': author['id'], 'to': coauthor['id'], 'value': 1, 'label': [(article, citation)]}
+    for i in range(len(results)):
+        author = results[i]['author']
+        author['value'] = 0
+        nodes.append(author)
 
-        # check if author in node list
-        if not any(node['id'] == author['id'] for node in nodes):
-            nodes.append(author)
+        # author - collect (article)
+        for article in results[i]['articles']:
 
-        # check if coauthor in node list
-        if len(nodes) == 0:
-            nodes.append(coauthor)
-        else:
-            node_flag = False
-            for i in range(len(nodes)):
-                if nodes[i]['id'] == coauthor['id']:
+            # article - collect(coauthor)
+            for coauthor in article['coauthors']:
+
+                # coauthor appears multiple times
+                flag = True
+                for j in range(len(nodes)):
+                    if nodes[j]['id'] == coauthor['id']:
+                        flag = False
+                        nodes[j]['value'] += 1
+                        break
+
+                # new coauthor
+                if flag:
+                    # author value + 1
                     nodes[i]['value'] += 1
-                    flag = True
-                    break
-            if not node_flag:
-                nodes.append(coauthor)
+                    # set coauthor value
+                    coauthor['value'] = 1
+                    nodes.append(coauthor)
+                edges.append({'from': author['id'], 'to': coauthor['id'], 'label': article['article']})
 
-        # check if edge in edge list
-        if len(edges) == 0:
-            edges.append(edge)
-        else:
-            edge_flag = False
-            for i in range(len(edges)):
-                if edges[i]['from'] == author['id'] and edges[i]['to'] == coauthor['id']:
-                    edges[i]['value'] += 1
-                    edges[i]['label'].append(edge['label'][0])
-                    edge_flag = True
-                    break
-            if not edge_flag:
-                edges.append(edge)
-
-    return jsonify({"nodes": nodes, "edges": edges, 'counts': {'nodes num': len(nodes), 'edges num': len(edges)}})
+    return jsonify({"nodes": nodes, "edges": edges,
+                    'counts': {'nodes num': len(nodes), 'edges num': len(edges), 'records num': len(results)}})
