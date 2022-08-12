@@ -58,6 +58,8 @@ Citations to other papers
 * ID
 * name
 
+#### Meta-node types
+
 `DBMetadata`
 * version: The database version number (integer).
 * update_time: The time the update commenced.
@@ -66,15 +68,33 @@ Citations to other papers
 * file_names: The list of file names that was used or will be used to perform the update.
 * file_hashes: The hashes of the files used in the update, in the same order as the file_names list. This will only be populated once the update has finished.
 
+`Snapshot`
+* id: `int`
+* creation_time: `date`
+* Filters used:
+  * mesh_heading: `str`
+  * author: `str`
+  * date_from: `date`
+  * date_to: `date`
+  * first_author: `str`
+  * last_author: `str`
+* num_nodes: `int`
+* Analytics results:
+  * degree_centrality distribution: list
+* DB version number (relationship to the DBMetadataNode)
+
 ### Relationships between nodes
 * `AUTHOR_OF`: `Author` --> `Article`
+  * Properties: `position`
 * `PUBLISHED_IN`: `Article` --> `Journal`
   * Properties: `publication_date`
 * `AFFILATED_WITH`: `Author` --> `Institution`
 * `CATEGORISED_BY`: `Article` --> `MeshHeading`
   * Properties: `qualifiers`
-* `REFERENCES`: `Article` --> `Article`
+* `CITES`: `Article` --> `Article`
 
+#### Meta-node relationships
+* `USING_VERSION`: `Snapshot` --> `DBMetadata`
 
 ### Cypher creation query examples
 
