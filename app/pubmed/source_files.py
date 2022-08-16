@@ -26,7 +26,9 @@ def list_pubmed_files_in_dir(d: str) -> list[str]:
     return [os.path.join(d, name) for name in os.listdir(d) if name.startswith("n") and name.endswith(".xml.gz")]
 
 
-def list_downloaded_pubmed_files(target_directory: str) -> list[tuple[str, str, str]]:
+def list_downloaded_pubmed_files(
+        target_directory: str
+) -> tuple[tuple[str, int], tuple[str, int], list[tuple[str, int, str]]]:
     """
     Returns the paths to downloaded PubMed XML files.
     Returns a list of tuples of (group, year, file).
@@ -47,7 +49,7 @@ def list_downloaded_pubmed_files(target_directory: str) -> list[tuple[str, str, 
     latest_baseline_dir = os.path.join(baseline_dir, latest_baseline_group)
     latest_update_dir = os.path.join(update_dir, latest_update_group)
 
-    return sorted([
+    return (latest_baseline_group, latest_baseline_year), (latest_update_group, latest_update_year), sorted([
         *[(latest_baseline_group, latest_baseline_year, f) for f in list_pubmed_files_in_dir(latest_baseline_dir)],
         *[(latest_update_group, latest_update_year, f) for f in list_pubmed_files_in_dir(latest_update_dir)]
     ])

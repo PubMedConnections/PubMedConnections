@@ -29,14 +29,9 @@ class PubMedManager:
     def __init__(self, db_name: Optional[str] = None):
         self.db_name = db_name
 
-    def report_db_outdated(self, current_pubmed_db_version: int):
-        """
-        Reports to the user when
-        """
+    def _report_regenerate_instructions(self):
+        """ Reports instructs to re-generate the database. """
         print(
-            f"Your database has an unsupported version. Expected version {LATEST_PUBMED_DB_VERSION},\n"
-            f"but the database has version {current_pubmed_db_version}.\n"
-            "\n"
             f"Please re-generate your database or change the version of\n"
             f"PubMedConnections that you are running.\n"
             f"\n"
@@ -51,6 +46,30 @@ class PubMedManager:
             f"The 'extract' sub-command may then be used to re-generate your database\n",
             file=sys.stderr
         )
+
+    def report_db_incompatible(self, current_pubmed_db_version: int):
+        """
+        Reports to the user when what is stored in the database is incompatible
+        with the current version of PubMedConnections.
+        """
+        print(
+            f"Your database has an unsupported version. Expected version {LATEST_PUBMED_DB_VERSION},\n"
+            f"but the database has version {current_pubmed_db_version}.\n\n",
+            file=sys.stderr
+        )
+        self._report_regenerate_instructions()
+
+    def report_db_outdated(self, current_pubmed_db_year: int, expected_pubmed_db_year: int):
+        """
+        Reports to the user when the data stored in the database is from a previous
+        year to what has been synchronised to disk.
+        """
+        print(
+            f"Your database is outdated. Your database contains data from {current_pubmed_db_year},\n"
+            f"but the latest downloaded data is from {expected_pubmed_db_year}.\n\n",
+            file=sys.stderr
+        )
+        self._report_regenerate_instructions()
 
     def run_sync(self, *, target_directory="./data"):
         """
@@ -99,14 +118,28 @@ class PubMedManager:
             conn.delete_entire_database_contents()
             print("Success")
 
-    def run_extract(self, *, log_dir="./logs", target_directory="./data", report_every=60):
+    def run_extract(self, *, log_dir="./logs", target_directory="./data", report_every=60) -> int:
         """
         Extracts data from the synchronized PubMed data files.
+        Returns 0 on success, and an error code on failure.
         """
         overall_start = time.time()
 
         # List the data files that have been downloaded.
-        pubmed_file_specs = list_downloaded_pubmed_files(target_directory)
+        baseline_info, latest_info, pubmed_file_specs = list_downloaded_pubmed_files(target_directory)
+        (_, latest_baseline_year) = baseline_info
+        (_, latest_update_year) = latest_info
+
+        # Check that the baseline and updatefiles years match.
+        if latest_baseline_year != latest_update_year:
+            print(
+                f"The latest baseline dataset and the latest updatefiles dataset\n"
+                f"do not match. (latest_baseline={latest_baseline_year}, latest_update={latest_update_year})\n"
+                f"Has the sync of a new year's dataset not completed successfully?",
+                file=sys.stderr
+            )
+            return 1
+
         pubmed_files = [f for _, _, f in pubmed_file_specs]
         pubmed_file_sizes = []
         for pubmed_file in pubmed_files:
@@ -131,7 +164,10 @@ class PubMedManager:
             ))
 
         # Generate the general database metadata object.
-        meta = DBMetadata(LATEST_PUBMED_DB_VERSION, None, None, DatabaseStatus.UPDATING, meta_mesh, meta_pubmed)
+        meta = DBMetadata(
+            LATEST_PUBMED_DB_VERSION, None, latest_baseline_year, None,
+            DatabaseStatus.UPDATING, meta_mesh, meta_pubmed
+        )
 
         # Open a connection to the database!
         with PubmedCacheConn(database=self.db_name) as conn:
@@ -140,11 +176,17 @@ class PubMedManager:
             existing_meta = conn.fetch_db_metadata()
             existing_meta_mesh = None if existing_meta is None else existing_meta.mesh_file
             existing_meta_pubmed = [] if existing_meta is None else existing_meta.data_files
+            existing_meta_year = None if existing_meta is None else existing_meta.year
+
+            # Check if the current version of the database is incompatible.
+            if existing_meta is not None and existing_meta.is_incompatible():
+                self.report_db_incompatible(existing_meta.pubmed_db_version)
+                return 1
 
             # Check if the current version of the database is outdated.
-            if existing_meta is not None and existing_meta.is_outdated():
-                self.report_db_outdated(existing_meta.pubmed_db_version)
-                return
+            if existing_meta_year is not None and existing_meta_year != latest_baseline_year:
+                self.report_db_outdated(existing_meta_year)
+                return 1
 
             # Detect if we will need to update the MeSH headings.
             requires_mesh_processing = (existing_meta_mesh is None or not existing_meta_mesh.is_same_file(meta_mesh))
@@ -256,3 +298,4 @@ class PubMedManager:
         print("PubMedExtract: Completed extraction of {} data files in {}".format(
             len(pubmed_files), format_minutes(overall_duration / 60)
         ))
+        return 0

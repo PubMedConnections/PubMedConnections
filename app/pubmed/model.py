@@ -64,7 +64,7 @@ class DBMetadataDataFile:
     database.
     """
     def __init__(self, category: str,
-                 year: str,
+                 year: int,
                  file: str,
                  processed: bool,
                  md5_hash: Optional[str] = None,
@@ -125,6 +125,7 @@ class DBMetadata:
     """
     def __init__(self, pubmed_db_version: int,
                  version: Optional[int],
+                 year: Optional[int],
                  time: Optional[datetime],
                  status: DatabaseStatus,
                  mesh_file: Optional[DBMetadataMeshFile],
@@ -132,12 +133,13 @@ class DBMetadata:
 
         self.pubmed_db_version = pubmed_db_version
         self.version = version
+        self.year = year
         self.time = time
         self.status = status
         self.mesh_file = mesh_file
         self.data_files = data_files
 
-    def is_outdated(self):
+    def is_incompatible(self):
         """
         Returns whether the model in the database is
         incompatible with the current version.
@@ -155,6 +157,7 @@ class DBMetadata:
         return {
             "pubmed_db_version": self.pubmed_db_version,
             "version": self.version,
+            "year": self.year,
             "time": self.time,
             "status": self.status.value
         }
@@ -171,6 +174,7 @@ class DBMetadata:
         return DBMetadata(
             pubmed_db_version=base["pubmed_db_version"] if "pubmed_db_version" in base else 0,
             version=base["version"],
+            year=base["year"] if "year" in base else None,
             time=base["time"],
             status=DatabaseStatus(base["status"]),
             mesh_file=mesh_file,

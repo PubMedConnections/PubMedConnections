@@ -42,7 +42,8 @@ if __name__ == "__main__":
             sys.exit(1)
 
         manager = PubMedManager()
-        manager.run_extract()
+        exit_code = manager.run_extract()
+        sys.exit(exit_code)
 
     elif mode == "clear":
         if len(args) != 2:
