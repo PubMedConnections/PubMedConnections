@@ -2,8 +2,9 @@
 This package contains the database models for the
 PubMed cache database.
 """
-import datetime
-from typing import Optional
+import sys
+from datetime import datetime
+from typing import Optional, cast
 from enum import Enum
 
 
@@ -12,30 +13,166 @@ class DatabaseStatus(Enum):
     UPDATING = 'updating'
 
 
+class DBMetadataMeshFile:
+    """
+    Stores metadata about a MeSH description file, which are
+    specification files released yearly. The MeSH headings
+    from these specifications are used to categorise research.
+    """
+    def __init__(self, year: str, file: str, processed: bool, md5_hash: Optional[str]):
+        self.year = year
+        self.file = file
+        self.processed = processed
+        self.md5_hash = md5_hash
+
+    def is_same_file(self, obj):
+        if not isinstance(obj, DBMetadataMeshFile):
+            return False
+
+        other = cast(DBMetadataMeshFile, obj)
+        return self.year == other.year and \
+               self.file == other.file and \
+               self.md5_hash == other.md5_hash
+
+    def to_processed_dict(self) -> dict:
+        if not self.processed:
+            raise Exception("This mesh file has not been processed")
+
+        return {
+            "year": self.year,
+            "file": self.file,
+            "md5_hash": self.md5_hash
+        }
+
+    @staticmethod
+    def from_processed_dict(data: dict) -> 'DBMetadataMeshFile':
+        return DBMetadataMeshFile(
+            year=data["year"],
+            file=data["file"],
+            processed=True,
+            md5_hash=data["md5_hash"],
+        )
+
+
+class DBMetadataDataFile:
+    """
+    Stores metadata about a PubMed data file. These are the data
+    files that are parsed from XML to be added into the Neo4J
+    database.
+    """
+    def __init__(self, category: str,
+                 year: str,
+                 file: str,
+                 processed: bool,
+                 md5_hash: Optional[str] = None,
+                 no_articles: Optional[int] = None):
+        """
+        :param category: One of 'baseline' or 'updatefiles'.
+        """
+        self.category = category
+        self.year = year
+        self.file = file
+        self.processed = processed
+        self.md5_hash = md5_hash
+        self.no_articles = no_articles
+
+    def is_same_file_path(self, obj):
+        if not isinstance(obj, DBMetadataDataFile):
+            return False
+
+        other = cast(DBMetadataDataFile, obj)
+        return self.category == other.category and \
+               self.year == other.year and \
+               self.file == other.file
+
+    def to_processed_dict(self) -> dict:
+        if not self.processed:
+            raise Exception("This data file has not been processed")
+
+        return {
+            "category": self.category,
+            "year": self.year,
+            "file": self.file,
+            "md5_hash": self.md5_hash,
+            "no_articles": self.no_articles
+        }
+
+    @staticmethod
+    def from_processed_dict(data: dict) -> 'DBMetadataDataFile':
+        return DBMetadataDataFile(
+            category=data["category"],
+            year=data["year"],
+            file=data["file"],
+            processed=True,
+            md5_hash=data["md5_hash"],
+            no_articles=data["no_articles"]
+        )
+
+    def __str__(self):
+        return f"{type(self).__name__}(" \
+               f"category={self.category}, " \
+               f"year={self.year}, " \
+               f"file={self.file}, " \
+               f"processed={self.processed})"
+
+
 class DBMetadata:
     """
     Stores metadata about the data within the database.
     """
-
-    def __init__(self, version: int,
-                 update_time: float,
-                 finish_time: float,
+    def __init__(self, version: Optional[int],
+                 time: Optional[datetime],
                  status: DatabaseStatus,
-                 file_names: list,
-                 file_hashes: list):
+                 mesh_file: Optional[DBMetadataMeshFile],
+                 data_files: list[DBMetadataDataFile]):
 
         self.version = version
-        self.update_time = update_time
-        self.finish_time = finish_time
+        self.time = time
         self.status = status
-        self.file_names = file_names
-        self.file_hashes = file_hashes
+        self.mesh_file = mesh_file
+        self.data_files = data_files
+
+    def update_version(self, version: int):
+        self.version = version
+        self.time = datetime.now()
+
+    def to_dict(self) -> dict:
+        if self.version is None or self.time is None:
+            raise Exception("The version has not been supplied for this metadata object through update_version")
+
+        return {
+            'version': self.version,
+            'time': self.time,
+            'status': self.status.value
+        }
+
+    @staticmethod
+    def from_dicts(base: dict, mesh: list[dict], data: list[dict]) -> 'DBMetadata':
+        if len(mesh) > 1:
+            print("Unexpectedly got more than one related MeSH file! Ignoring them all", file=sys.stderr)
+            mesh = []
+
+        mesh_file = None if len(mesh) == 0 else DBMetadataMeshFile.from_processed_dict(mesh[0])
+        data_files = [DBMetadataDataFile.from_processed_dict(f) for f in data]
+
+        return DBMetadata(
+            version=base["version"],
+            time=base["time"],
+            status=DatabaseStatus(base["status"]),
+            mesh_file=mesh_file,
+            data_files=data_files
+        )
 
     def __str__(self):
-        return f"DBMetadata ({self.update_time}): {self.file_names}"
+        processed_files = 0
+        for file in self.data_files:
+            if file.processed:
+                processed_files += 1
 
-    def __repr__(self):
-        return "<DBMetadata v{}>".format(self.version)
+        return f"{type(self).__name__}(" \
+               f"version={self.version}, " \
+               f"time={self.time.strftime('%Y-%m-%d, %H:%M:%S')}, " \
+               f"progress={processed_files}/{len(self.data_files)})"
 
 
 class Author:

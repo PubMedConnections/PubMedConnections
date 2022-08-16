@@ -7,7 +7,6 @@ from typing import Optional
 import atomics
 import neo4j
 from app.pubmed.model import Article, DBMetadata, MeshHeading
-from app.utils import or_else
 from config import NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD, NEO4J_DATABASE
 
 
@@ -315,42 +314,95 @@ class PubmedCacheConn:
             headings=headings_data
         ).consume()
 
-    def fetch_db_metadata_version(self):
-        result = self.new_session().run(
-            """
-            MATCH (m:DBMetadata)
-            RETURN max(m.version)
-            """
-        ).single()[0]
+    def fetch_db_metadata(self) -> Optional[DBMetadata]:
+        """
+        Fetches the most recent DBMetadata.
+        """
+        with self.new_session() as session:
+            results = session.run(
+                """
+                CALL {
+                    MATCH (base:DBMetadata)
+                    RETURN base
+                    ORDER BY base.version DESC
+                    LIMIT 1
+                }
+                CALL {
+                    WITH base
+                    MATCH (base) -[:META_MESH_SOURCE]-> (meta:DBMetadataMeshFile)
+                    RETURN COLLECT(meta) as meta
+                }
+                CALL {
+                    WITH base
+                    MATCH (base) -[:META_DATA_SOURCE]-> (data: DBMetadataDataFile)
+                    RETURN COLLECT(data) as data
+                }
+                RETURN base, meta, data
+                """
+            ).single()
+            result = None if results is None or len(results) < 1 else results[0]
 
-        # If there are no nodes, then None will be returned.
-        return 0 if result is None else result
+        if result is None:
+            return None
+
+        base, meta, data = tuple(results)
+        return DBMetadata.from_dicts(base, meta, data)
 
     def write_db_metadata(self, metadata: DBMetadata):
-        data = {
-            'version': metadata.version,
-            'update_time': metadata.update_time,
-            'finish_time': metadata.finish_time,
-            'status': metadata.status.value,
-            'file_names': metadata.file_names,
-            'file_hashes': metadata.file_hashes,
-        }
-
         with self.new_session() as session:
-            session.write_transaction(self._write_db_metadata, data)
+            session.write_transaction(
+                self._write_db_metadata,
+                metadata
+            )
 
-    def _write_db_metadata(self, tx: neo4j.Transaction, data_dict):
+    def _write_db_metadata(self, tx: neo4j.Transaction, metadata: DBMetadata):
+        base_data = metadata.to_dict()
+        mesh_data = [f.to_processed_dict() for f in [metadata.mesh_file] if f.processed]
+        processed_data = [f.to_processed_dict() for f in metadata.data_files if f.processed]
         tx.run(
             """
-            CREATE(m: DBMetadata {
-            version: $data.version,
-            update_time: $data.update_time,
-            finish_time: $data.finish_time,
-            status: $data.status,
-            file_names: $data.file_names,
-            file_hashes: $data.file_hashes
-            })
+            CALL {  // Create the current metadata version node.
+                MERGE (base: DBMetadata {version: $base_data.version})
+                SET base = $base_data
+                RETURN base
+            }
+            CALL {  // Create the nodes that represent the MeSH files.
+                WITH base
+                UNWIND $mesh_data AS mesh_file WITH base, mesh_file
+                MERGE (mesh: DBMetadataMeshFile {
+                    year: mesh_file.year,
+                    file: mesh_file.file,
+                    md5_hash: mesh_file.md5_hash
+                })
+                CREATE (mesh) <-[:META_MESH_SOURCE]- (base)
+            }
+            CALL {  // Create the nodes that represent the PubMed data files.
+                WITH base
+                UNWIND $processed_data AS processed_data_file WITH base, processed_data_file
+                MERGE (data: DBMetadataDataFile {
+                    category: processed_data_file.category,
+                    year: processed_data_file.year,
+                    file: processed_data_file.file,
+                    md5_hash: processed_data_file.md5_hash,
+                    no_articles: processed_data_file.no_articles
+                })
+                CREATE (data) <-[:META_DATA_SOURCE]- (base)
+            }
             """,
-            data=data_dict
+            base_data=base_data, mesh_data=mesh_data, processed_data=processed_data
         ).consume()
 
+    def push_new_db_metadata(self, meta: DBMetadata):
+        """
+        Pushes the new state of the metadata to the database.
+        Updates the version and the modification time of the
+        metadata object.
+        """
+        latest_meta = self.fetch_db_metadata()
+        if latest_meta is None:
+            version = 1
+        else:
+            version = latest_meta.version + 1
+
+        meta.update_version(version)
+        self.write_db_metadata(meta)

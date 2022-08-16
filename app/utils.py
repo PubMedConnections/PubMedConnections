@@ -2,8 +2,23 @@
 This file contains general utility functions that don't
 really fit anywhere else.
 """
+import hashlib
 from multiprocessing.pool import ThreadPool
 from typing import TypeVar
+
+
+def calc_md5_hash_of_file(file_and_dir: str, *, block_size=2**20) -> str:
+    """
+    Calculates the MD5 hash for the contents of the given file encoded in hexadecimal.
+    """
+    with open(file_and_dir, 'rb') as f:
+        md5 = hashlib.md5()
+        while True:
+            data = f.read(block_size)
+            if not data:
+                break
+            md5.update(data)
+        return md5.hexdigest()
 
 
 T = TypeVar('T')
