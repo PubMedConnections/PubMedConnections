@@ -2,7 +2,7 @@ from flask import request
 from flask_restx import Namespace, Resource, fields
 from app.controller.snapshot_visualise import query_by_filters
 from app.controller.snapshot_create import create_by_filters
-from app.controller.snapshot_get import get_all_snapshots
+from app.controller.snapshot_get import get_snapshot
 from app.controller.snapshot_delete import delete_by_snapshot_id
 from app.controller.snapshot_analyse import retrieve_analytics
 
@@ -11,8 +11,8 @@ ns = Namespace('snapshot', description='snapshot related operations')
 
 filters = ns.model('filters',
                    {'mesh_heading': fields.String(required=False, default="Skin Neoplasms"),
-                    'author': fields.String(required=False, default="Annalisa Patrizi"),
-                    'first_author': fields.String(required=False, default=""),
+                    'author': fields.String(required=False, default=""),
+                    'first_author': fields.String(required=False, default="Vittorio Bolcato"),
                     'last_author': fields.String(required=False, default=""),
                     'published_before': fields.String(required=False, default=""),
                     'published_after': fields.String(required=False, default=""),
@@ -32,11 +32,13 @@ class CreateSnapshot(Resource):
         filters = request.json
         return create_by_filters(graph_type, filters)
 
-@ns.route('/get_all_snapshots')
-class GetAllSnapshot(Resource):
+@ns.route('/get_snapshot/')
+@ns.route('/get_snapshot/<int:snapshot_id>')
+class GetSnapshot(Resource):
     @staticmethod
-    def get():
-        return get_all_snapshots()
+
+    def get(snapshot_id=-1):
+        return get_snapshot(snapshot_id)
 
 @ns.route('/delete/<int:snapshot_id>')
 class DeleteSnapshot(Resource):

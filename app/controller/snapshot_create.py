@@ -10,13 +10,13 @@ def create_by_filters(graph_type: str, filters):
 
     filters['creation_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    def create_snapshot(tx):
+    def cypher(tx):
         result = tx.run(
             '''
-            //MATCH (m:DBMetadata)
-            //WITH max(m.version) AS max_version
-            //MATCH (d:DBMetadata)
-            //WHERE d.version = max_version
+            MATCH (m:DBMetadata)
+            WITH max(m.version) AS max_version
+            MATCH (d:DBMetadata)
+            WHERE d.version = max_version
 
             CREATE (s:Snapshot {
             creation_time: $creation_time,
@@ -29,9 +29,9 @@ def create_by_filters(graph_type: str, filters):
             journal: $journal,
             article: $article,
             num_nodes: $num_nodes,
-            degree_centrality: $degree_centrality
-            }) 
-            //- [u:USING_VERSION] -> (d)
+            degree_centrality: $degree_centrality,
+            database_version: max_version
+            })
             SET s.id = ID(s)
             RETURN ID(s) AS snapshot_id
             ''',
@@ -58,7 +58,7 @@ def create_by_filters(graph_type: str, filters):
     """
     driver = GraphDatabase.driver(uri=NEO4J_URI, auth=basic_auth(NEO4J_USER, NEO4J_PASSWORD))
     session = driver.session()
-    snapshot_id = session.write_transaction(create_snapshot)
+    snapshot_id = session.write_transaction(cypher)
 
     return snapshot_id
 

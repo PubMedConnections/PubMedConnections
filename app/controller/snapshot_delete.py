@@ -3,7 +3,7 @@ from config import NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD
 
 
 def delete_by_snapshot_id(snapshot_id: int):
-    def delete_snapshot(tx):
+    def cypher(tx):
         result = tx.run(
             '''
             MATCH (s:Snapshot)
@@ -21,5 +21,5 @@ def delete_by_snapshot_id(snapshot_id: int):
 
     driver = GraphDatabase.driver(uri=NEO4J_URI, auth=basic_auth(NEO4J_USER, NEO4J_PASSWORD))
     session = driver.session()
-    snapshot_id = session.write_transaction(delete_snapshot)
+    snapshot_id = session.write_transaction(cypher)
     return snapshot_id
