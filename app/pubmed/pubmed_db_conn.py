@@ -151,12 +151,18 @@ class PubmedCacheConn:
         """
         articles_data = []
         for article in articles:
-            authors_data = []
-            for author in article.authors:
-                authors_data.append({
-                    "id": self.author_id_counter.next(),
-                    "name": author.full_name,
-                    "is_collective": author.is_collective
+            author_relations = []
+            for author_relation in article.author_relations:
+                author = author_relation.author
+                author_relations.append({
+                    "author": {
+                        "id": self.author_id_counter.next(),
+                        "name": author.full_name,
+                        "is_collective": author.is_collective
+                    },
+                    "author_position": author_relation.author_position,
+                    "is_first_author": author_relation.is_first_author,
+                    "is_last_author": author_relation.is_last_author
                 })
 
             journal = article.journal
@@ -167,10 +173,10 @@ class PubmedCacheConn:
                 "journal": {
                     "id": journal.identifier,
                     "title": journal.title,
-                    "volume": journal.volume,
-                    "issue": journal.issue
+                    "volume": journal.non_null_volume,
+                    "issue": journal.non_null_issue
                 },
-                "authors": authors_data,
+                "author_relations": author_relations,
                 "refs": article.reference_pmids,
                 "mesh_desc_ids": article.mesh_descriptor_ids
             })
@@ -178,7 +184,8 @@ class PubmedCacheConn:
         tx.run(
             """
             // Loop through all the articles we want to insert.
-            UNWIND $articles AS article WITH article, article.journal as journal, article.authors as authors
+            UNWIND $articles AS article
+            WITH article, article.journal as journal, article.author_relations as author_relations
 
                 // Make sure the journal exists.
                 CALL {
@@ -220,7 +227,7 @@ class PubmedCacheConn:
                 // Add the journal of the article.
                 CALL {
                     WITH article_node, journal_node, journal
-                    CREATE (article_node)-[:PUBLISHED_IN {
+                    MERGE (article_node)-[:PUBLISHED_IN {
                         volume: journal.volume,
                         issue: journal.issue
                     }]->(journal_node)
@@ -232,7 +239,7 @@ class PubmedCacheConn:
                     UNWIND article.refs as ref_pmid
                     MATCH (ref_node:Article)
                     WHERE ref_node.pmid = ref_pmid
-                    CREATE (article_node)-[:CITES]->(ref_node)
+                    MERGE (article_node)-[:CITES]->(ref_node)
                 }
 
                 // Add the mesh headings of the article.
@@ -241,11 +248,12 @@ class PubmedCacheConn:
                     UNWIND article.mesh_desc_ids as mesh_id
                     MATCH (mesh_node:MeshHeading)
                     WHERE mesh_node.id = mesh_id
-                    CREATE (article_node)-[:CATEGORISED_BY]->(mesh_node)
+                    MERGE (article_node)-[:CATEGORISED_BY]->(mesh_node)
                 }
 
             // Add all of the authors of the article.
-            UNWIND authors AS author
+            UNWIND author_relations AS author_relation
+            WITH article_node, author_relation, author_relation.author AS author
                 CALL {
                     WITH author
                     MERGE (author_node:Author {name: author.name})
@@ -253,9 +261,17 @@ class PubmedCacheConn:
                         SET
                             author_node.id = author.id,
                             author_node.is_collective = author.is_collective
+                    ON MATCH
+                        SET
+                            author_node.id = author.id,
+                            author_node.is_collective = author.is_collective
                     RETURN author_node
                 }
-                CREATE (author_node)-[:AUTHOR_OF]->(article_node)
+                MERGE (author_node)-[:AUTHOR_OF {
+                    author_position: author_relation.author_position,
+                    is_first_author: author_relation.is_first_author,
+                    is_last_author: author_relation.is_last_author
+                }]->(article_node)
             """,
             articles=articles_data
         ).consume()

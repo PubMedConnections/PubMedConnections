@@ -8,7 +8,7 @@ from typing import Optional, cast
 from enum import Enum
 
 
-LATEST_PUBMED_DB_VERSION = 1
+LATEST_PUBMED_DB_VERSION = 2
 
 
 class DatabaseStatus(Enum):
@@ -272,19 +272,32 @@ class Journal:
     """
     A journal within which an article was published.
     """
+    SPECIAL_MISSING_VOLUME_TEXT = "<NO_VOLUME>"
+    SPECIAL_MISSING_ISSUE_TEXT = "<NO_ISSUE>"
+
     def __init__(
             self,
             identifier: str,
             title: str,
-            volume: str,
-            issue: str,
+            volume: Optional[str],
+            issue: Optional[str],
             date: datetime.date):
 
         self.identifier = identifier
         self.title = title
-        self.volume = volume
-        self.issue = issue
+        self.volume = volume if volume != Journal.SPECIAL_MISSING_VOLUME_TEXT else None
+        self.issue = issue if issue != Journal.SPECIAL_MISSING_ISSUE_TEXT else None
         self.date = date
+
+    @property
+    def non_null_volume(self) -> str:
+        """ If the volume is None, returns Journal.SPECIAL_MISSING_VOLUME_TEXT. """
+        return self.volume if self.volume is not None else Journal.SPECIAL_MISSING_VOLUME_TEXT
+
+    @property
+    def non_null_issue(self) -> str:
+        """ If the issue is None, returns Journal.SPECIAL_MISSING_ISSUE_TEXT. """
+        return self.issue if self.issue is not None else Journal.SPECIAL_MISSING_ISSUE_TEXT
 
     @staticmethod
     def generate(
@@ -311,6 +324,32 @@ class Journal:
         return "<Journal {}: {}>".format(self.identifier, str(self))
 
 
+class ArticleAuthorRelation:
+    """
+    Represents the relationship that represents authorship of an article.
+    The authorship is represented by the
+    """
+    def __init__(self,
+                 article: 'Article', author: Author,
+                 author_position: int, is_first_author: bool, is_last_author: bool):
+
+        self.article = article
+        self.author = author
+        self.author_position = author_position
+        self.is_first_author = is_first_author
+        self.is_last_author = is_last_author
+
+    def __str__(self):
+        return f"({str(self.author)}) " \
+               f"-[:AUTHOR_OF {{author_pos={self.author_position}, " \
+               f"first={self.is_first_author}, " \
+               f"last={self.is_last_author} }}]-> " \
+               f"({str(self.article)})"
+
+    def __repr__(self):
+        return f"<ArticleAuthorRelation {str(self)}>"
+
+
 class Article:
     """
     An article in PubMed.
@@ -325,7 +364,7 @@ class Article:
         self.date: datetime.date = date
         self.title: str = title
         self._journal: Optional[Journal] = None
-        self._authors: Optional[list[Author]] = None
+        self._author_relations: Optional[list[ArticleAuthorRelation]] = None
         self._reference_pmids: Optional[list[int]] = None
         self._mesh_descriptor_ids: Optional[list[int]] = None
 
@@ -365,14 +404,19 @@ class Article:
     @property
     def authors(self) -> list[Author]:
         """ Returns all the Authors of this article. """
-        if self._authors is None:
-            raise ValueError("The authors of this article have not been read from the database")
-        return self._authors
+        return [relation.author for relation in self.author_relations]
 
-    @authors.setter
-    def authors(self, authors: list[Author]):
+    @property
+    def author_relations(self) -> list[ArticleAuthorRelation]:
+        """ Returns all the ArticleAuthorRelations of this article. """
+        if self._author_relations is None:
+            raise ValueError("The authors of this article have not been read from the database")
+        return self._author_relations
+
+    @author_relations.setter
+    def author_relations(self, author_relations: list[Author]):
         """ Sets the Authors of this article. """
-        self._authors = authors
+        self._author_relations = author_relations
 
     @property
     def journal(self) -> Journal:
