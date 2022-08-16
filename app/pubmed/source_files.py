@@ -16,6 +16,7 @@ from lxml import etree
 from app.pubmed.extract_xml import extract_articles
 from app.pubmed.model import Article
 from app.pubmed.warning_log import WarningLog, LogFile
+from app.utils import calc_md5_hash_of_file
 
 
 def list_pubmed_files_in_dir(d: str) -> list[str]:
@@ -25,31 +26,41 @@ def list_pubmed_files_in_dir(d: str) -> list[str]:
     return [os.path.join(d, name) for name in os.listdir(d) if name.startswith("n") and name.endswith(".xml.gz")]
 
 
-def list_downloaded_pubmed_files(target_directory: str) -> list[str]:
+def list_downloaded_pubmed_files(
+        target_directory: str
+) -> tuple[tuple[str, int], tuple[str, int], list[tuple[str, int, str]]]:
     """
     Returns the paths to downloaded PubMed XML files.
+    Returns a list of tuples of (group, year, file).
     """
     pubmed_dir = os.path.join(target_directory, "pubmed")
     baseline_dir = os.path.join(pubmed_dir, "baseline")
-    updatefiles_dir = os.path.join(pubmed_dir, "updatefiles")
+    update_dir = os.path.join(pubmed_dir, "updatefiles")
 
     baseline_groups = sorted(os.listdir(baseline_dir))
-    updatefiles_groups = sorted(os.listdir(updatefiles_dir))
+    update_groups = sorted(os.listdir(update_dir))
 
-    latest_baseline_dir = os.path.join(baseline_dir, baseline_groups[-1])
-    latest_updatefiles_group = os.path.join(updatefiles_dir, updatefiles_groups[-1])
+    latest_baseline_group = baseline_groups[-1]
+    latest_update_group = update_groups[-1]
 
-    return sorted([
-        *list_pubmed_files_in_dir(latest_baseline_dir),
-        *list_pubmed_files_in_dir(latest_updatefiles_group)
+    latest_baseline_year = 2000 + int(latest_baseline_group[len("pubmed"):])
+    latest_update_year = 2000 + int(latest_update_group[len("pubmed"):])
+
+    latest_baseline_dir = os.path.join(baseline_dir, latest_baseline_group)
+    latest_update_dir = os.path.join(update_dir, latest_update_group)
+
+    return (latest_baseline_group, latest_baseline_year), (latest_update_group, latest_update_year), sorted([
+        *[(latest_baseline_group, latest_baseline_year, f) for f in list_pubmed_files_in_dir(latest_baseline_dir)],
+        *[(latest_update_group, latest_update_year, f) for f in list_pubmed_files_in_dir(latest_update_dir)]
     ])
 
 
 class ReadPubMedItem:
     """ The contents of a PubMed file that has been read. """
 
-    def __init__(self, index: int, articles: Optional[list[Article]]):
+    def __init__(self, index: int, md5_hash: Optional[str], articles: Optional[list[Article]]):
         self.index = index
+        self.md5_hash = md5_hash
         self.articles = articles
 
     def __eq__(self, other):
@@ -96,7 +107,8 @@ def read_all_pubmed_files(
                 break
 
             articles = parse_pubmed_xml(log_dir, target_directory, process_file)
-            output = ReadPubMedItem(process_index, articles)
+            md5_hash = calc_md5_hash_of_file(process_file)
+            output = ReadPubMedItem(process_index, md5_hash, articles)
             with unordered_queue_lock:
                 unordered_output_queue.put(output)
                 unordered_output_indices.add(process_index)
@@ -121,7 +133,7 @@ def read_all_pubmed_files(
                 # Sleep for 10 milliseconds.
                 time.sleep(0.01)
 
-        ordered_output_queue.put(ReadPubMedItem(next_index, None))
+        ordered_output_queue.put(ReadPubMedItem(next_index, None, None))
 
     order_thread = threading.Thread(name="order", target=order_queue, daemon=True)
     threads.append(order_thread)

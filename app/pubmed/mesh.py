@@ -6,7 +6,7 @@ import glob
 
 from app.pubmed.extract_xml import extract_mesh_headings
 from app.pubmed.source_files import DTDResolver
-from app.pubmed.sink_db import PubmedCacheConn
+from app.pubmed.pubmed_db_conn import PubmedCacheConn
 
 
 def create_mesh_parser(directory: str) -> etree.XMLParser:
@@ -33,6 +33,7 @@ def extract_desc_file_year(desc_file_name: str):
 
     return int(desc_file_name[len("desc"):-len(".xml")])
 
+
 def get_latest_mesh_desc_file(target_directory: str) -> [str, str]:
     directory = os.path.join(target_directory, "mesh")
 
@@ -49,11 +50,12 @@ def get_latest_mesh_desc_file(target_directory: str) -> [str, str]:
     if latest_file is None:
         raise Exception("No MESH heading XML file found in the format desc*.xml")
 
-    return directory, latest_file
+    return directory, latest_file, latest_year
 
-def process_mesh_headings(directory:str , latest_file: str, conn: PubmedCacheConn):
+
+def process_mesh_headings(directory: str, latest_file: str, conn: PubmedCacheConn):
     # Parse the XML
-    print(f"PubMedExtract: Parsing MeSH headings from {latest_file}...")
+    print(f"\nPubMedExtract: Parsing MeSH headings from {latest_file}...")
     parser = create_mesh_parser(directory)
     tree = etree.parse(latest_file, parser)
 
@@ -64,4 +66,4 @@ def process_mesh_headings(directory:str , latest_file: str, conn: PubmedCacheCon
     print(f"PubMedExtract: Adding {len(headings)} MeSH headings to the database...")
     conn.insert_mesh_heading_batch(headings)
 
-    print(f"PubMedExtract: Successfully added {len(headings)} MESH headings to database.\n")
+    print(f"PubMedExtract: Successfully added {len(headings)} MESH headings to database.")

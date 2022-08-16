@@ -9,7 +9,7 @@ from typing import Optional
 from lxml import etree
 
 from app.pubmed.medline_dates import parse_month, parse_medline_date
-from app.pubmed.model import Author, Article, Journal, MeshHeading
+from app.pubmed.model import Author, Article, Journal, MeshHeading, ArticleAuthorRelation
 from app.pubmed.warning_log import WarningLog
 
 
@@ -78,23 +78,33 @@ def extract_author(author_node: etree.Element) -> Author:
     return Author.generate_from_name_pieces(last_name, fore_name, initials, suffix, collective_name)
 
 
-def extract_authors(author_list_node: etree.Element) -> list[Author]:
+def extract_authors(article: Article, author_list_node: etree.Element) -> list[ArticleAuthorRelation]:
     """
     Reads all the authors from an <AuthorList>.
     """
     seen_authors = set()  # Some articles can contain duplicate authors, hence the set.
-    authors = []
+    authors: list[tuple[int, Author]] = []
+    position = 0
     if author_list_node is not None:
         for author_node in author_list_node:
             if author_node.tag != "Author":
                 continue
 
+            position += 1
             author = extract_author(author_node)
             if author.full_name not in seen_authors:
                 seen_authors.add(author.full_name)
-                authors.append(author)
+                authors.append((position, author))
 
-    return authors
+    author_relations = []
+    for author_position, author in authors:
+        is_first_author = (author_position == 1)
+        is_last_author = (author_position == position)
+        author_relations.append(ArticleAuthorRelation(
+            article, author, author_position, is_first_author, is_last_author
+        ))
+
+    return author_relations
 
 
 def canonicalize_issn(issn: str) -> str:
@@ -193,9 +203,9 @@ def extract_article(pmid: int, date: datetime.date, article_node: etree.Element)
     article.journal = extract_journal(journal_node)
 
     if author_list_node is not None:
-        article.authors = extract_authors(author_list_node)
+        article.author_relations = extract_authors(article, author_list_node)
     else:
-        article.authors = []
+        article.author_relations = []
 
     return article
 

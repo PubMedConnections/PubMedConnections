@@ -8,19 +8,21 @@ from app.utils import format_minutes
 
 class DownloadAnalytics:
     def __init__(self, remaining_file_sizes, no_threads, *,
-                 prediction_size_bias=0.8, history_for_prediction=50):
+                 prediction_size_bias=0.8, history_for_prediction=50,
+                 start_file_index=0):
 
+        self.start_file_index = start_file_index
         self.download_times = []
         self.download_sizes = []
-        self.remaining_file_sizes = remaining_file_sizes
         self.total_files = len(remaining_file_sizes)
+        self.remaining_file_sizes = remaining_file_sizes[start_file_index:]
         self.no_threads = no_threads
         self.prediction_size_bias = prediction_size_bias
         self.history_for_prediction = history_for_prediction
 
     @property
     def num_processed(self):
-        return len(self.download_sizes)
+        return self.start_file_index + len(self.download_sizes)
 
     def update_remaining(self, remaining_file_sizes):
         """
