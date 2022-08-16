@@ -5,16 +5,17 @@ from the data, and the updating of the Neo4J databse with this
 information.
 """
 import gzip
-import hashlib
 import os
 import sys
 import pathlib
 import time
+from typing import Optional
 
 from app.pubmed.mesh import process_mesh_headings, get_latest_mesh_desc_file
-from app.pubmed.model import DBMetadataMeshFile, DBMetadataDataFile, DatabaseStatus, DBMetadata
+from app.pubmed.model import DBMetadataMeshFile, DBMetadataDataFile, DatabaseStatus, DBMetadata, \
+    LATEST_PUBMED_DB_VERSION
 from app.pubmed.progress_analytics import DownloadAnalytics
-from app.pubmed.sink_db import PubmedCacheConn
+from app.pubmed.pubmed_db_conn import PubmedCacheConn
 from app.pubmed.source_files import list_downloaded_pubmed_files, read_all_pubmed_files
 from app.pubmed.source_ftp import PubMedFTP
 from app.utils import format_minutes, calc_md5_hash_of_file
@@ -25,8 +26,31 @@ class PubMedManager:
     Provides the functionality required to populate and
     maintain the PubMed Neo4J database.
     """
-    def __init__(self, db_name: str):
+    def __init__(self, db_name: Optional[str] = None):
         self.db_name = db_name
+
+    def report_db_outdated(self, current_pubmed_db_version: int):
+        """
+        Reports to the user when
+        """
+        print(
+            f"Your database has an unsupported version. Expected version {LATEST_PUBMED_DB_VERSION},\n"
+            f"but the database has version {current_pubmed_db_version}.\n"
+            "\n"
+            f"Please re-generate your database or change the version of\n"
+            f"PubMedConnections that you are running.\n"
+            f"\n"
+            f"You can re-generate your database by first clearing it, and then\n"
+            f"re-generating it. The most efficient method to clear your database\n"
+            f"is to delete the data on-disk.\n"
+            f"See: https://neo4j.com/developer/kb/large-delete-transaction-best-practices-in-neo4j/\n"
+            f"\n"
+            f"The 'clear' sub-command may also be used to clear your database,\n"
+            f"although it is slow.\n"
+            f"\n"
+            f"The 'extract' sub-command may then be used to re-generate your database\n",
+            file=sys.stderr
+        )
 
     def run_sync(self, *, target_directory="./data"):
         """
@@ -53,11 +77,27 @@ class PubMedManager:
         with open(example_file_xml, "w") as f:
             f.write(example_file_contents.decode("utf8"))
 
-    def _update_extract_progress(self):
+    def run_clear(self):
         """
-        Updates the progress of the extraction process in the database.
+        Clears the content of the Neo4J database.
         """
-        pass
+        print("Are you sure you wish to delete all of the data in your Neo4J Database (y/N):")
+        value = input()
+        if value.lower() != "y":
+            print("Aborted")
+            return
+
+        print()
+        with PubmedCacheConn(database=self.db_name) as conn:
+            if conn.count_nodes() > 1_000_000:
+                print("Your database is too large to clear using this command.")
+                print("Please delete the data manually from your file system.")
+                print("See: https://neo4j.com/developer/kb/large-delete-transaction-best-practices-in-neo4j/")
+                return
+
+            print("Deleting the entire contents of the Neo4J database... (This may take a while)")
+            conn.delete_entire_database_contents()
+            print("Success")
 
     def run_extract(self, *, log_dir="./logs", target_directory="./data", report_every=60):
         """
@@ -91,15 +131,20 @@ class PubMedManager:
             ))
 
         # Generate the general database metadata object.
-        meta = DBMetadata(None, None, DatabaseStatus.UPDATING, meta_mesh, meta_pubmed)
+        meta = DBMetadata(LATEST_PUBMED_DB_VERSION, None, None, DatabaseStatus.UPDATING, meta_mesh, meta_pubmed)
 
         # Open a connection to the database!
-        with PubmedCacheConn(database=self.db_name, reset_on_connect=False) as conn:
+        with PubmedCacheConn(database=self.db_name) as conn:
 
             # Get the current metadata.
             existing_meta = conn.fetch_db_metadata()
             existing_meta_mesh = None if existing_meta is None else existing_meta.mesh_file
             existing_meta_pubmed = [] if existing_meta is None else existing_meta.data_files
+
+            # Check if the current version of the database is outdated.
+            if existing_meta is not None and existing_meta.is_outdated():
+                self.report_db_outdated(existing_meta.pubmed_db_version)
+                return
 
             # Detect if we will need to update the MeSH headings.
             requires_mesh_processing = (existing_meta_mesh is None or not existing_meta_mesh.is_same_file(meta_mesh))

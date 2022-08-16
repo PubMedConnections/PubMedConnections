@@ -8,6 +8,8 @@ from config import NEO4J_DATABASE
 def print_valid_modes():
     print("Valid Modes:", file=sys.stderr)
     print(" - sync: Synchronise the data files from the PubMed FTP server", file=sys.stderr)
+    print(" - extract: Extracts the data files into a Neo4J database", file=sys.stderr)
+    print(" - clear: Clears the content of the Neo4J database", file=sys.stderr)
     print(" - test: Run the test Flask webserver", file=sys.stderr)
 
 
@@ -31,7 +33,7 @@ if __name__ == "__main__":
             print("Expected no arguments to sync", file=sys.stderr)
             sys.exit(1)
 
-        manager = PubMedManager(NEO4J_DATABASE)
+        manager = PubMedManager()
         manager.run_sync()
 
     elif mode == "extract":
@@ -39,8 +41,16 @@ if __name__ == "__main__":
             print("Expected no arguments to extract", file=sys.stderr)
             sys.exit(1)
 
-        manager = PubMedManager(NEO4J_DATABASE)
+        manager = PubMedManager()
         manager.run_extract()
+
+    elif mode == "clear":
+        if len(args) != 2:
+            print("Expected no arguments to clear", file=sys.stderr)
+            sys.exit(1)
+
+        manager = PubMedManager()
+        manager.run_clear()
 
     elif mode == "test":
         if len(args) != 2:

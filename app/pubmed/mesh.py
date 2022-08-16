@@ -6,7 +6,7 @@ import glob
 
 from app.pubmed.extract_xml import extract_mesh_headings
 from app.pubmed.source_files import DTDResolver
-from app.pubmed.sink_db import PubmedCacheConn
+from app.pubmed.pubmed_db_conn import PubmedCacheConn
 
 
 def create_mesh_parser(directory: str) -> etree.XMLParser:

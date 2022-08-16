@@ -31,10 +31,9 @@ class PubmedCacheConn:
     """
     Can be used to connect to the pubmed cache Neo4J database.
     """
-    def __init__(self, database: Optional[str] = None, *, reset_on_connect: bool = False):
-        self.database: str = database if database is not None else NEO4J_DATABASE
+    def __init__(self, database: Optional[str] = None):
+        self.database: Optional[str] = database
         self.driver: Optional[neo4j.Driver] = None
-        self.reset_on_connect: bool = reset_on_connect
 
         # We store metadata about the database within a Metadata node.
         self.metadata: Optional[DBMetadata] = None
@@ -49,13 +48,6 @@ class PubmedCacheConn:
             raise ValueError("Already created connection!")
 
         self.driver = neo4j.GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
-
-        # Create a default connection first to create the database.
-        with self.driver.session() as session:
-            if self.reset_on_connect:
-                session.run("CREATE OR REPLACE DATABASE {}".format(self.database)).consume()
-            else:
-                session.run("CREATE DATABASE {} IF NOT EXISTS".format(self.database)).consume()
 
         # Create a connection to the database to create its constraints and grab metadata.
         with self.new_session() as session:
@@ -406,3 +398,29 @@ class PubmedCacheConn:
 
         meta.update_version(version)
         self.write_db_metadata(meta)
+
+    def delete_entire_database_contents(self):
+        """
+        DANGEROUS FUNCTION: Deletes the entire contents of the Neo4J database!
+        """
+        with self.new_session() as session:
+            session.run(
+                """
+                MATCH (n)
+                CALL {
+                    WITH n
+                    DETACH DELETE n
+                } IN TRANSACTIONS OF 100000 ROWS;
+                """
+            ).consume()
+
+    def count_nodes(self) -> int:
+        """
+        Counts the number of nodes in the database.
+        """
+        with self.new_session() as session:
+            return session.run(
+                """
+                MATCH (n) RETURN COUNT(n)
+                """
+            ).single()[0]

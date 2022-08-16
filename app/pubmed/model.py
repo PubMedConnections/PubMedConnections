@@ -1,11 +1,14 @@
 """
 This package contains the database models for the
-PubMed cache database.
+PubMed Neo4J database.
 """
 import sys
 from datetime import datetime
 from typing import Optional, cast
 from enum import Enum
+
+
+LATEST_PUBMED_DB_VERSION = 1
 
 
 class DatabaseStatus(Enum):
@@ -120,17 +123,26 @@ class DBMetadata:
     """
     Stores metadata about the data within the database.
     """
-    def __init__(self, version: Optional[int],
+    def __init__(self, pubmed_db_version: int,
+                 version: Optional[int],
                  time: Optional[datetime],
                  status: DatabaseStatus,
                  mesh_file: Optional[DBMetadataMeshFile],
                  data_files: list[DBMetadataDataFile]):
 
+        self.pubmed_db_version = pubmed_db_version
         self.version = version
         self.time = time
         self.status = status
         self.mesh_file = mesh_file
         self.data_files = data_files
+
+    def is_outdated(self):
+        """
+        Returns whether the model in the database is
+        incompatible with the current version.
+        """
+        return self.pubmed_db_version != LATEST_PUBMED_DB_VERSION
 
     def update_version(self, version: int):
         self.version = version
@@ -141,9 +153,10 @@ class DBMetadata:
             raise Exception("The version has not been supplied for this metadata object through update_version")
 
         return {
-            'version': self.version,
-            'time': self.time,
-            'status': self.status.value
+            "pubmed_db_version": self.pubmed_db_version,
+            "version": self.version,
+            "time": self.time,
+            "status": self.status.value
         }
 
     @staticmethod
@@ -156,6 +169,7 @@ class DBMetadata:
         data_files = [DBMetadataDataFile.from_processed_dict(f) for f in data]
 
         return DBMetadata(
+            pubmed_db_version=base["pubmed_db_version"] if "pubmed_db_version" in base else 0,
             version=base["version"],
             time=base["time"],
             status=DatabaseStatus(base["status"]),
@@ -170,6 +184,7 @@ class DBMetadata:
                 processed_files += 1
 
         return f"{type(self).__name__}(" \
+               f"pubmed_db_version={self.pubmed_db_version}, " \
                f"version={self.version}, " \
                f"time={self.time.strftime('%Y-%m-%d, %H:%M:%S')}, " \
                f"progress={processed_files}/{len(self.data_files)})"
