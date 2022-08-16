@@ -318,6 +318,10 @@ class PubmedCacheConn:
                 SET
                     heading_node.name = heading.name,
                     heading_node.tree_numbers = heading.tree_numbers
+            ON MATCH
+                SET
+                    heading_node.name = heading.name,
+                    heading_node.tree_numbers = heading.tree_numbers
             """,
             headings=headings_data
         ).consume()
