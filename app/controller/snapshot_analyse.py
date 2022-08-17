@@ -6,10 +6,7 @@ from app import db
 from app.snapshot_models import Snapshot, DegreeCentrality
 from flask import jsonify
 import json
-
-
 import threading
-
 
 class AnalyticsThreading(object):
     def __init__(self, graph_type: str, snapshot_id: int, filters):
@@ -36,6 +33,7 @@ def _map_centrality_results(centrality_res: list[DegreeCentrality]):
 
 def _update_snapshot_degree_centrality(tx, snapshot_id, degree_centrality_record):
     """
+    Helper function that updates a snapshot with the corresponding degree centrality results.
     """
     result = tx.run(
         """
@@ -50,8 +48,26 @@ def _update_snapshot_degree_centrality(tx, snapshot_id, degree_centrality_record
         """, snapshot_id=snapshot_id, degree_centrality=degree_centrality_record
     )
 
-    print(result.single())
+    # TODO error handling
 
+def _retrieve_degree_centrality(tx, snapshot_id):
+    """
+    Helper function to retrieve the degree centrality results.
+    """
+
+    result = tx.run(
+        """
+        MATCH (m:DBMetadata)
+        WITH max(m.version) AS max_version
+        MATCH (d:DBMetadata)
+        WHERE d.version = max_version
+
+        MATCH (s: Snapshot { id: $snapshot_id })
+        RETURN s.degree_centrality AS degree_centrality
+        """, snapshot_id=snapshot_id
+    )
+
+    return result.single()
 
 def run_analytics(graph_type: str, snapshot_id: int, filters):
     """
@@ -161,21 +177,29 @@ def retrieve_analytics(snapshot_id: int):
     """
     Returns a JSON object containing the analytics results for a given snapshot.
     """
-    # get degree centrality scores
-    res = DegreeCentrality.query.filter_by(snapshot_id=snapshot_id)
 
-    if res.count() != 0:
-        top5_degree = _map_centrality_results(res)
+    driver = GraphDatabase.driver(uri=NEO4J_URI)
+    with driver.session(database=NEO4J_DATABASE) as session:
 
-        # construct response
-        analytics_response = {
-            "principle_connectors": top5_degree
-        }
+        # retrieve the degree centrality record
+        degree_centrality_record = session.read_transaction(_retrieve_degree_centrality, snapshot_id)
 
-        return jsonify(analytics_response)
+        if degree_centrality_record is not None:
 
-    else:
-        if Snapshot.query.filter_by(id=snapshot_id).first() is None:
-            return "ERROR: snapshot does not exist"
+            # if the degree centrality record is the empty string it means the analytics results
+            # have not yet been added to the db
+            if (degree_centrality_record.data()['degree_centrality'] != ""):
+                degree_centrality = json.loads(degree_centrality_record.data()['degree_centrality'])
+
+                # construct response
+                analytics_response = {
+                    "principle_connectors": degree_centrality 
+                }
+
+                return jsonify(analytics_response)
+
+            else:
+                return "analytics have not completed yet"
+
         else:
-            return "analytics have not completed yet"
+            return "ERROR: snapshot does not exist"
