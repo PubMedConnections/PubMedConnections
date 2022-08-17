@@ -265,7 +265,6 @@ class PubMedManager:
                 start = time.time()
                 file = file_queue.get()
                 file_index = file.index + start_file_index
-                file_meta = meta_pubmed[file_index]
                 if file.articles is None:
                     break  # Marks that there are no more files.
 
@@ -275,6 +274,7 @@ class PubMedManager:
                     print(f"Error occurred in file {analytics.num_processed + 1}:", file=sys.stderr)
                     raise e
 
+                file_meta = meta_pubmed[file_index]
                 file_meta.processed = True
                 file_meta.md5_hash = file.md5_hash
                 file_meta.no_articles = len(file.articles)
@@ -295,7 +295,8 @@ class PubMedManager:
             conn.push_new_db_metadata(meta)
 
         overall_duration = time.time() - overall_start
-        print("PubMedExtract: Completed extraction of {} data files in {}".format(
-            len(pubmed_files), format_minutes(overall_duration / 60)
-        ))
+        print(
+            f"PubMedExtract: Completed extraction of {len(pubmed_files)} "
+            f"data files in {format_minutes(overall_duration / 60)}\n"
+        )
         return 0
