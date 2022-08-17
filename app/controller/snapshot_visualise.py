@@ -164,6 +164,7 @@ def query_by_filters(snapshot_id):
                 edges.append({'from': author['id'],
                               'to': coauthor['coauthor']['id'],
                               'label': {'article': article['article'],
+                                        'mesh_heading':article['mesh_heading'],
                                         'position': {author['name']: article['author_position'],
                                                      coauthor['coauthor']['name']: coauthor['coauthor_position']
                                                      }}})
