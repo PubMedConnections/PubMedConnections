@@ -52,7 +52,7 @@ class DeleteSnapshot(Resource):
 class VisualiseSnapshot(Resource):
     @staticmethod
     @ns.doc(params={'snapshot_id':{'default':'1'}})
-    def post(snapshot_id: int):
+    def get(snapshot_id: int):
         return query_by_filters(snapshot_id)
 
 
