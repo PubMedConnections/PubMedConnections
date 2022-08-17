@@ -1,6 +1,7 @@
 from neo4j import GraphDatabase, basic_auth
 from config import NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD
 from datetime import datetime
+from app.controller.snapshot_analyse import AnalyticsThreading
 
 
 def create_by_filters(graph_type: str, filters):
@@ -51,6 +52,10 @@ def create_by_filters(graph_type: str, filters):
         if result is None:
             return 'Failed to create snapshot!'
         record = result.single()
+
+        # run analytics on graph 
+        AnalyticsThreading(graph_type=graph_type, filters=filters, snapshot_id=record['snapshot_id'])
+
         return record['snapshot_id']
 
     """
