@@ -19,7 +19,8 @@ def query_by_filters(snapshot_id):
     cypher for querying authors
     """
 
-    def cypher(tx):
+    # query for single author / first author/ last author & coauthor
+    def cypher_single_author(tx):
         return list(tx.run(
             '''
             // mesh - author - coauthor
@@ -60,7 +61,6 @@ def query_by_filters(snapshot_id):
                 AND SIZE(s.last_author)<>0 
                 AND toLower(author.name) 
                     CONTAINS toLower(s.last_author) AND a.is_last_author = true)            
-
             
             //coauthor
             MATCH (coauthor: Author) - [c:AUTHOR_OF] -> (article)          
@@ -73,11 +73,19 @@ def query_by_filters(snapshot_id):
             AND (SIZE(s.article) = 0 OR toLower(article.title) CONTAINS toLower(s.article))
             
             WITH
+            author, article, a,c,mesh_heading,
+            {
+                coauthor: properties(coauthor),
+                coauthor_position: c.author_position           
+            } AS coauthor
+            
+            WITH
             author,
             {
                 article: article.title,
+                author_position: a.author_position,
                 mesh_heading: COLLECT(DISTINCT mesh_heading.name),
-                coauthors: COLLECT(DISTINCT properties(coauthor))
+                coauthors: COLLECT(DISTINCT coauthor)
             } AS articles
                         
             RETURN 
@@ -93,12 +101,11 @@ def query_by_filters(snapshot_id):
     """
     driver = GraphDatabase.driver(uri=NEO4J_URI, auth=basic_auth(NEO4J_USER, NEO4J_PASSWORD))
     session = driver.session()
-    results = session.read_transaction(cypher)
+    results = session.read_transaction(cypher_single_author)
     # create snapshot
     # snapshot = Snapshot()
     # db.session.add(snapshot)
     # db.session.commit()
-
     # print("snapshot id: {}".format(snapshot.id))
 
     # AnalyticsThreading(graph_type=graph_type, filters=filters, snapshot_id=snapshot.id)
@@ -118,47 +125,51 @@ def query_by_filters(snapshot_id):
         if author['id'] not in author_set:
             author_set.add(author['id'])
             new_author = True
-            # nodes.append(author)
 
         # author - collect (article)
+        # article = {article, author_position, collect(coauthors)}
         for article in results[i]['articles']:
 
             # article - collect(coauthor)
+            # coauthor = {coauthor, coauthor_position}
             for coauthor in article['coauthors']:
 
                 # old coauthor, new author
                 #   1. old coauthor value + 1   2. new author value + 1
-                if coauthor['id'] in author_set and new_author:
+                if coauthor['coauthor']['id'] in author_set and new_author:
                     author['value'] += 1
-                    nodes = add_node_value(nodes, coauthor)
+                    nodes = add_node_value(nodes, coauthor['coauthor'])
 
                 # old coauthor, old author
                 # todo: edge value + 1
-                elif coauthor['id'] not in author_set and not new_author:
+                elif coauthor['coauthor']['id'] not in author_set and not new_author:
                     pass
 
                 # new coauthor, old author
                 # 1. add coauthor to set, 2. old author value + 1, 3. add coauthor to nodes
-                elif coauthor['id'] not in author_set and not new_author:
-                    author_set.add(coauthor['id'])
+                elif coauthor['coauthor']['id'] not in author_set and not new_author:
+                    author_set.add(coauthor['coauthor']['id'])
                     nodes = add_node_value(nodes, author)
-                    coauthor['value'] = 1
-                    nodes.append(coauthor)
+                    coauthor['coauthor']['value'] = 1
+                    nodes.append(coauthor['coauthor'])
 
                 # new coauthor, new author
                 # 1. add coauthor to set, 2. new author value + 1, 3. add coauthor to nodes
                 else:
-                    author_set.add(coauthor['id'])
+                    author_set.add(coauthor['coauthor']['id'])
                     author['value'] += 1
-                    coauthor['value'] = 1
-                    nodes.append(coauthor)
-
-                # add new author
-                if new_author:
-                    nodes.append(author)
-
+                    coauthor['coauthor']['value'] = 1
+                    nodes.append(coauthor['coauthor'])
                 # edges
-                edges.append({'from': author['id'], 'to': coauthor['id'], 'label': article['article']})
+                edges.append({'from': author['id'],
+                              'to': coauthor['coauthor']['id'],
+                              'label': {'article': article['article'],
+                                        'position': {author['name']: article['author_position'],
+                                                     coauthor['coauthor']['name']: coauthor['coauthor_position']
+                                                     }}})
+        # add new author
+        if new_author:
+            nodes.append(author)
 
     return jsonify({"nodes": nodes,
                     "edges": edges,
