@@ -102,13 +102,6 @@ def query_by_filters(snapshot_id):
     driver = GraphDatabase.driver(uri=NEO4J_URI, auth=basic_auth(NEO4J_USER, NEO4J_PASSWORD))
     session = driver.session()
     results = session.read_transaction(cypher_single_author)
-    # create snapshot
-    # snapshot = Snapshot()
-    # db.session.add(snapshot)
-    # db.session.commit()
-    # print("snapshot id: {}".format(snapshot.id))
-
-    # AnalyticsThreading(graph_type=graph_type, filters=filters, snapshot_id=snapshot.id)
 
     nodes = []
     edges = []

@@ -5,6 +5,7 @@ from config import NEO4J_DATABASE, NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD
 from app import db
 from app.snapshot_models import Snapshot, DegreeCentrality
 from flask import jsonify
+import json
 
 
 import threading
@@ -32,6 +33,24 @@ def _map_centrality_results(centrality_res: list[DegreeCentrality]):
         top_nodes.append(node)
 
     return top_nodes
+
+def _update_snapshot_degree_centrality(tx, snapshot_id, degree_centrality_record):
+    """
+    """
+    result = tx.run(
+        """
+        MATCH (m:DBMetadata)
+        WITH max(m.version) AS max_version
+        MATCH (d:DBMetadata)
+        WHERE d.version = max_version
+
+        MATCH (s:Snapshot { id: $snapshot_id })
+        SET s.degree_centrality = $degree_centrality
+        RETURN s
+        """, snapshot_id=snapshot_id, degree_centrality=degree_centrality_record
+    )
+
+    print(result.single())
 
 
 def run_analytics(graph_type: str, snapshot_id: int, filters):
@@ -83,37 +102,57 @@ def run_analytics(graph_type: str, snapshot_id: int, filters):
                 # save top 5 nodes by degree to db
                 res = res.sort_values(by=['score'], ascending=False, ignore_index=True)
 
+                top_5_degree = []
                 for row in res.head(5).itertuples():
-                    node_degree_centrality = \
-                        DegreeCentrality(
-                            snapshot_id=snapshot_id,
-                            rank=row.Index,
-                            node_id=row.nodeId,
-                            node_name=gds.util.asNode(row.nodeId).get('name'),
-                            node_score=int(row.score)
-                        )
-                    db.session.add(node_degree_centrality)
-                    db.session.commit()
+                    top_5_degree.append(
+                        {
+                            "id": row.nodeId,
+                            "name": gds.util.asNode(row.nodeId).get('name'),
+                            "centrality": int(row.score)
+                        }
+                    )
+
+                # save the degree distributions to db
+                # TODO may need to use a cut-off for very large graphs
+                degree_distributions = []
+                for score, count in res['score'].value_counts().sort_index().iteritems():
+                    degree_distributions.append(
+                        {
+                            "score": score,
+                            "count": count
+                        }
+                    )
+
+                # print(top_5_degree)
+                # print(degree_distributions)
+
+                # save to db
+                degree_centrality_record = json.dumps(
+                    {
+                        "top_5": top_5_degree,
+                        "distributions": degree_distributions
+                    }
+                )
+
+                session.write_transaction(_update_snapshot_degree_centrality, snapshot_id, degree_centrality_record)
 
                 print("analytics completed")
 
                 # TODO
                 # other centrality measures
+                #   could also use a weighted degree centrality (by collaborations) 
                 # add more complicated filters
 
                 G.drop()
 
-            # unable to project the graph into memory because there is no matches for the given filters
+            # unable to project the graph into memory because there are no matches for the given filters
             except ClientError as err:
+                # TODO
                 # print(err)
+                pass
 
                 # remove snapshot
                 # TODO need to make sure this is consistent behaviour with adding the filters to the snapshot
-                snapshot = Snapshot.query.filter_by(id=snapshot_id).first()
-                db.session.delete(snapshot)
-                db.session.commit()
-
-                print("Successfully removed snapshot {} from the database".format(snapshot_id))
 
         driver.close()
 
