@@ -70,3 +70,17 @@ new dependencies that were added to the
 ```shell
 conda env update --name pubmed-connections --file environment.yml --prune
 ```
+
+## Neo4J Configuration
+Neo4J stores recent transactions in a log by default, but this can use up huge amounts
+of disk-space when we create the entire database. Therefore, adding the following
+options to your Neo4J configuration will disable storing more than one transaction
+at a time, which will greatly reduce the size of the Neo4J database on-disk after
+its extraction.
+
+```
+# Retention policy for transaction logs needed to perform recovery and backups.
+dbms.tx_log.rotation.retention_policy=1 files
+dbms.tx_log.rotation.size=56M
+dbms.tx_log.rotation.retention_policy=keep_none
+```
