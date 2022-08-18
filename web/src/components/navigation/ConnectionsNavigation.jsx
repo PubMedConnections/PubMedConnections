@@ -4,7 +4,7 @@ import Container from '@mui/material/Container';
 import Box from '@mui/material/Box';
 import Tabs from '@mui/material/Tabs';
 import Tab from '@mui/material/Tab';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { CONNECTIONS_NAVBAR_HEIGHT } from '../../constants';
 
 const ConnectionsNavigation = (props) => {
@@ -25,14 +25,17 @@ const ConnectionsNavigation = (props) => {
           justifyContent: 'space-between',
         }}
       >
-        <Box
-          sx={{
-            width: 150,
-            paddingY: 1,
-          }}
-          component='img'
-          src='img/logo-with-text.png'
-        />
+        <Link to={'/'}>
+          <Box
+            sx={{
+              width: 150,
+              paddingY: 1,
+            }}
+            component='img'
+            src='img/logo-with-text.png'
+          />
+        </Link>
+
         <Tabs value={selectedTab} sx={{ alignSelf: 'flex-end' }}>
           <Tab
             sx={{ fontSize: '1.5rem' }}
