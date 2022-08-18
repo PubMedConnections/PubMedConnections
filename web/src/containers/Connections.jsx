@@ -1,11 +1,11 @@
-import { OtherNavigation } from '../components/navigation';
-import { Graph } from '../components/graph';
+import { ConnectionsNavigation } from '../components/navigation';
+import { Outlet } from 'react-router-dom';
 
 function Connections() {
   return (
     <div>
-      <OtherNavigation />
-      <Graph />
+      <ConnectionsNavigation />
+      <Outlet />
     </div>
   );
 }
