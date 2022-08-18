@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom"
+import { Link } from 'react-router-dom';
 
 const OtherNavigation = (props) => {
   return (
@@ -11,15 +11,14 @@ const OtherNavigation = (props) => {
             data-toggle='collapse'
             data-target='#bs-example-navbar-collapse-1'
           >
-
             <span className='sr-only'>Toggle navigation</span>
             <span className='icon-bar'></span>
             <span className='icon-bar'></span>
             <span className='icon-bar'></span>
           </button>
-          <Link className='navbar-brand' to="/">
+          <Link className='navbar-brand' to='/'>
             PubMed Connections
-            </Link>
+          </Link>
         </div>
 
         <div
@@ -27,14 +26,16 @@ const OtherNavigation = (props) => {
           id='bs-example-navbar-collapse-1'
         >
           <ul className='nav navbar-nav navbar-right'>
-            <li><Link to="/">Home</Link></li>
+            <li>
+              <Link to='/'>Home</Link>
+            </li>
             {/* <li><Link to="/connections">Get Started</Link></li>
             <li><Link to="/login">Login</Link></li> */}
           </ul>
         </div>
       </div>
     </nav>
-  )
-}
+  );
+};
 
 export default OtherNavigation;

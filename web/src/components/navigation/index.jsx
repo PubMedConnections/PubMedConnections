@@ -1,4 +1,4 @@
-import HomeNavigation from "./HomeNavigation";
-import OtherNavigation from "./OtherNavigation";
+import HomeNavigation from './HomeNavigation';
+import OtherNavigation from './OtherNavigation';
 
-export {HomeNavigation, OtherNavigation}
+export { HomeNavigation, OtherNavigation };

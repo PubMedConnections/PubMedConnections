@@ -1,15 +1,13 @@
-import { OtherNavigation } from "../components/navigation";
-import { Graph } from "../components/graph";
-
+import { OtherNavigation } from '../components/navigation';
+import { Graph } from '../components/graph';
 
 function Connections() {
-
-    return (
-        <div>
-            <OtherNavigation />
-            <Graph />
-        </div>
-    );
+  return (
+    <div>
+      <OtherNavigation />
+      <Graph />
+    </div>
+  );
 }
 
 export default Connections;
