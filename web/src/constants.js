@@ -1,0 +1,1 @@
+export const CONNECTIONS_NAVBAR_HEIGHT = '72px'
