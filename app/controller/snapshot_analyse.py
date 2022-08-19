@@ -102,6 +102,80 @@ def _create_query_from_filters(filters):
 
     return " AND ".join(filter_queries)
 
+def _project_graph_and_run_analytics(graph_name: str, node_query: str, relationship_query: str, snapshot_id: int):
+    
+    driver = GraphDatabase.driver(uri=NEO4J_URI)
+    gds = GraphDataScience(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
+
+    with driver.session(database=NEO4J_DATABASE) as session:
+        # try project graph into memory
+        try:
+            G, _ = gds.graph.project.cypher(
+                graph_name,
+                node_query,
+                relationship_query,
+                validateRelationships=False
+            )
+
+            print("computing analytics")
+
+            # compute degree centrality
+            res = gds.degree.stream(G)
+            res = res.sort_values(by=['score'], ascending=False, ignore_index=True)
+
+            # for row in res.itertuples():
+            #     print(gds.util.asNode(row.nodeId).get('name'), row.score)
+            # print(len(res))
+
+            # get the top 5 nodes by degree centrality
+            top_5_degree = []
+            for row in res.head(5).itertuples():
+                top_5_degree.append(
+                    {
+                        "id": row.nodeId,
+                        "name": gds.util.asNode(row.nodeId).get('name'),
+                        "centrality": int(row.score)
+                    }
+                )
+
+            # compute the degree distributions
+            # TODO may need to use a cut-off for very large graphs
+            degree_distributions = []
+            for score, count in res['score'].value_counts().sort_index().iteritems():
+                degree_distributions.append(
+                    {
+                        "score": score,
+                        "count": count
+                    }
+                )
+
+            # construct degree centrality record and save to db
+
+            degree_centrality_record = json.dumps(
+                {
+                    "top_5": top_5_degree,
+                    "distributions": degree_distributions
+                }
+            )
+
+            session.write_transaction(_update_snapshot_degree_centrality, snapshot_id, degree_centrality_record)
+
+            print("analytics completed")
+
+            # TODO
+            # other centrality measures
+            #   could also use a weighted degree centrality (by collaborations) 
+            # handle concurrent graph projections -> name has to be unique
+
+            G.drop()
+
+        # unable to project the graph into memory because there are no matches for the given filters
+        except ClientError as err:
+            # TODO
+            print(err)
+            pass
+    
+    driver.close()
 
 
 def run_analytics(graph_type: str, snapshot_id: int, filters):
@@ -109,8 +183,6 @@ def run_analytics(graph_type: str, snapshot_id: int, filters):
     Runs analytics on the graph returned by the query. The graph is either author-author
     or MeSH-MeSH.
     """
-    driver = GraphDatabase.driver(uri=NEO4J_URI)
-    gds = GraphDataScience(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
 
     print("starting analytics")
 
@@ -154,79 +226,7 @@ def run_analytics(graph_type: str, snapshot_id: int, filters):
 
         # print(relationship_query)
 
-        with driver.session(database=NEO4J_DATABASE) as session:
-            # try project graph into memory
-            try:
-                G, _ = gds.graph.project.cypher(
-                    graph_name,
-                    node_query,
-                    relationship_query,
-                    validateRelationships=False
-                )
-
-                print("computing analytics")
-
-                # compute degree centrality
-                res = gds.degree.stream(G)
-                res = res.sort_values(by=['score'], ascending=False, ignore_index=True)
-
-                # for row in res.itertuples():
-                #     print(gds.util.asNode(row.nodeId).get('name'), row.score)
-                # print(len(res))
-
-                # get the top 5 nodes by degree centrality
-                top_5_degree = []
-                for row in res.head(5).itertuples():
-                    top_5_degree.append(
-                        {
-                            "id": row.nodeId,
-                            "name": gds.util.asNode(row.nodeId).get('name'),
-                            "centrality": int(row.score)
-                        }
-                    )
-
-                # compute the degree distributions
-                # TODO may need to use a cut-off for very large graphs
-                degree_distributions = []
-                for score, count in res['score'].value_counts().sort_index().iteritems():
-                    degree_distributions.append(
-                        {
-                            "score": score,
-                            "count": count
-                        }
-                    )
-
-                # print(top_5_degree)
-                # print(degree_distributions)
-
-                # construct degree centrality record and save to db
-
-                degree_centrality_record = json.dumps(
-                    {
-                        "top_5": top_5_degree,
-                        "distributions": degree_distributions
-                    }
-                )
-
-                session.write_transaction(_update_snapshot_degree_centrality, snapshot_id, degree_centrality_record)
-
-                print("analytics completed")
-
-                # TODO
-                # other centrality measures
-                #   could also use a weighted degree centrality (by collaborations) 
-                # handle concurrent graph projections -> name has to be unique
-
-                G.drop()
-
-            # unable to project the graph into memory because there are no matches for the given filters
-            except ClientError as err:
-                # TODO
-                # print(err)
-                pass
-
-                # remove snapshot
-                # TODO need to make sure this is consistent behaviour with adding the filters to the snapshot
+        _project_graph_and_run_analytics(graph_name, node_query, relationship_query, snapshot_id)
 
     elif graph_type == "mesh":
         graph_name = "comeshs"
@@ -268,73 +268,7 @@ def run_analytics(graph_type: str, snapshot_id: int, filters):
 
         # print(relationship_query)
 
-        with driver.session(database=NEO4J_DATABASE) as session:
-            # try project graph into memory
-            try:
-                G, _ = gds.graph.project.cypher(
-                    graph_name,
-                    node_query,
-                    relationship_query,
-                    validateRelationships=False
-                )
-
-                print("computing analytics")
-
-                # compute degree centrality
-                res = gds.degree.stream(G)
-                res = res.sort_values(by=['score'], ascending=False, ignore_index=True)
-
-                # for row in res.itertuples():
-                #     print(gds.util.asNode(row.nodeId).get('name'), row.score)
-                # print(len(res))
-
-                # get the top 5 nodes by degree centrality
-                top_5_degree = []
-                for row in res.head(5).itertuples():
-                    top_5_degree.append(
-                        {
-                            "id": row.nodeId,
-                            "name": gds.util.asNode(row.nodeId).get('name'),
-                            "centrality": int(row.score)
-                        }
-                    )
-
-                # compute the degree distributions
-                # TODO may need to use a cut-off for very large graphs
-                degree_distributions = []
-                for score, count in res['score'].value_counts().sort_index().iteritems():
-                    degree_distributions.append(
-                        {
-                            "score": score,
-                            "count": count
-                        }
-                    )
-
-                # print(top_5_degree)
-                # print(degree_distributions)
-
-                # construct degree centrality record and save to db
-
-                degree_centrality_record = json.dumps(
-                    {
-                        "top_5": top_5_degree,
-                        "distributions": degree_distributions
-                    }
-                )
-
-                session.write_transaction(_update_snapshot_degree_centrality, snapshot_id, degree_centrality_record)
-
-                print("analytics completed")
-
-                G.drop()
-
-            # unable to project the graph into memory because there are no matches for the given filters
-            except ClientError as err:
-                # TODO
-                print(err)
-                pass
-
-    driver.close()
+        _project_graph_and_run_analytics(graph_name, node_query, relationship_query, snapshot_id)
 
 
 def retrieve_analytics(snapshot_id: int):
