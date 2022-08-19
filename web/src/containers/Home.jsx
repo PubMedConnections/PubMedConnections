@@ -15,6 +15,10 @@ function Home() {
     setLandingPageData(JsonData);
   }, []);
 
+  useEffect(() => {
+    document.title = 'PubMed Connections | Home';
+  }, []);
+
   return (
     <div>
       <HomeNavigation />

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Button from '@mui/material/Button';
 import TextField from '@mui/material/TextField';
 import Box from '@mui/material/Box';
@@ -24,6 +24,10 @@ function Login() {
       console.error(err);
     }
   };
+
+  useEffect(() => {
+    document.title = 'PubMed Connections | Login';
+  }, []);
 
   return (
     <Container component='main' sx={{ width: '50%' }}>
