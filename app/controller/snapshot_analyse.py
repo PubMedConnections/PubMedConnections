@@ -117,7 +117,9 @@ def run_analytics(graph_type: str, snapshot_id: int, filters):
                 MATCH (a1)-[w:AUTHOR_OF]->(ar1:Article)-[:CATEGORISED_BY]->(m:MeshHeading)
                 WHERE {}
             }}
-            RETURN id(a2) as id
+            WITH COLLECT(DISTINCT id(a1)) + COLLECT(DISTINCT id(a2)) AS ids
+            UNWIND ids as id
+            RETURN id
             """.format(" AND ".join(filter_queries))
 
         # print(node_query)
@@ -156,10 +158,6 @@ def run_analytics(graph_type: str, snapshot_id: int, filters):
                 # compute degree centrality
                 res = gds.degree.stream(G)
                 res = res.sort_values(by=['score'], ascending=False, ignore_index=True)
-
-                for row in res.itertuples():
-                    print(gds.util.asNode(row.nodeId).get('name'), row.score)
-                print(len(res))
 
                 # get the top 5 nodes by degree centrality
                 top_5_degree = []
@@ -203,6 +201,7 @@ def run_analytics(graph_type: str, snapshot_id: int, filters):
                 # other centrality measures
                 #   could also use a weighted degree centrality (by collaborations) 
                 # add more complicated filters
+                # mesh-mesh graph
                 # handle concurrent graph projections -> name has to be unique
 
                 G.drop()
