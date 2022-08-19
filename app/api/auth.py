@@ -19,12 +19,12 @@ class Login(Resource):
         username = data['username']
         password = data['password']
         if not password or not username:
-            return jsonify('Username or password cannot be empty!', 400)
+            return make_response(jsonify('Username or password cannot be empty!', 400))
         if authenticate_user(username, password):
             access_token = create_access_token(identity=username, expires_delta=timedelta(minutes=60))
-            return jsonify(access_token=access_token)
+            return make_response(jsonify(access_token=access_token), 200)
         else:
-            return jsonify({"message": "Invalid username or password"}), 401
+            return make_response(jsonify({"message": "Invalid username or password"}), 401)
 
 
 @ns.route('/check_authentication')
