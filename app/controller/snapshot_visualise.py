@@ -73,9 +73,13 @@ def query_by_filters(snapshot_id):
             AND (SIZE(s.article) = 0 OR toLower(article.title) CONTAINS toLower(s.article))
             
             WITH
-            author, article, a,c,mesh_heading,
+            article, a,c,mesh_heading,
             {
-                coauthor: properties(coauthor),
+                label: author.name,
+                id: author.id
+            } AS author,
+            {
+                coauthor: {label: coauthor.name, id: coauthor.id},
                 coauthor_position: c.author_position           
             } AS coauthor
             
@@ -158,8 +162,8 @@ def query_by_filters(snapshot_id):
                               'to': coauthor['coauthor']['id'],
                               'label': {'article': article['article'],
                                         'mesh_heading':article['mesh_heading'],
-                                        'position': {author['name']: article['author_position'],
-                                                     coauthor['coauthor']['name']: coauthor['coauthor_position']
+                                        'position': {author['label']: article['author_position'],
+                                                     coauthor['coauthor']['label']: coauthor['coauthor_position']
                                                      }}})
         # add new author
         if new_author:

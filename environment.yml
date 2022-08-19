@@ -10,3 +10,4 @@ dependencies:
     - atomics
     - flask-restx
     - graphdatascience
+    - flask_jwt_extended
