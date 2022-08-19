@@ -23,7 +23,19 @@ def authenticate_user(username: str, password: str) -> bool :
     return len(result) == 1
 
 
-def create_user(username: str, password: str):
+def create_user(username: str, password: str) -> bool:
+    def get_users(tx):
+        return list(tx.run(
+            '''
+            MATCH (u:User)  
+            WHERE u.username = $username
+            RETURN u
+            ''',
+            {
+                'username': username,
+            }
+        ))
+
     def cypher(tx):
         return list(tx.run(
             '''
@@ -40,4 +52,9 @@ def create_user(username: str, password: str):
 
     driver = GraphDatabase.driver(uri=NEO4J_URI, auth=basic_auth(NEO4J_USER, NEO4J_PASSWORD))
     session = driver.session()
-    session.write_transaction(cypher)
+    results = session.read_transaction(get_users)
+    if len(results) > 0:
+        return False
+    else:
+        session.write_transaction(cypher)
+        return True

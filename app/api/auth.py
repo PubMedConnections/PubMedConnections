@@ -56,13 +56,15 @@ class RegisterUser(Resource):
         data = request.json
 
         if data['invite_code'] != app.config['REGISTRATION_INVITE_CODE']:
-            return make_response(jsonify({"message": "Invalid invite code"}), 401)
+            return make_response(jsonify({"message": "Invalid invite code."}), 401)
 
         username = data['username']
         password = data['password']
 
         if not username or not password:
-            return make_response(jsonify({"message": "Please enter a username and password"}), 400)
+            return make_response(jsonify({"message": "Please enter a username and password."}), 400)
 
-        create_user(username, password)
-        return make_response(jsonify({"message": f"User '{username}' created"}), 200)
+        if create_user(username, password):
+            return make_response(jsonify({"message": f"User '{username}' created."}), 200)
+        else:
+            return make_response(jsonify({"message": f"Error! User '{username}' already exists."}), 400)
