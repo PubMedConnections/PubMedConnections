@@ -77,6 +77,8 @@ def run_analytics(graph_type: str, snapshot_id: int, filters):
     driver = GraphDatabase.driver(uri=NEO4J_URI)
     gds = GraphDataScience(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
 
+    print("starting analytics")
+
     if graph_type == "authors":
         graph_name = "coauthors"
 
@@ -120,35 +122,6 @@ def run_analytics(graph_type: str, snapshot_id: int, filters):
 
         # print(node_query)
 
-        # node_query = \
-        #     """
-        #     MATCH (a1:Author)-[:AUTHOR_OF*1..3]-(ar:Article)<--(a2:Author)
-        #     WHERE EXISTS {{
-        #         MATCH (a1)-[w:AUTHOR_OF]->(ar1:Article)-[:CATEGORISED_BY]->(m:MeshHeading)
-        #         WHERE (SIZE({mesh_heading_keyword}) = 0 OR m.name CONTAINS '{mesh_heading_keyword}')
-        #             AND (SIZE({author_name}) = 0 OR a1.name CONTAINS '{author_name}')
-        #             AND (SIZE({article_title}) = 0 OR ar.title CONTAINS '{article_title}')
-        #             AND (SIZE({start_date}) = 0 OR ar1.date >= date({start_date}))
-        #             AND (SIZE({end_date}) = 0 OR ar1.date <= date({end_date}))
-        #             AND (SIZE({is_first_author}) = 0 OR w.is_first_author = {is_first_author})
-        #             AND (SIZE({is_last_author}) = 0 OR w.is_last_author = {is_last_author})
-        #             AND (SIZE({journal_title}) = 0 OR EXISTS {{
-        #                 MATCH (ar)-[:PUBLISHED_IN]->(j:Journal)
-        #                 WHERE j.title CONTAINS '{journal_title}'
-        #             }})
-        #     }}
-        #     RETURN id(a2) as id
-        #     """.format(
-        #         mesh_heading_keyword=filters['mesh_heading'],
-        #         author_name=filters['author'],
-        #         is_first_author=filters['first_author'],
-        #         is_last_author=filters['last_author'],
-        #         start_date=filters['published_after'],
-        #         end_date=filters['published_before'],
-        #         journal_title=filters['journal'],
-        #         article_title=filters['article']
-        #     )
-
         # create direct author-author relations based on the 3 hop neighbourhood
         relationship_query = \
             """
@@ -167,42 +140,6 @@ def run_analytics(graph_type: str, snapshot_id: int, filters):
             """.format(" AND ".join(filter_queries), min_colaborations=0)
 
         # print(relationship_query)
-
-        # relationship_query = \
-        #     """
-        #     CALL {{
-        #         MATCH (a1:Author)-[:AUTHOR_OF*1..3]-(ar:Article)<--(a2:Author)
-        #         WHERE EXISTS {{
-        #             MATCH (a1)-[w:AUTHOR_OF]->(ar1:Article)-[:CATEGORISED_BY]->(m:MeshHeading)
-        #             WHERE (SIZE({mesh_heading_keyword}) = 0 OR m.name CONTAINS '{mesh_heading_keyword}')
-        #                 AND (SIZE({author_name}) = 0 OR a1.name CONTAINS '{author_name}')
-        #                 AND (SIZE({article_title}) = 0 OR ar.title CONTAINS '{article_title}')
-        #                 AND (SIZE({start_date}) = 0 OR ar1.date >= date({start_date}))
-        #                 AND (SIZE({end_date}) = 0 OR ar1.date <= date({end_date}))
-        #                 AND (SIZE({is_first_author}) = 0 OR w.is_first_author = {is_first_author})
-        #                 AND (SIZE({is_last_author}) = 0 OR w.is_last_author = {is_last_author})
-        #                 AND (SIZE({journal_title}) = 0 OR EXISTS {{
-        #                     MATCH (ar)-[:PUBLISHED_IN]->(j:Journal)
-        #                     WHERE j.title CONTAINS '{journal_title}'
-        #                 }})
-        #         }}
-        #         RETURN ar
-        #     }}
-
-        #     MATCH (a1:Author)-[:AUTHOR_OF]->(ar:Article)<-[:AUTHOR_OF]-(a2:Author)
-        #     WITH a1, a2, count(*) AS c WHERE c > {min_colaborations}
-        #     RETURN id(a1) as source, id(a2) as target, apoc.create.vRelationship(a1, "COAUTHOR", {{count: c}}, a2) as rel
-        #     """.format(
-        #         mesh_heading_keyword=filters['mesh_heading'],
-        #         author_name=filters['author'],
-        #         is_first_author=filters['first_author'],
-        #         is_last_author=filters['last_author'],
-        #         start_date=filters['published_after'],
-        #         end_date=filters['published_before'],
-        #         journal_title=filters['journal'],
-        #         article_title=filters['article'],
-        #         min_colaborations=0
-        #     )
 
         with driver.session(database=NEO4J_DATABASE) as session:
             # try project graph into memory
