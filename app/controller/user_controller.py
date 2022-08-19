@@ -2,25 +2,7 @@ import json
 from neo4j import GraphDatabase, basic_auth
 from config import NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD
 from hashlib import sha256
-
-def authenticate_user(username: str, password: str) -> bool :
-    def cypher(tx):
-        return list(tx.run(
-            '''
-            MATCH (u:User)  
-            WHERE u.username = $username AND u.password = $password
-            RETURN u
-            ''',
-            {
-                'username': username,
-                'password':  sha256(password.encode('utf-8')).hexdigest()
-            }
-        ))
-
-    driver = GraphDatabase.driver(uri=NEO4J_URI, auth=basic_auth(NEO4J_USER, NEO4J_PASSWORD))
-    session = driver.session()
-    result = session.read_transaction(cypher)
-    return len(result) == 1
+from datetime import datetime
 
 
 def get_user(username: str):
@@ -43,6 +25,44 @@ def get_user(username: str):
         return result[0].data()['user']
     else:
         return None
+
+
+def clean_up_expired_tokens(username):
+    user = get_user(username)
+    revoked_tokens = json.loads(user['revoked_tokens'])
+    expired_jtis = []
+    for jti, expiry in revoked_tokens.items():
+        if datetime.fromtimestamp(expiry) < datetime.now():
+            # If it has already expired, we don't need to blacklist it any more
+            expired_jtis.append(jti)
+
+    for jti in expired_jtis:
+        del revoked_tokens[jti]
+
+    update_revoked_tokens(username, revoked_tokens)
+
+
+def authenticate_user(username: str, password: str) -> bool :
+    def cypher(tx):
+        return list(tx.run(
+            '''
+            MATCH (u:User)  
+            WHERE u.username = $username AND u.password = $password
+            RETURN u
+            ''',
+            {
+                'username': username,
+                'password':  sha256(password.encode('utf-8')).hexdigest()
+            }
+        ))
+
+    driver = GraphDatabase.driver(uri=NEO4J_URI, auth=basic_auth(NEO4J_USER, NEO4J_PASSWORD))
+    session = driver.session()
+    result = session.read_transaction(cypher)
+
+    clean_up_expired_tokens(username)
+
+    return len(result) == 1
 
 
 def create_user(username: str, password: str) -> bool:
@@ -70,11 +90,7 @@ def create_user(username: str, password: str) -> bool:
         return True
 
 
-def expire_token(username: str, jti: str, expiry: int):
-    user = get_user(username)
-    revoked_tokens = json.loads(user["revoked_tokens"])
-    revoked_tokens[jti] = expiry
-
+def update_revoked_tokens(username, revoked_tokens):
     def cypher(tx):
         return list(tx.run(
             '''
@@ -91,3 +107,11 @@ def expire_token(username: str, jti: str, expiry: int):
     driver = GraphDatabase.driver(uri=NEO4J_URI, auth=basic_auth(NEO4J_USER, NEO4J_PASSWORD))
     session = driver.session()
     session.write_transaction(cypher)
+
+
+def expire_token(username: str, jti: str, expiry: int):
+    user = get_user(username)
+    revoked_tokens = json.loads(user["revoked_tokens"])
+    revoked_tokens[jti] = expiry
+    update_revoked_tokens(username, revoked_tokens)
+
