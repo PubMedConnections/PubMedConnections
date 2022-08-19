@@ -1,11 +1,14 @@
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
+from flask_jwt_extended import JWTManager
 
 # Our application
 app = Flask(__name__)
 
 # Load the configuration from config.py
 app.config.from_object('config')
+
+jwt = JWTManager(app)
 
 # Create the database
 db = SQLAlchemy(app)
