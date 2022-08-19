@@ -80,27 +80,129 @@ def run_analytics(graph_type: str, snapshot_id: int, filters):
     if graph_type == "authors":
         graph_name = "coauthors"
 
+        filter_queries = []
+
+        if filters['mesh_heading'] != "":
+            filter_queries.append("m.name CONTAINS '{}'".format(filters['mesh_heading']))
+        if filters['author'] != "":
+            filter_queries.append("a1.name CONTAINS '{}'".format(filters['author']))
+        if filters['first_author'] != "":
+            filter_queries.append("w.is_first_author = {}".format(filters['first_author']))
+        if filters['last_author'] != "":
+            filter_queries.append("w.is_last_author = {}".format(filters['last_author']))
+        if filters['published_after'] != "":
+            filter_queries.append("ar1.date >= date({})".format(filters['published_after']))
+        if filters['published_before'] != "":
+            filter_queries.append("ar1.date <= date({})".format(filters['published_before']))
+        if filters['journal'] != "":
+            filter_queries.append(
+                """
+                EXISTS {{
+                    MATCH (ar)-[:PUBLISHED_IN]->(j:Journal)
+                    WHERE j.title CONTAINS '{}'
+                }}
+                """.format(filters['journal'])
+            )
+        if filters['article'] != "":
+            filter_queries.append("ar.title CONTAINS '{}'".format(filters['article']))
+
         # return all authors within a 3 hop neighbourhood of a specific author
         # in the projected author-author graph
         node_query = \
             """
-            MATCH (a1:Author)-[r:AUTHOR_OF*1..3]-(ar:Article)<--(a2:Author)
-            WHERE a1.name =~ ".*{author_name}.*"
+            MATCH (a1:Author)-[:AUTHOR_OF*1..3]-(ar:Article)<--(a2:Author)
+            WHERE EXISTS {{
+                MATCH (a1)-[w:AUTHOR_OF]->(ar1:Article)-[:CATEGORISED_BY]->(m:MeshHeading)
+                WHERE {}
+            }}
             RETURN id(a2) as id
-            """.format(author_name=filters['author'])
+            """.format(" AND ".join(filter_queries))
+
+        # print(node_query)
+
+        # node_query = \
+        #     """
+        #     MATCH (a1:Author)-[:AUTHOR_OF*1..3]-(ar:Article)<--(a2:Author)
+        #     WHERE EXISTS {{
+        #         MATCH (a1)-[w:AUTHOR_OF]->(ar1:Article)-[:CATEGORISED_BY]->(m:MeshHeading)
+        #         WHERE (SIZE({mesh_heading_keyword}) = 0 OR m.name CONTAINS '{mesh_heading_keyword}')
+        #             AND (SIZE({author_name}) = 0 OR a1.name CONTAINS '{author_name}')
+        #             AND (SIZE({article_title}) = 0 OR ar.title CONTAINS '{article_title}')
+        #             AND (SIZE({start_date}) = 0 OR ar1.date >= date({start_date}))
+        #             AND (SIZE({end_date}) = 0 OR ar1.date <= date({end_date}))
+        #             AND (SIZE({is_first_author}) = 0 OR w.is_first_author = {is_first_author})
+        #             AND (SIZE({is_last_author}) = 0 OR w.is_last_author = {is_last_author})
+        #             AND (SIZE({journal_title}) = 0 OR EXISTS {{
+        #                 MATCH (ar)-[:PUBLISHED_IN]->(j:Journal)
+        #                 WHERE j.title CONTAINS '{journal_title}'
+        #             }})
+        #     }}
+        #     RETURN id(a2) as id
+        #     """.format(
+        #         mesh_heading_keyword=filters['mesh_heading'],
+        #         author_name=filters['author'],
+        #         is_first_author=filters['first_author'],
+        #         is_last_author=filters['last_author'],
+        #         start_date=filters['published_after'],
+        #         end_date=filters['published_before'],
+        #         journal_title=filters['journal'],
+        #         article_title=filters['article']
+        #     )
 
         # create direct author-author relations based on the 3 hop neighbourhood
         relationship_query = \
             """
             CALL {{
-                MATCH (a:Author)-[r:AUTHOR_OF*1..3]-(ar:Article)<--(target:Author)
-                WHERE a.name =~ ".*{author_name}.*"
+                MATCH (a1:Author)-[:AUTHOR_OF*1..3]-(ar:Article)<--(a2:Author)
+                WHERE EXISTS {{
+                    MATCH (a1)-[w:AUTHOR_OF]->(ar1:Article)-[:CATEGORISED_BY]->(m:MeshHeading)
+                    WHERE {}
+                }}
                 RETURN ar
             }}
+
             MATCH (a1:Author)-[:AUTHOR_OF]->(ar:Article)<-[:AUTHOR_OF]-(a2:Author)
             WITH a1, a2, count(*) AS c WHERE c > {min_colaborations}
             RETURN id(a1) as source, id(a2) as target, apoc.create.vRelationship(a1, "COAUTHOR", {{count: c}}, a2) as rel
-            """.format(author_name=filters['author'], min_colaborations=0)
+            """.format(" AND ".join(filter_queries), min_colaborations=0)
+
+        # print(relationship_query)
+
+        # relationship_query = \
+        #     """
+        #     CALL {{
+        #         MATCH (a1:Author)-[:AUTHOR_OF*1..3]-(ar:Article)<--(a2:Author)
+        #         WHERE EXISTS {{
+        #             MATCH (a1)-[w:AUTHOR_OF]->(ar1:Article)-[:CATEGORISED_BY]->(m:MeshHeading)
+        #             WHERE (SIZE({mesh_heading_keyword}) = 0 OR m.name CONTAINS '{mesh_heading_keyword}')
+        #                 AND (SIZE({author_name}) = 0 OR a1.name CONTAINS '{author_name}')
+        #                 AND (SIZE({article_title}) = 0 OR ar.title CONTAINS '{article_title}')
+        #                 AND (SIZE({start_date}) = 0 OR ar1.date >= date({start_date}))
+        #                 AND (SIZE({end_date}) = 0 OR ar1.date <= date({end_date}))
+        #                 AND (SIZE({is_first_author}) = 0 OR w.is_first_author = {is_first_author})
+        #                 AND (SIZE({is_last_author}) = 0 OR w.is_last_author = {is_last_author})
+        #                 AND (SIZE({journal_title}) = 0 OR EXISTS {{
+        #                     MATCH (ar)-[:PUBLISHED_IN]->(j:Journal)
+        #                     WHERE j.title CONTAINS '{journal_title}'
+        #                 }})
+        #         }}
+        #         RETURN ar
+        #     }}
+
+        #     MATCH (a1:Author)-[:AUTHOR_OF]->(ar:Article)<-[:AUTHOR_OF]-(a2:Author)
+        #     WITH a1, a2, count(*) AS c WHERE c > {min_colaborations}
+        #     RETURN id(a1) as source, id(a2) as target, apoc.create.vRelationship(a1, "COAUTHOR", {{count: c}}, a2) as rel
+        #     """.format(
+        #         mesh_heading_keyword=filters['mesh_heading'],
+        #         author_name=filters['author'],
+        #         is_first_author=filters['first_author'],
+        #         is_last_author=filters['last_author'],
+        #         start_date=filters['published_after'],
+        #         end_date=filters['published_before'],
+        #         journal_title=filters['journal'],
+        #         article_title=filters['article'],
+        #         min_colaborations=0
+        #     )
 
         with driver.session(database=NEO4J_DATABASE) as session:
             # try project graph into memory
@@ -112,12 +214,17 @@ def run_analytics(graph_type: str, snapshot_id: int, filters):
                     validateRelationships=False
                 )
 
+                print("computing analytics")
+
                 # compute degree centrality
                 res = gds.degree.stream(G)
-
-                # save top 5 nodes by degree to db
                 res = res.sort_values(by=['score'], ascending=False, ignore_index=True)
 
+                for row in res.itertuples():
+                    print(gds.util.asNode(row.nodeId).get('name'), row.score)
+                print(len(res))
+
+                # get the top 5 nodes by degree centrality
                 top_5_degree = []
                 for row in res.head(5).itertuples():
                     top_5_degree.append(
@@ -128,7 +235,7 @@ def run_analytics(graph_type: str, snapshot_id: int, filters):
                         }
                     )
 
-                # save the degree distributions to db
+                # compute the degree distributions
                 # TODO may need to use a cut-off for very large graphs
                 degree_distributions = []
                 for score, count in res['score'].value_counts().sort_index().iteritems():
@@ -142,7 +249,8 @@ def run_analytics(graph_type: str, snapshot_id: int, filters):
                 # print(top_5_degree)
                 # print(degree_distributions)
 
-                # save to db
+                # construct degree centrality record and save to db
+
                 degree_centrality_record = json.dumps(
                     {
                         "top_5": top_5_degree,
@@ -158,6 +266,7 @@ def run_analytics(graph_type: str, snapshot_id: int, filters):
                 # other centrality measures
                 #   could also use a weighted degree centrality (by collaborations) 
                 # add more complicated filters
+                # handle concurrent graph projections -> name has to be unique
 
                 G.drop()
 
