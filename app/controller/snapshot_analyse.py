@@ -69,6 +69,41 @@ def _retrieve_degree_centrality(tx, snapshot_id):
 
     return result.single()
 
+def _create_query_from_filters(filters):
+    """
+    Helper function to map the input filters to query conditions. The query conditions are returned as a string.
+    """
+
+    filter_queries = []
+
+    if filters['mesh_heading'] != "":
+        filter_queries.append("m1.name CONTAINS '{}'".format(filters['mesh_heading']))
+    if filters['author'] != "":
+        filter_queries.append("a1.name CONTAINS '{}'".format(filters['author']))
+    if filters['first_author'] != "":
+        filter_queries.append("w.is_first_author = {}".format(filters['first_author']))
+    if filters['last_author'] != "":
+        filter_queries.append("w.is_last_author = {}".format(filters['last_author']))
+    if filters['published_after'] != "":
+        filter_queries.append("ar1.date >= date({})".format(filters['published_after']))
+    if filters['published_before'] != "":
+        filter_queries.append("ar1.date <= date({})".format(filters['published_before']))
+    if filters['journal'] != "":
+        filter_queries.append(
+            """
+            EXISTS {{
+                MATCH (ar)-[:PUBLISHED_IN]->(j:Journal)
+                WHERE j.title CONTAINS '{}'
+            }}
+            """.format(filters['journal'])
+        )
+    if filters['article'] != "":
+        filter_queries.append("ar.title CONTAINS '{}'".format(filters['article']))
+
+    return " AND ".join(filter_queries)
+
+
+
 def run_analytics(graph_type: str, snapshot_id: int, filters):
     """
     Runs analytics on the graph returned by the query. The graph is either author-author
@@ -82,31 +117,7 @@ def run_analytics(graph_type: str, snapshot_id: int, filters):
     if graph_type == "authors":
         graph_name = "coauthors"
 
-        filter_queries = []
-
-        if filters['mesh_heading'] != "":
-            filter_queries.append("m.name CONTAINS '{}'".format(filters['mesh_heading']))
-        if filters['author'] != "":
-            filter_queries.append("a1.name CONTAINS '{}'".format(filters['author']))
-        if filters['first_author'] != "":
-            filter_queries.append("w.is_first_author = {}".format(filters['first_author']))
-        if filters['last_author'] != "":
-            filter_queries.append("w.is_last_author = {}".format(filters['last_author']))
-        if filters['published_after'] != "":
-            filter_queries.append("ar1.date >= date({})".format(filters['published_after']))
-        if filters['published_before'] != "":
-            filter_queries.append("ar1.date <= date({})".format(filters['published_before']))
-        if filters['journal'] != "":
-            filter_queries.append(
-                """
-                EXISTS {{
-                    MATCH (ar)-[:PUBLISHED_IN]->(j:Journal)
-                    WHERE j.title CONTAINS '{}'
-                }}
-                """.format(filters['journal'])
-            )
-        if filters['article'] != "":
-            filter_queries.append("ar.title CONTAINS '{}'".format(filters['article']))
+        filter_query_string = _create_query_from_filters(filters)
 
         # return all authors within a 3 hop neighbourhood of a specific author
         # in the projected author-author graph
@@ -114,13 +125,13 @@ def run_analytics(graph_type: str, snapshot_id: int, filters):
             """
             MATCH (a1:Author)-[:AUTHOR_OF*1..3]-(ar:Article)<--(a2:Author)
             WHERE EXISTS {{
-                MATCH (a1)-[w:AUTHOR_OF]->(ar1:Article)-[:CATEGORISED_BY]->(m:MeshHeading)
+                MATCH (a1)-[w:AUTHOR_OF]->(ar1:Article)-[:CATEGORISED_BY]->(m1:MeshHeading)
                 WHERE {}
             }}
             WITH COLLECT(DISTINCT id(a1)) + COLLECT(DISTINCT id(a2)) AS ids
             UNWIND ids as id
             RETURN id
-            """.format(" AND ".join(filter_queries))
+            """.format(filter_query_string)
 
         # print(node_query)
 
@@ -130,7 +141,7 @@ def run_analytics(graph_type: str, snapshot_id: int, filters):
             CALL {{
                 MATCH (a1:Author)-[:AUTHOR_OF*1..3]-(ar:Article)<--(a2:Author)
                 WHERE EXISTS {{
-                    MATCH (a1)-[w:AUTHOR_OF]->(ar1:Article)-[:CATEGORISED_BY]->(m:MeshHeading)
+                    MATCH (a1)-[w:AUTHOR_OF]->(ar1:Article)-[:CATEGORISED_BY]->(m1:MeshHeading)
                     WHERE {}
                 }}
                 RETURN ar
@@ -139,7 +150,7 @@ def run_analytics(graph_type: str, snapshot_id: int, filters):
             MATCH (a1:Author)-[:AUTHOR_OF]->(ar:Article)<-[:AUTHOR_OF]-(a2:Author)
             WITH a1, a2, count(*) AS c WHERE c > {min_colaborations}
             RETURN id(a1) as source, id(a2) as target, apoc.create.vRelationship(a1, "COAUTHOR", {{count: c}}, a2) as rel
-            """.format(" AND ".join(filter_queries), min_colaborations=0)
+            """.format(filter_query_string, min_colaborations=0)
 
         # print(relationship_query)
 
@@ -158,6 +169,10 @@ def run_analytics(graph_type: str, snapshot_id: int, filters):
                 # compute degree centrality
                 res = gds.degree.stream(G)
                 res = res.sort_values(by=['score'], ascending=False, ignore_index=True)
+
+                # for row in res.itertuples():
+                #     print(gds.util.asNode(row.nodeId).get('name'), row.score)
+                # print(len(res))
 
                 # get the top 5 nodes by degree centrality
                 top_5_degree = []
@@ -200,8 +215,6 @@ def run_analytics(graph_type: str, snapshot_id: int, filters):
                 # TODO
                 # other centrality measures
                 #   could also use a weighted degree centrality (by collaborations) 
-                # add more complicated filters
-                # mesh-mesh graph
                 # handle concurrent graph projections -> name has to be unique
 
                 G.drop()
@@ -215,7 +228,113 @@ def run_analytics(graph_type: str, snapshot_id: int, filters):
                 # remove snapshot
                 # TODO need to make sure this is consistent behaviour with adding the filters to the snapshot
 
-        driver.close()
+    elif graph_type == "mesh":
+        graph_name = "comeshs"
+
+        filter_query_string = _create_query_from_filters(filters)
+
+        # return all mesh headings within a 3 hop neighbourhood of a specific author
+        node_query = \
+            """
+            MATCH (ar:Article)-[:CATEGORISED_BY]->(m:MeshHeading) 
+            WHERE EXISTS {{
+                MATCH (a1:Author)-[:AUTHOR_OF*1..3]->(ar:Article)
+                WHERE EXISTS {{
+                    MATCH (a1)-[w:AUTHOR_OF]->(ar1:Article)-[:CATEGORISED_BY]->(m1:MeshHeading) 
+                    WHERE {}
+                }}
+            }}
+            RETURN id(m) as id
+            """.format(filter_query_string)
+
+        # print(node_query)
+
+        # create direct mesh heading-mesh heading relations based on the 3 hop neighbourhood
+        relationship_query = \
+            """
+            CALL {{
+            MATCH (a1:Author)-[:AUTHOR_OF*1..3]->(ar:Article)
+            WHERE EXISTS {{
+                MATCH (a1)-[w:AUTHOR_OF]->(ar1:Article)-[:CATEGORISED_BY]->(m1:MeshHeading)  
+                    WHERE {}
+                }}
+                RETURN ar
+            }}
+
+            MATCH (m1:MeshHeading)<-[:CATEGORISED_BY]-(ar:Article)-[:CATEGORISED_BY]->(m2:MeshHeading)
+            WITH m1, m2, count(*) AS c WHERE c > {min_colaborations}
+            RETURN id(m1) as source, id(m2) as target, apoc.create.vRelationship(m1, "COAUTHOR", {{count: c}}, m2) as rel
+            """.format(filter_query_string, min_colaborations=0)
+
+        # print(relationship_query)
+
+        with driver.session(database=NEO4J_DATABASE) as session:
+            # try project graph into memory
+            try:
+                G, _ = gds.graph.project.cypher(
+                    graph_name,
+                    node_query,
+                    relationship_query,
+                    validateRelationships=False
+                )
+
+                print("computing analytics")
+
+                # compute degree centrality
+                res = gds.degree.stream(G)
+                res = res.sort_values(by=['score'], ascending=False, ignore_index=True)
+
+                # for row in res.itertuples():
+                #     print(gds.util.asNode(row.nodeId).get('name'), row.score)
+                # print(len(res))
+
+                # get the top 5 nodes by degree centrality
+                top_5_degree = []
+                for row in res.head(5).itertuples():
+                    top_5_degree.append(
+                        {
+                            "id": row.nodeId,
+                            "name": gds.util.asNode(row.nodeId).get('name'),
+                            "centrality": int(row.score)
+                        }
+                    )
+
+                # compute the degree distributions
+                # TODO may need to use a cut-off for very large graphs
+                degree_distributions = []
+                for score, count in res['score'].value_counts().sort_index().iteritems():
+                    degree_distributions.append(
+                        {
+                            "score": score,
+                            "count": count
+                        }
+                    )
+
+                # print(top_5_degree)
+                # print(degree_distributions)
+
+                # construct degree centrality record and save to db
+
+                degree_centrality_record = json.dumps(
+                    {
+                        "top_5": top_5_degree,
+                        "distributions": degree_distributions
+                    }
+                )
+
+                session.write_transaction(_update_snapshot_degree_centrality, snapshot_id, degree_centrality_record)
+
+                print("analytics completed")
+
+                G.drop()
+
+            # unable to project the graph into memory because there are no matches for the given filters
+            except ClientError as err:
+                # TODO
+                print(err)
+                pass
+
+    driver.close()
 
 
 def retrieve_analytics(snapshot_id: int):
