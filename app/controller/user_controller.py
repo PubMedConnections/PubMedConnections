@@ -34,7 +34,7 @@ def create_user(username: str, password: str):
             ''',
             {
                 'username': username,
-                'password': sha256(password)
+                'password': sha256(password.encode('utf-8')).hexdigest()
             }
         ))
 

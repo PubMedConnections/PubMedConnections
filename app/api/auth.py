@@ -2,13 +2,24 @@
 from flask import request, jsonify, make_response
 from flask_restx import Namespace, Resource, fields
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
-from app.controller.user_controller import authenticate_user
+from app.controller.user_controller import authenticate_user, create_user
 from datetime import timedelta
+from app import app
 
-ns = Namespace('auth', description='user authentication', authorizations={'api_key': {'type': 'apiKey', 'in': 'header', 'name': 'Authorization'}}, security="api_key")
+ns = Namespace('auth', description='user authentication',
+               authorizations={'api_key':
+                                   {'type': 'apiKey',
+                                    'in': 'header',
+                                    'name': 'Authorization'}
+                               },
+               security="api_key")
+
 user = ns.model('user', {'username': fields.String(required=False, default="admin"),
                          'password': fields.String(required=False, default="admin")})
 
+registration = ns.model('registration', {'username': fields.String(required=False, default="admin"),
+                                         'password': fields.String(required=False, default="admin"),
+                                         'invite_code': fields.String(required=False, default=app.config['REGISTRATION_INVITE_CODE'])})
 
 @ns.route('/login')
 class Login(Resource):
@@ -28,10 +39,30 @@ class Login(Resource):
 
 
 @ns.route('/check_authentication')
-class ProtectedTest(Resource):
+class CheckAuthentication(Resource):
     @staticmethod
     @jwt_required()
     @ns.doc(security='api_key')
     def get():
         current_user = get_jwt_identity()
         return make_response(jsonify({'current_user': current_user}), 200)
+
+
+@ns.route('/register')
+class RegisterUser(Resource):
+    @staticmethod
+    @ns.expect(registration)
+    def post():
+        data = request.json
+
+        if data['invite_code'] != app.config['REGISTRATION_INVITE_CODE']:
+            return make_response(jsonify({"message": "Invalid invite code"}), 401)
+
+        username = data['username']
+        password = data['password']
+
+        if not username or not password:
+            return make_response(jsonify({"message": "Please enter a username and password"}), 400)
+
+        create_user(username, password)
+        return make_response(jsonify({"message": f"User '{username}' created"}), 200)
