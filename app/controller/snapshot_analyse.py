@@ -77,9 +77,9 @@ def _create_query_from_filters(filters):
     filter_queries = []
 
     if filters['mesh_heading'] != "":
-        filter_queries.append("m1.name CONTAINS '{}'".format(filters['mesh_heading']))
+        filter_queries.append("toLower(m1.name) CONTAINS '{}'".format(filters['mesh_heading'].lower()))
     if filters['author'] != "":
-        filter_queries.append("a1.name CONTAINS '{}'".format(filters['author']))
+        filter_queries.append("toLower(a1.name) CONTAINS '{}'".format(filters['author'].lower()))
     if filters['first_author'] != "":
         filter_queries.append("w.is_first_author = {}".format(filters['first_author']))
     if filters['last_author'] != "":
@@ -93,12 +93,12 @@ def _create_query_from_filters(filters):
             """
             EXISTS {{
                 MATCH (ar)-[:PUBLISHED_IN]->(j:Journal)
-                WHERE j.title CONTAINS '{}'
+                WHERE toLower(j.title) CONTAINS '{}'
             }}
-            """.format(filters['journal'])
+            """.format(filters['journal'].lower())
         )
     if filters['article'] != "":
-        filter_queries.append("ar.title CONTAINS '{}'".format(filters['article']))
+        filter_queries.append("toLower(ar.title) CONTAINS '{}'".format(filters['article'].lower()))
 
     return " AND ".join(filter_queries)
 
@@ -106,6 +106,9 @@ def _project_graph_and_run_analytics(graph_name: str, node_query: str, relations
     
     driver = GraphDatabase.driver(uri=NEO4J_URI)
     gds = GraphDataScience(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
+
+    # print(node_query)
+    # print(relationship_query)
 
     with driver.session(database=NEO4J_DATABASE) as session:
         # try project graph into memory
@@ -116,8 +119,6 @@ def _project_graph_and_run_analytics(graph_name: str, node_query: str, relations
                 relationship_query,
                 validateRelationships=False
             )
-
-            print("computing analytics")
 
             # compute degree centrality
             res = gds.degree.stream(G)
@@ -160,12 +161,42 @@ def _project_graph_and_run_analytics(graph_name: str, node_query: str, relations
 
             session.write_transaction(_update_snapshot_degree_centrality, snapshot_id, degree_centrality_record)
 
+            # compute degree centrality
+            res = gds.betweenness.stream(G)
+            res = res.sort_values(by=['score'], ascending=False, ignore_index=True)
+
+            # get the top 5 nodes by degree centrality
+            top_5_betweenness = []
+            for row in res.head(5).itertuples():
+                top_5_betweenness.append(
+                    {
+                        "id": row.nodeId,
+                        "name": gds.util.asNode(row.nodeId).get('name'),
+                        "centrality": row.score
+                    }
+                )
+
+            # print(top_5_betweenness)
+
+            # compute the betweenness distributions
+            # TODO may need to use a cut-off for very large graphs
+            betweenness_distributions = []
+            for score, count in res['score'].value_counts().sort_index().iteritems():
+                betweenness_distributions.append(
+                    {
+                        "score": score,
+                        "count": count
+                    }
+                )
+
+            # print(betweenness_distributions)
+
             print("analytics completed")
 
             # TODO
             # other centrality measures
             #   could also use a weighted degree centrality (by collaborations) 
-            # handle concurrent graph projections -> name has to be unique
+            # first/last author should be a string not boolean
 
             G.drop()
 
@@ -205,8 +236,6 @@ def run_analytics(graph_type: str, snapshot_id: int, filters):
             RETURN id
             """.format(filter_query_string)
 
-        # print(node_query)
-
         # create direct author-author relations based on the 3 hop neighbourhood
         relationship_query = \
             """
@@ -223,8 +252,6 @@ def run_analytics(graph_type: str, snapshot_id: int, filters):
             WITH a1, a2, count(*) AS c WHERE c > {min_colaborations}
             RETURN id(a1) as source, id(a2) as target, apoc.create.vRelationship(a1, "COAUTHOR", {{count: c}}, a2) as rel
             """.format(filter_query_string, min_colaborations=0)
-
-        # print(relationship_query)
 
         _project_graph_and_run_analytics(graph_name, node_query, relationship_query, snapshot_id)
 
@@ -247,8 +274,6 @@ def run_analytics(graph_type: str, snapshot_id: int, filters):
             RETURN id(m) as id
             """.format(filter_query_string)
 
-        # print(node_query)
-
         # create direct mesh heading-mesh heading relations based on the 3 hop neighbourhood
         relationship_query = \
             """
@@ -265,8 +290,6 @@ def run_analytics(graph_type: str, snapshot_id: int, filters):
             WITH m1, m2, count(*) AS c WHERE c > {min_colaborations}
             RETURN id(m1) as source, id(m2) as target, apoc.create.vRelationship(m1, "COAUTHOR", {{count: c}}, m2) as rel
             """.format(filter_query_string, min_colaborations=0)
-
-        # print(relationship_query)
 
         _project_graph_and_run_analytics(graph_name, node_query, relationship_query, snapshot_id)
 
