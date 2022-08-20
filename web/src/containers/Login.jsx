@@ -4,13 +4,17 @@ import TextField from '@mui/material/TextField';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Container from '@mui/material/Container';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { login } from '../store/slices/userSlice';
 import { useNavigate } from 'react-router-dom';
+import Alert from '@mui/material/Alert';
+import AlertTitle from '@mui/material/AlertTitle';
 
 function Login() {
   const [user, setUser] = useState('');
   const [password, setPassword] = useState('');
+
+  const { loading, error } = useSelector((state) => state.user);
 
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -80,6 +84,15 @@ function Login() {
             onChange={(e) => setPassword(e.target.value)}
             autoComplete='current-password'
           />
+          {error && (
+            <Alert severity='error'>
+              <AlertTitle>Wrong Username or Password</AlertTitle>
+              There was a problem logging in -{' '}
+              <strong>
+                please ensure your login details are correct and try again.
+              </strong>
+            </Alert>
+          )}
           {
             // TODO: Support 'remember me' feature
             /* <FormControlLabel

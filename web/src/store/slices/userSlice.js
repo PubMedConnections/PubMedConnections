@@ -1,40 +1,46 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
+import axios from 'axios';
 
 const initialState = {
   isLoading: false,
   username: null,
-  userToken: null, // for storing the JWT
+  access_token: null, // for storing the JWT
   error: null,
   success: false, // for monitoring the registration process.
 };
 
-// TESTING ONLY
-const creds = {
-  username: 'test',
-  password: 'test123',
-};
-
 // async thunks
-export const login = createAsyncThunk('auth/login', async (args) => {
-  try {
-    const { user, password } = args;
-
-    // TODO: connect to api, as follows
-    //const data = await AuthService.login(email, password);
-
-    // Testing only
-    if (user === creds.username && password === creds.password) {
-      return {
-        username: user,
-        userToken: 12344,
+export const login = createAsyncThunk(
+  'auth/login',
+  async ({ user, password }, { rejectWithValue }) => {
+    try {
+      const config = {
+        method: 'post',
+        url: `${process.env.REACT_APP_API_ENDPOINT}/auth/login`,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        data: {
+          username: user,
+          password: password,
+        },
       };
-    } else {
-      throw new Error('Incorrect login details');
+
+      console.log(JSON.stringify(process.env));
+      const { data } = await axios(config);
+
+      localStorage.setItem('access_token', data.access_token);
+
+      return { access_token: data.access_token, username: user };
+    } catch (error) {
+      if (error.response && error.response.data.message) {
+        return rejectWithValue(error.response.data.message);
+      } else {
+        return rejectWithValue(error.message);
+      }
     }
-  } catch (err) {
-    console.error(err);
   }
-});
+);
 
 export const userSlice = createSlice({
   name: 'user',
@@ -55,7 +61,7 @@ export const userSlice = createSlice({
       state.isLoading = false;
       state.success = true;
       state.username = payload.username;
-      state.userToken = payload.userToken;
+      state.access_token = payload.access_token;
     },
     [login.rejected]: (state, action) => {
       state.isLoading = false;
