@@ -1,0 +1,11 @@
+node_modules/
+coverage/
+public/
+build/
+package.json
+tsconfig.json
+.prettierrc.js
+.eslintrc.js
+.gitignore
+.prettierignore
+.eslintignore
