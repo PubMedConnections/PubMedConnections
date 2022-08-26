@@ -8,8 +8,9 @@ import ListItemButton from '@mui/material/ListItemButton';
 import ListItemText from '@mui/material/ListItemText';
 import Button from '@mui/material/Button';
 import { CONNECTIONS_NAVBAR_HEIGHT } from '../../constants';
+import Filters from "./Filters";
 
-const drawerWidth = 240;
+const drawerWidth = 450;
 
 // TODO: Update with real data
 const snapshots = [
@@ -80,33 +81,7 @@ function SnapshotSidebar() {
         variant='fullWidth'
         sx={{ background: '#c4c4c4', width: '100%', height: '1px' }}
       />
-      <List>
-        {currentFilter.map((filter, index) => (
-          <ListItem key={filter.field} disablePadding>
-            <ListItemText
-              sx={{ marginLeft: '15px' }}
-              primaryTypographyProps={{
-                fontSize: 15,
-                fontWeight: 'medium',
-                color: '#333333',
-                letterSpacing: 0,
-              }}
-              secondaryTypographyProps={{
-                fontSize: 12,
-                color: '#333333',
-              }}
-              primary={filter.field}
-              secondary={filter.value}
-            />
-          </ListItem>
-        ))}
-      </List>
-      <Button
-        variant='contained'
-        sx={{ marginTop: 1, width: 150, alignSelf: 'center' }}
-      >
-        + Add new filter
-      </Button>
+      <Filters />
     </Drawer>
   );
 }

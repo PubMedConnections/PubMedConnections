@@ -9872,6 +9872,8 @@ const Graph = () => {
     );
 
     network.on("stabilizationProgress", function (params) {
+      document.getElementById("visjs-loading-cover").style.opacity = 1;
+      document.getElementById("visjs-loading-cover").style.display = "show";
       setLoadingProgress( 100 * params.iterations / params.total);
     });
 
