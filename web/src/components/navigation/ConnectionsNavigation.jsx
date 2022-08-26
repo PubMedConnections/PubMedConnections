@@ -32,7 +32,7 @@ const ConnectionsNavigation = (props) => {
               paddingY: 1,
             }}
             component='img'
-            src='img/logo-with-text.png'
+            src='/img/logo-with-text.png'
           />
         </Link>
 

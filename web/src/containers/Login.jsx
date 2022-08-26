@@ -49,7 +49,7 @@ function Login() {
             paddingY: 1,
           }}
           component='img'
-          src='img/logo-with-text.png'
+          src='/img/logo-with-text.png'
         />
         <Typography component='h1' variant='h5'>
           Sign in

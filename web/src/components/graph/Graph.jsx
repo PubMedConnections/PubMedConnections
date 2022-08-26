@@ -8,6 +8,7 @@
  */
 
 import React, { useEffect, useRef, useState } from 'react';
+import LinearProgress from '@mui/material/LinearProgress'
 import { Network } from 'vis-network/standalone';
 
 const Graph = () => {
@@ -9858,18 +9859,44 @@ const Graph = () => {
     },
   });
 
+  const [loadingProgress, setLoadingProgress] = useState(0)
+
   // A reference to the div rendered by this component
   const domNode = useRef(null);
 
   useEffect(() => {
-    domNode.current = new Network(
-      domNode.current,
-      graphInfo.data,
-      graphInfo.options
+    let network = new Network(
+        domNode.current,
+        graphInfo.data,
+        graphInfo.options
     );
+
+    network.on("stabilizationProgress", function (params) {
+      setLoadingProgress( 100 * params.iterations / params.total);
+    });
+
+    network.once("stabilizationIterationsDone", function () {
+      setLoadingProgress(100);
+      document.getElementById("visjs-loading-cover").style.opacity = 0;
+
+      setTimeout(function () {
+        document.getElementById("visjs-loading-cover").style.display = "none";
+      }, 500);
+    });
+
+    domNode.current = network
+
   }, [domNode, graphInfo]);
 
-  return <div ref={domNode} />;
+  return <div>
+    <div ref={domNode} />
+    <div id="visjs-loading-cover">
+      <div id="visjs-progress-container">
+        <LinearProgress variant="determinate" value={loadingProgress} />
+        <div id="visjs-progress-percentage">{loadingProgress}%</div>
+      </div>
+    </div>
+  </div>;
 };
 
 export default Graph;
