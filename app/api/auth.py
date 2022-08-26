@@ -1,10 +1,9 @@
-# from app.api import bp
+import json
 from flask import request, jsonify, make_response
 from flask_restx import Namespace, Resource, fields
-from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
-from app.controller.user_controller import authenticate_user, create_user
-from datetime import timedelta
-from app import app
+from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, get_jwt
+from app.controller.user_controller import authenticate_user, create_user, get_user, expire_token
+from app import app, jwt
 
 ns = Namespace('auth', description='user authentication',
                authorizations={'api_key':
@@ -21,6 +20,15 @@ registration = ns.model('registration', {'username': fields.String(required=Fals
                                          'password': fields.String(required=False, default="admin"),
                                          'invite_code': fields.String(required=False, default=app.config['REGISTRATION_INVITE_CODE'])})
 
+@jwt.token_in_blocklist_loader
+def check_if_token_is_revoked(jwt_header, jwt_payload: dict):
+    jti = jwt_payload["jti"]
+    username = jwt_payload["sub"]
+    user = get_user(username)
+    revoked_tokens = json.loads(user["revoked_tokens"])
+    return jti in revoked_tokens.keys()
+
+
 @ns.route('/login')
 class Login(Resource):
     @staticmethod
@@ -32,7 +40,7 @@ class Login(Resource):
         if not password or not username:
             return make_response(jsonify('Username or password cannot be empty!', 400))
         if authenticate_user(username, password):
-            access_token = create_access_token(identity=username, expires_delta=timedelta(minutes=60))
+            access_token = create_access_token(identity=username)
             return make_response(jsonify(access_token=access_token), 200)
         else:
             return make_response(jsonify({"message": "Invalid username or password"}), 401)
@@ -68,3 +76,17 @@ class RegisterUser(Resource):
             return make_response(jsonify({"message": f"User '{username}' created."}), 200)
         else:
             return make_response(jsonify({"message": f"Error! User '{username}' already exists."}), 400)
+
+
+@ns.route('/logout')
+class Logout(Resource):
+    @staticmethod
+    @jwt_required()
+    @ns.doc(security='api_key')
+    def post():
+        jwt_payload = get_jwt()
+        username = jwt_payload["sub"]
+        jti = jwt_payload["jti"]
+        expiry = jwt_payload["exp"]
+        expire_token(username, jti, expiry)
+        return make_response(jsonify({"message": "Access token revoked"}))

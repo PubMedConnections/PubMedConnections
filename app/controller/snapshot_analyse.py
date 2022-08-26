@@ -69,108 +69,229 @@ def _retrieve_degree_centrality(tx, snapshot_id):
 
     return result.single()
 
+def _create_query_from_filters(filters):
+    """
+    Helper function to map the input filters to query conditions. The query conditions are returned as a string.
+    """
+
+    filter_queries = []
+
+    if filters['mesh_heading'] != "":
+        filter_queries.append("toLower(m1.name) CONTAINS '{}'".format(filters['mesh_heading'].lower()))
+    if filters['author'] != "":
+        filter_queries.append("toLower(a1.name) CONTAINS '{}'".format(filters['author'].lower()))
+    if filters['first_author'] != "":
+        filter_queries.append("w.is_first_author = {}".format(filters['first_author']))
+    if filters['last_author'] != "":
+        filter_queries.append("w.is_last_author = {}".format(filters['last_author']))
+    if filters['published_after'] != "":
+        filter_queries.append("ar1.date >= date({})".format(filters['published_after']))
+    if filters['published_before'] != "":
+        filter_queries.append("ar1.date <= date({})".format(filters['published_before']))
+    if filters['journal'] != "":
+        filter_queries.append(
+            """
+            EXISTS {{
+                MATCH (ar)-[:PUBLISHED_IN]->(j:Journal)
+                WHERE toLower(j.title) CONTAINS '{}'
+            }}
+            """.format(filters['journal'].lower())
+        )
+    if filters['article'] != "":
+        filter_queries.append("toLower(ar.title) CONTAINS '{}'".format(filters['article'].lower()))
+
+    return " AND ".join(filter_queries)
+
+def _project_graph_and_run_analytics(graph_name: str, node_query: str, relationship_query: str, snapshot_id: int):
+    
+    driver = GraphDatabase.driver(uri=NEO4J_URI)
+    gds = GraphDataScience(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
+
+    # print(node_query)
+    # print(relationship_query)
+
+    with driver.session(database=NEO4J_DATABASE) as session:
+        # try project graph into memory
+        try:
+            G, _ = gds.graph.project.cypher(
+                graph_name,
+                node_query,
+                relationship_query,
+                validateRelationships=False
+            )
+
+            # compute degree centrality
+            res = gds.degree.stream(G)
+            res = res.sort_values(by=['score'], ascending=False, ignore_index=True)
+
+            # for row in res.itertuples():
+            #     print(gds.util.asNode(row.nodeId).get('name'), row.score)
+            # print(len(res))
+
+            # get the top 5 nodes by degree centrality
+            top_5_degree = []
+            for row in res.head(5).itertuples():
+                top_5_degree.append(
+                    {
+                        "id": row.nodeId,
+                        "name": gds.util.asNode(row.nodeId).get('name'),
+                        "centrality": int(row.score)
+                    }
+                )
+
+            # compute the degree distributions
+            # TODO may need to use a cut-off for very large graphs
+            degree_distributions = []
+            for score, count in res['score'].value_counts().sort_index().iteritems():
+                degree_distributions.append(
+                    {
+                        "score": score,
+                        "count": count
+                    }
+                )
+
+            # construct degree centrality record and save to db
+
+            degree_centrality_record = json.dumps(
+                {
+                    "top_5": top_5_degree,
+                    "distributions": degree_distributions
+                }
+            )
+
+            session.write_transaction(_update_snapshot_degree_centrality, snapshot_id, degree_centrality_record)
+
+            # compute degree centrality
+            res = gds.betweenness.stream(G)
+            res = res.sort_values(by=['score'], ascending=False, ignore_index=True)
+
+            # get the top 5 nodes by degree centrality
+            top_5_betweenness = []
+            for row in res.head(5).itertuples():
+                top_5_betweenness.append(
+                    {
+                        "id": row.nodeId,
+                        "name": gds.util.asNode(row.nodeId).get('name'),
+                        "centrality": row.score
+                    }
+                )
+
+            # print(top_5_betweenness)
+
+            # compute the betweenness distributions
+            # TODO may need to use a cut-off for very large graphs
+            betweenness_distributions = []
+            for score, count in res['score'].value_counts().sort_index().iteritems():
+                betweenness_distributions.append(
+                    {
+                        "score": score,
+                        "count": count
+                    }
+                )
+
+            # print(betweenness_distributions)
+
+            print("analytics completed")
+
+            # TODO
+            # other centrality measures
+            #   could also use a weighted degree centrality (by collaborations) 
+            # first/last author should be a string not boolean
+
+            G.drop()
+
+        # unable to project the graph into memory because there are no matches for the given filters
+        except ClientError as err:
+            # TODO
+            print(err)
+            pass
+    
+    driver.close()
+
+
 def run_analytics(graph_type: str, snapshot_id: int, filters):
     """
     Runs analytics on the graph returned by the query. The graph is either author-author
     or MeSH-MeSH.
     """
-    driver = GraphDatabase.driver(uri=NEO4J_URI)
-    gds = GraphDataScience(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
+
+    print("starting analytics")
 
     if graph_type == "authors":
         graph_name = "coauthors"
+
+        filter_query_string = _create_query_from_filters(filters)
 
         # return all authors within a 3 hop neighbourhood of a specific author
         # in the projected author-author graph
         node_query = \
             """
-            MATCH (a1:Author)-[r:AUTHOR_OF*1..3]-(ar:Article)<--(a2:Author)
-            WHERE a1.name =~ ".*{author_name}.*"
-            RETURN id(a2) as id
-            """.format(author_name=filters['author'])
+            MATCH (a1:Author)-[:AUTHOR_OF*1..3]-(ar:Article)<--(a2:Author)
+            WHERE EXISTS {{
+                MATCH (a1)-[w:AUTHOR_OF]->(ar1:Article)-[:CATEGORISED_BY]->(m1:MeshHeading)
+                WHERE {}
+            }}
+            WITH COLLECT(DISTINCT id(a1)) + COLLECT(DISTINCT id(a2)) AS ids
+            UNWIND ids as id
+            RETURN id
+            """.format(filter_query_string)
 
         # create direct author-author relations based on the 3 hop neighbourhood
         relationship_query = \
             """
             CALL {{
-                MATCH (a:Author)-[r:AUTHOR_OF*1..3]-(ar:Article)<--(target:Author)
-                WHERE a.name =~ ".*{author_name}.*"
+                MATCH (a1:Author)-[:AUTHOR_OF*1..3]-(ar:Article)<--(a2:Author)
+                WHERE EXISTS {{
+                    MATCH (a1)-[w:AUTHOR_OF]->(ar1:Article)-[:CATEGORISED_BY]->(m1:MeshHeading)
+                    WHERE {}
+                }}
                 RETURN ar
             }}
+
             MATCH (a1:Author)-[:AUTHOR_OF]->(ar:Article)<-[:AUTHOR_OF]-(a2:Author)
             WITH a1, a2, count(*) AS c WHERE c > {min_colaborations}
             RETURN id(a1) as source, id(a2) as target, apoc.create.vRelationship(a1, "COAUTHOR", {{count: c}}, a2) as rel
-            """.format(author_name=filters['author'], min_colaborations=0)
+            """.format(filter_query_string, min_colaborations=0)
 
-        with driver.session(database=NEO4J_DATABASE) as session:
-            # try project graph into memory
-            try:
-                G, _ = gds.graph.project.cypher(
-                    graph_name,
-                    node_query,
-                    relationship_query,
-                    validateRelationships=False
-                )
+        _project_graph_and_run_analytics(graph_name, node_query, relationship_query, snapshot_id)
 
-                # compute degree centrality
-                res = gds.degree.stream(G)
+    elif graph_type == "mesh":
+        graph_name = "comeshs"
 
-                # save top 5 nodes by degree to db
-                res = res.sort_values(by=['score'], ascending=False, ignore_index=True)
+        filter_query_string = _create_query_from_filters(filters)
 
-                top_5_degree = []
-                for row in res.head(5).itertuples():
-                    top_5_degree.append(
-                        {
-                            "id": row.nodeId,
-                            "name": gds.util.asNode(row.nodeId).get('name'),
-                            "centrality": int(row.score)
-                        }
-                    )
+        # return all mesh headings within a 3 hop neighbourhood of a specific author
+        node_query = \
+            """
+            MATCH (ar:Article)-[:CATEGORISED_BY]->(m:MeshHeading) 
+            WHERE EXISTS {{
+                MATCH (a1:Author)-[:AUTHOR_OF*1..3]->(ar:Article)
+                WHERE EXISTS {{
+                    MATCH (a1)-[w:AUTHOR_OF]->(ar1:Article)-[:CATEGORISED_BY]->(m1:MeshHeading) 
+                    WHERE {}
+                }}
+            }}
+            RETURN id(m) as id
+            """.format(filter_query_string)
 
-                # save the degree distributions to db
-                # TODO may need to use a cut-off for very large graphs
-                degree_distributions = []
-                for score, count in res['score'].value_counts().sort_index().iteritems():
-                    degree_distributions.append(
-                        {
-                            "score": score,
-                            "count": count
-                        }
-                    )
+        # create direct mesh heading-mesh heading relations based on the 3 hop neighbourhood
+        relationship_query = \
+            """
+            CALL {{
+            MATCH (a1:Author)-[:AUTHOR_OF*1..3]->(ar:Article)
+            WHERE EXISTS {{
+                MATCH (a1)-[w:AUTHOR_OF]->(ar1:Article)-[:CATEGORISED_BY]->(m1:MeshHeading)  
+                    WHERE {}
+                }}
+                RETURN ar
+            }}
 
-                # print(top_5_degree)
-                # print(degree_distributions)
+            MATCH (m1:MeshHeading)<-[:CATEGORISED_BY]-(ar:Article)-[:CATEGORISED_BY]->(m2:MeshHeading)
+            WITH m1, m2, count(*) AS c WHERE c > {min_colaborations}
+            RETURN id(m1) as source, id(m2) as target, apoc.create.vRelationship(m1, "COAUTHOR", {{count: c}}, m2) as rel
+            """.format(filter_query_string, min_colaborations=0)
 
-                # save to db
-                degree_centrality_record = json.dumps(
-                    {
-                        "top_5": top_5_degree,
-                        "distributions": degree_distributions
-                    }
-                )
-
-                session.write_transaction(_update_snapshot_degree_centrality, snapshot_id, degree_centrality_record)
-
-                print("analytics completed")
-
-                # TODO
-                # other centrality measures
-                #   could also use a weighted degree centrality (by collaborations) 
-                # add more complicated filters
-
-                G.drop()
-
-            # unable to project the graph into memory because there are no matches for the given filters
-            except ClientError as err:
-                # TODO
-                # print(err)
-                pass
-
-                # remove snapshot
-                # TODO need to make sure this is consistent behaviour with adding the filters to the snapshot
-
-        driver.close()
+        _project_graph_and_run_analytics(graph_name, node_query, relationship_query, snapshot_id)
 
 
 def retrieve_analytics(snapshot_id: int):
