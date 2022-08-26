@@ -2,7 +2,6 @@ import sys
 
 from app import app as application
 from app.pubmed.manager import PubMedManager
-from config import NEO4J_DATABASE
 
 
 def print_valid_modes():

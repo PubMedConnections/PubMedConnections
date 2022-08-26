@@ -1,6 +1,6 @@
 from neo4j import GraphDatabase, basic_auth
 from graphdatascience import GraphDataScience
-from config import NEO4J_DATABASE, NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD
+from config import NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD
 from flask import jsonify
 
 from app import db
@@ -160,7 +160,7 @@ def run_analytics(graph_type: str, snapshot_id: int, filters):
             RETURN id(a1) as source, id(a2) as target, apoc.create.vRelationship(a1, "COAUTHOR", {{count: c}}, a2) as rel
             """.format(author_name=filters['author'], min_colaborations=0)
 
-        with driver.session(database=NEO4J_DATABASE) as session:
+        with driver.session() as session:
             # project graph into memory
             G, _ = gds.graph.project.cypher(
                 graph_name,

@@ -8,7 +8,7 @@ from typing import Optional
 import atomics
 import neo4j
 from app.pubmed.model import Article, DBMetadata, MeshHeading
-from config import NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD, NEO4J_DATABASE
+from config import NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD
 
 
 class IdCounter:
