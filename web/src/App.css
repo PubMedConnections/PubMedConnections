@@ -5,6 +5,7 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
 }
 
 code {
@@ -50,4 +51,79 @@ code {
   width: 600px;
   height: 23px;
   margin: auto;
+}
+
+/** Filters **/
+#filter-dropdown {
+  position: absolute;
+  top: 75px;
+  border: 1px solid rgba(200, 200, 200, 1);
+  box-shadow: 0 0 5px gray;
+  z-index: 999;
+  background-color: rgba(255, 255, 255, 0.95);
+}
+
+#filter-dropdown #filters {
+  height: 60vh;
+  overflow: scroll;
+}
+
+#filter-collapse-button {
+  width: 100%;
+}
+
+#filters {
+  padding-left: 10px;
+}
+
+#add-filter-button {
+  width: 100%;
+  text-align: center;
+}
+
+.filter-row {
+  margin-top: 15px;
+  margin-bottom: 15px;
+  display: flex;
+  /*height: 40px;*/
+  width: 100%;
+}
+
+.filter-row:after {
+  content: "";
+  display: table;
+  clear: both;
+}
+
+.filter-row>div {
+  float: left;
+  padding-left: 10px;
+}
+
+.filter-class {
+  width: 20%;
+}
+
+.filter-class>p {
+  border-radius: 5px;
+  padding: 3px;
+  text-align: center;
+  font-weight: bold;
+}
+
+.filter-name {
+  width: 30%;
+}
+
+.filter-entry {
+  width: 30%;
+  height: 100%;
+}
+
+.filter-entry>div {
+  width: 100%;
+}
+
+.filter-delete {
+  width: 20%;
 }
