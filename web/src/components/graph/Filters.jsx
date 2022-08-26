@@ -102,7 +102,7 @@ const Filters = () => {
         journal: makeTextFieldEntry(filterCategories.Article,"journal", "Journal"),
         article: makeTextFieldEntry(filterCategories.Article,"article", "Title"),
         num_nodes: makeFilterEntry(filterCategories.Author,"num_nodes", <TextField
-            type="numeric"
+            type="number"
             value={filters.num_nodes}
             onChange={updateStateCallbackGenerator("num_nodes")}
             />
