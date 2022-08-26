@@ -1,5 +1,21 @@
 from app import neo4j_session
 from flask import jsonify
+from datetime import datetime
+from dateutil.relativedelta import relativedelta
+
+
+def set_default_date(filters):
+    if filters['published_after'] == '':
+        # default: 40 years ago
+        filters['published_after'] = datetime.now() - relativedelta(years=40)
+    else:
+        filters['published_after'] = datetime.strptime(filters['published_after'], '%Y-%m-%d')
+    if filters['published_before'] == '':
+        # default: now
+        filters['published_before'] = datetime.now()
+    else:
+        filters['published_before'] = datetime.strptime(filters['published_before'], '%Y-%m-%d')
+    return filters
 
 
 def add_node_value(nodes, author):
@@ -79,8 +95,9 @@ def process_query_author(cypher):
                 edges.append({'from': author['id'],
                               'to': coauthor['coauthor']['id'],
                               'title':
-                                  'Mesh Heading:' + ' & '.join(article['mesh_heading']) + '\n' +
-                                  'Article Name:' + article['article'] + '\n' +
+                                  'Mesh Heading: ' + ' & '.join(article['mesh_heading']) + '\n' +
+                                  'Article Title: ' + article['article'] + '\n' +
+                                  'date: ' + str(article['date']) + '\n' +
                                   'Positions: \n' +
                                   '#' + str(article['author_position']) + ' ' + author['label'] + '\n' +
                                   '#' + str(coauthor['coauthor_position']) + ' ' + coauthor['coauthor']['label']
@@ -98,6 +115,8 @@ def process_query_author(cypher):
 
 
 def query_by_filters(filters):
+    filters = set_default_date(filters)
+
     # query for single author / first author/ last author & coauthor
     def cypher_author(tx):
         return list(tx.run(
@@ -138,8 +157,11 @@ def query_by_filters(filters):
             WHERE coauthor <> author
             
             MATCH (article) - [: PUBLISHED_IN] -> (journal : Journal)
-            WHERE (SIZE($published_after) = 0 OR article.date >= $published_after)
-            AND (SIZE($published_before) = 0 OR article.date <= $published_before) 
+            WHERE 
+            (article.date >= date({year: $published_after.year, month:$published_after.month, 
+                    day:$published_after.day}))
+            AND (article.date <= date({year: $published_before.year, month:$published_before.month, 
+                    day:$published_before.day}))
             AND (SIZE($journal) = 0 OR toLower(journal.title) CONTAINS toLower($journal))
             AND (SIZE($article) = 0 OR toLower(article.title) CONTAINS toLower($article))
             
@@ -158,6 +180,7 @@ def query_by_filters(filters):
             author,
             {
                 article: article.title,
+                date: article.date,
                 author_position: a.author_position,
                 mesh_heading: COLLECT(DISTINCT mesh_heading.name),
                 coauthors: COLLECT(DISTINCT coauthor)
@@ -232,8 +255,11 @@ def query_by_snapshot_id(snapshot_id):
             WHERE coauthor <> author
             
             MATCH (article) - [: PUBLISHED_IN] -> (journal : Journal)
-            WHERE (SIZE(s.published_after) = 0 OR article.date >= s.published_after)
-            AND (SIZE(s.published_before) = 0 OR article.date <= s.published_before) 
+            WHERE 
+            (article.date >= date({year: s.published_after.year, month:s.published_after.month, 
+                    day:s.published_after.day}))
+            AND (article.date <= date({year: s.published_before.year, month:s.published_before.month, 
+                    day:s.published_before.day}))
             AND (SIZE(s.journal) = 0 OR toLower(journal.title) CONTAINS toLower(s.journal))
             AND (SIZE(s.article) = 0 OR toLower(article.title) CONTAINS toLower(s.article))
             
@@ -252,6 +278,7 @@ def query_by_snapshot_id(snapshot_id):
             author,
             {
                 article: article.title,
+                date: article.date,
                 author_position: a.author_position,
                 mesh_heading: COLLECT(DISTINCT mesh_heading.name),
                 coauthors: COLLECT(DISTINCT coauthor)

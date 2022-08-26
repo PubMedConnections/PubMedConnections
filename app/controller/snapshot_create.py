@@ -1,15 +1,17 @@
 from datetime import datetime
+from app.controller.snapshot_visualise import set_default_date
 from app import neo4j_session
 from app.controller.snapshot_analyse import AnalyticsThreading
 
 
 def create_by_filters(graph_type: str, filters):
-    """
-    cypher for creating snapshot
-    """
+    filters = set_default_date(filters)
 
     filters['creation_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+    """
+    cypher for creating snapshot
+    """
     def cypher(tx):
         result = tx.run(
             '''
