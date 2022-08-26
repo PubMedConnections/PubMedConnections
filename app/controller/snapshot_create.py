@@ -1,6 +1,5 @@
-from neo4j import GraphDatabase, basic_auth
-from config import NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD
 from datetime import datetime
+from app import neo4j_session
 from app.controller.snapshot_analyse import AnalyticsThreading
 
 
@@ -31,6 +30,7 @@ def create_by_filters(graph_type: str, filters):
             article: $article,
             num_nodes: $num_nodes,
             degree_centrality: $degree_centrality,
+            graph_type: $graph_type,
             database_version: max_version
             })
             SET s.id = ID(s)
@@ -46,7 +46,8 @@ def create_by_filters(graph_type: str, filters):
              'article': filters['article'],
              'creation_time': filters['creation_time'],
              'num_nodes': filters['num_nodes'],
-             'degree_centrality': filters['degree_centrality']
+             'degree_centrality': filters['degree_centrality'],
+             'graph_type':filters['graph_type']
              }
         )
         if result is None:
@@ -61,9 +62,8 @@ def create_by_filters(graph_type: str, filters):
     """
     set up a graph database connection session
     """
-    driver = GraphDatabase.driver(uri=NEO4J_URI, auth=basic_auth(NEO4J_USER, NEO4J_PASSWORD))
-    session = driver.session()
-    snapshot_id = session.write_transaction(cypher)
+
+    snapshot_id = neo4j_session.write_transaction(cypher)
 
     return snapshot_id
 

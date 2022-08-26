@@ -1,5 +1,4 @@
-from neo4j import GraphDatabase, basic_auth
-from config import NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD
+from app import neo4j_session
 import json
 
 
@@ -27,8 +26,6 @@ def get_snapshot(snapshot_id):
             }
         ))
 
-    driver = GraphDatabase.driver(uri=NEO4J_URI, auth=basic_auth(NEO4J_USER, NEO4J_PASSWORD))
-    session = driver.session()
-    result = session.read_transaction(cypher)
+    result = neo4j_session.read_transaction(cypher)
     snapshots = json.loads(json.dumps([record.data()['snapshot'] for record in result], default=date_handler))
     return snapshots

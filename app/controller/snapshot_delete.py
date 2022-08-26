@@ -1,5 +1,4 @@
-from neo4j import GraphDatabase, basic_auth
-from config import NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD
+from app import neo4j_session
 
 
 def delete_by_snapshot_id(snapshot_id: int):
@@ -19,7 +18,5 @@ def delete_by_snapshot_id(snapshot_id: int):
         record = result.single()
         return record["snapshot_id"]
 
-    driver = GraphDatabase.driver(uri=NEO4J_URI, auth=basic_auth(NEO4J_USER, NEO4J_PASSWORD))
-    session = driver.session()
-    snapshot_id = session.write_transaction(cypher)
+    snapshot_id = neo4j_session.write_transaction(cypher)
     return snapshot_id
