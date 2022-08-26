@@ -71,7 +71,7 @@ class PubMedManager:
         )
         self._report_regenerate_instructions()
 
-    def run_sync(self, *, target_directory="./data"):
+    def run_sync(self, *, target_directory="./data") -> int:
         """
         Synchronises the PubMed dataset from FTP.
         """
@@ -96,6 +96,8 @@ class PubMedManager:
         with open(example_file_xml, "w") as f:
             f.write(example_file_contents.decode("utf8"))
 
+        return 0
+
     def run_clear(self):
         """
         Clears the content of the Neo4J database.
@@ -118,7 +120,10 @@ class PubMedManager:
             conn.delete_entire_database_contents()
             print("Success")
 
-    def run_extract(self, *, log_dir="./logs", target_directory="./data", report_every=60) -> int:
+    def run_extract(
+            self, *,
+            log_dir="./logs", target_directory="./data", report_every=60,
+            do_md5_file_change_check=False) -> int:
         """
         Extracts data from the synchronized PubMed data files.
         Returns 0 on success, and an error code on failure.
@@ -195,16 +200,18 @@ class PubMedManager:
                 meta.mesh_file = existing_meta_mesh
 
             # Skip the files that have already been processed and haven't changed.
+            print("\nPubMedExtract: Detecting the data files that have changed...")
             start_file_index = 0
             for index, meta_pubmed_file in enumerate(meta_pubmed):
                 matching_meta_pubmed_file = None
-                on_disk_md5_hash = calc_md5_hash_of_file(meta_pubmed_file.file)
+
+                on_disk_md5_hash = calc_md5_hash_of_file(meta_pubmed_file.file) if do_md5_file_change_check else None
                 for existing_meta_pubmed_file in existing_meta_pubmed:
                     if not existing_meta_pubmed_file.processed:
                         continue
                     if not existing_meta_pubmed_file.is_same_file_path(meta_pubmed_file):
                         continue
-                    if on_disk_md5_hash != existing_meta_pubmed_file.md5_hash:
+                    if do_md5_file_change_check and on_disk_md5_hash != existing_meta_pubmed_file.md5_hash:
                         continue
 
                     # Found that we already processed this file!
@@ -280,8 +287,8 @@ class PubMedManager:
                 file_meta.no_articles = len(file.articles)
 
                 duration = time.time() - start
-                analytics.update(duration, pubmed_file_sizes[file.index])
-                analytics.update_remaining(pubmed_file_sizes[file.index + 1:])
+                analytics.update(duration, pubmed_file_sizes[start_file_index + file.index])
+                analytics.update_remaining(pubmed_file_sizes[start_file_index + file.index + 1:])
 
                 if time.time() - last_report_time >= report_every:
                     last_report_time = time.time()
@@ -296,7 +303,7 @@ class PubMedManager:
 
         overall_duration = time.time() - overall_start
         print(
-            f"PubMedExtract: Completed extraction of {len(pubmed_files)} "
+            f"PubMedExtract: Completed extraction of {len(new_pubmed_files)} "
             f"data files in {format_minutes(overall_duration / 60)}\n"
         )
         return 0

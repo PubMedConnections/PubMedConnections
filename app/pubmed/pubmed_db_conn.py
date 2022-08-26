@@ -2,6 +2,7 @@
 Allows dumping data into SQLite to speed up iteration
 over the ~33 million records.
 """
+import time
 from typing import Optional
 
 import atomics
@@ -140,6 +141,7 @@ class PubmedCacheConn:
             batch = articles[start_index:end_index]
             total_articles_inserted += len(batch)
             with self.new_session() as session:
+                t = time.time()
                 session.write_transaction(self._insert_article_batch, batch)
 
         # Just to be sure...
@@ -183,6 +185,8 @@ class PubmedCacheConn:
 
         tx.run(
             """
+            CYPHER planner=dp
+            
             // Loop through all the articles we want to insert.
             UNWIND $articles AS article
             WITH article, article.journal as journal, article.author_relations as author_relations
@@ -193,41 +197,41 @@ class PubmedCacheConn:
                     MERGE (journal_node:Journal {id: journal.id})
                     ON CREATE
                         SET journal_node.title = journal.title
-                    ON MATCH
-                        SET journal_node.title = journal.title
                     RETURN journal_node
                 }
 
-                // If there is already an old version of the article,
-                // then delete any relationships that it has.
-                // We can't just DETACH DELETE the article itself, as
-                // it doesn't get applied before we insert the article
-                // in the next step.
-                CALL {
-                    WITH article
-                    MATCH (article_node:Article {pmid: article.pmid}) -[r]->()
-                    DELETE r
-                }
-
-                // Insert the article and its relationship to the journal.
+                // Insert the article.
                 CALL {
                     WITH article
                     MERGE (article_node:Article {pmid: article.pmid})
-                    ON MATCH
+                    ON CREATE
                         SET
                             article_node.title = article.title,
                             article_node.date = article.date
-                    ON CREATE
+                    ON MATCH
                         SET
                             article_node.title = article.title,
                             article_node.date = article.date
                     RETURN article_node
                 }
+                
+                // If there was already an old version of the article,
+                // then delete any relationships that it had.
+                CALL {
+                    WITH article_node
+                    MATCH (article_node) -[r]-> ()
+                    DELETE r
+                }
+                CALL {
+                    WITH article_node
+                    MATCH () -[r]-> (article_node)
+                    DELETE r
+                }
 
                 // Add the journal of the article.
                 CALL {
                     WITH article_node, journal_node, journal
-                    MERGE (article_node)-[:PUBLISHED_IN {
+                    CREATE (article_node)-[:PUBLISHED_IN {
                         volume: journal.volume,
                         issue: journal.issue
                     }]->(journal_node)
@@ -239,7 +243,7 @@ class PubmedCacheConn:
                     UNWIND article.refs as ref_pmid
                     MATCH (ref_node:Article)
                     WHERE ref_node.pmid = ref_pmid
-                    MERGE (article_node)-[:CITES]->(ref_node)
+                    CREATE (article_node)-[:CITES]->(ref_node)
                 }
 
                 // Add the mesh headings of the article.
@@ -248,7 +252,7 @@ class PubmedCacheConn:
                     UNWIND article.mesh_desc_ids as mesh_id
                     MATCH (mesh_node:MeshHeading)
                     WHERE mesh_node.id = mesh_id
-                    MERGE (article_node)-[:CATEGORISED_BY]->(mesh_node)
+                    CREATE (article_node)-[:CATEGORISED_BY]->(mesh_node)
                 }
 
             // Add all of the authors of the article.
@@ -261,13 +265,9 @@ class PubmedCacheConn:
                         SET
                             author_node.id = author.id,
                             author_node.is_collective = author.is_collective
-                    ON MATCH
-                        SET
-                            author_node.id = author.id,
-                            author_node.is_collective = author.is_collective
                     RETURN author_node
                 }
-                MERGE (author_node)-[:AUTHOR_OF {
+                CREATE (author_node)-[:AUTHOR_OF {
                     author_position: author_relation.author_position,
                     is_first_author: author_relation.is_first_author,
                     is_last_author: author_relation.is_last_author

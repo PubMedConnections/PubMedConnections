@@ -7,6 +7,7 @@ from config import NEO4J_DATABASE
 
 def print_valid_modes():
     print("Valid Modes:", file=sys.stderr)
+    print(" - update: Synchronise from the PubMed FTP server, and extract the new data")
     print(" - sync: Synchronise the data files from the PubMed FTP server", file=sys.stderr)
     print(" - extract: Extracts the data files into a Neo4J database", file=sys.stderr)
     print(" - clear: Clears the content of the Neo4J database", file=sys.stderr)
@@ -28,13 +29,27 @@ if __name__ == "__main__":
         sys.exit(1)
 
     mode = args[1]
-    if mode == "sync":
+    if mode == "update":
+        if len(args) != 2:
+            print("Expected no arguments to update", file=sys.stderr)
+            sys.exit(1)
+
+        manager = PubMedManager()
+        exit_code = manager.run_sync()
+        if exit_code != 0:
+            sys.exit(exit_code)
+
+        exit_code = manager.run_extract()
+        sys.exit(exit_code)
+
+    elif mode == "sync":
         if len(args) != 2:
             print("Expected no arguments to sync", file=sys.stderr)
             sys.exit(1)
 
         manager = PubMedManager()
-        manager.run_sync()
+        exit_code = manager.run_sync()
+        sys.exit(exit_code)
 
     elif mode == "extract":
         if len(args) != 2:
