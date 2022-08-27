@@ -2,8 +2,6 @@ from neo4j import GraphDatabase
 from neo4j.exceptions import ClientError
 from graphdatascience import GraphDataScience
 from config import NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD
-from app import db
-from app.snapshot_models import Snapshot, DegreeCentrality
 from flask import jsonify
 import json
 import threading
@@ -13,23 +11,6 @@ class AnalyticsThreading(object):
         thread = threading.Thread(target=run_analytics, args=(graph_type, snapshot_id, filters))
         thread.daemon = True
         thread.start()
-
-def _map_centrality_results(centrality_res: list[DegreeCentrality]):
-    """
-    Helper function which maps centrality results retrieved from the db into the required
-    response format.
-    """
-    top_nodes = []
-
-    # TODO might need to sort by rank if not returned by order
-    for db_node in centrality_res:
-        node = {}
-        node['id'] = db_node.node_id
-        node['name'] = db_node.node_name
-        node['centrality'] = db_node.node_score
-        top_nodes.append(node)
-
-    return top_nodes
 
 def _update_snapshot_degree_centrality(tx, snapshot_id, degree_centrality_record):
     """

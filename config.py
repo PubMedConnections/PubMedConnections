@@ -39,9 +39,3 @@ SECRET_KEY = "secret"
 PUBMED_ACCESS_EMAIL = ""
 ENTREZ_TOOL = "pubmedconnections"
 ENTREZ_API_KEY = None
-
-
-# SQLAlchemy settings.
-SQLALCHEMY_DATABASE_URI = "sqlite:///{}".format(APP_DB_FILE)
-SQLALCHEMY_TRACK_MODIFICATIONS = False
-DATABASE_CONNECT_OPTIONS = {}

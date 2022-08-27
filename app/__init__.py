@@ -16,17 +16,9 @@ app.config.from_object('config')
 
 jwt = JWTManager(app)
 
-# Create the database
-db = SQLAlchemy(app)
-
 # establish neo4j connection session
 driver = GraphDatabase.driver(uri=NEO4J_URI, auth=basic_auth(NEO4J_USER, NEO4J_PASSWORD))
 neo4j_session = driver.session()
-
-# Import snapshot models
-from app.snapshot_models import *
-
-db.create_all()
 
 # Import blueprints
 from app.api import bp as api_bp
