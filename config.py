@@ -20,6 +20,13 @@ APP_DB_FILE = os.path.join(DATA_DIR, "app.db")
 PUBMED_DIR = os.path.join(DATA_DIR, "pubmed")
 PUBMED_DB_FILE = os.path.join(PUBMED_DIR, "pubmed.db")
 
+
+# Neo4J
+NEO4J_URI = "bolt://localhost:7687"
+NEO4J_USER = "neo4j"
+NEO4J_PASSWORD = "password"
+
+
 # SQLAlchemy settings.
 SQLALCHEMY_DATABASE_URI = "sqlite:///{}".format(APP_DB_FILE)
 SQLALCHEMY_TRACK_MODIFICATIONS = False
