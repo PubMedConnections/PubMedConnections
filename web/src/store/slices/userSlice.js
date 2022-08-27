@@ -16,9 +16,10 @@ export const login = createAsyncThunk(
     try {
       const config = {
         method: 'post',
-        url: `${process.env.REACT_APP_API_ENDPOINT}/auth/login`,
+        url: `${process.env.REACT_APP_API_ENDPOINT}auth/login`,
         headers: {
           'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
         },
         data: {
           username: user,
@@ -26,7 +27,6 @@ export const login = createAsyncThunk(
         },
       };
 
-      console.log(JSON.stringify(process.env));
       const { data } = await axios(config);
 
       localStorage.setItem('access_token', data.access_token);
