@@ -1,14 +1,6 @@
 import os
 
-
-# Define the Entrez email, tool, and the optional api-key
-PUBMED_ACCESS_EMAIL = ""
-ENTREZ_TOOL = "pubmedconnections"
-ENTREZ_API_KEY = None
-
-
 # Statement for enabling the development environment
-DEBUG = True
 PUBMED_FTP_DEBUG = False
 SQLALCHEMY_ECHO = False
 
@@ -27,14 +19,20 @@ NEO4J_USER = "neo4j"
 NEO4J_PASSWORD = "password"
 
 
-# SQLAlchemy settings.
-SQLALCHEMY_DATABASE_URI = "sqlite:///{}".format(APP_DB_FILE)
-SQLALCHEMY_TRACK_MODIFICATIONS = False
-DATABASE_CONNECT_OPTIONS = {}
-
-
 # Flask settings.
 THREADS_PER_PAGE = 2
 CSRF_ENABLED = True  # Cross-site Request Forgery (CSRF)
 CSRF_SESSION_KEY = "secret"
 SECRET_KEY = "secret"
+
+
+# Define the Entrez email, tool, and the optional api-key
+PUBMED_ACCESS_EMAIL = ""
+ENTREZ_TOOL = "pubmedconnections"
+ENTREZ_API_KEY = None
+
+
+# SQLAlchemy settings.
+SQLALCHEMY_DATABASE_URI = "sqlite:///{}".format(APP_DB_FILE)
+SQLALCHEMY_TRACK_MODIFICATIONS = False
+DATABASE_CONNECT_OPTIONS = {}
