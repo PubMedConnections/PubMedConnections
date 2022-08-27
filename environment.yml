@@ -1,13 +1,15 @@
 name: pubmed-connections
 dependencies:
-  - flask
   - numpy
   - scikit-learn
   - lxml
-  - neo4j-python-driver
+  - neo4j-python-driver=4.4.0
   - pip
   - pip:
+    - flask==2.1.2
     - atomics
     - flask-restx
     - graphdatascience
-    - flask_jwt_extended
+    - flask-jwt-extended
+    - flask-cors
+    - werkzeug<=2.1.2
