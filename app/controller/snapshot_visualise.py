@@ -26,11 +26,7 @@ def add_node_value(nodes, author):
     return nodes
 
 
-def process_query_author(cypher):
-    """
-    set up a graph database connection session
-    """
-    results = neo4j_session.read_transaction(cypher)
+def process_query_author(results):
     nodes = []
     edges = []
     author_set = set()
@@ -50,7 +46,6 @@ def process_query_author(cypher):
 
             # no coauthor
             if len(article['coauthors']) == 0:
-                print(author['id'])
                 edges.append({'from': author['id'],
                               'to': author['id'],
                               'title':
@@ -115,7 +110,6 @@ def process_query_author(cypher):
 
 
 def query_by_filters(filters):
-    filters = set_default_date(filters)
 
     # query for single author / first author/ last author & coauthor
     def cypher_author(tx):
@@ -202,94 +196,30 @@ def query_by_filters(filters):
              'num_nodes': filters['num_nodes'],
              'degree_centrality': filters['degree_centrality']}
         ))
-
-    return process_query_author(cypher_author)
+    results = neo4j_session.read_transaction(cypher_author)
+    return process_query_author(results)
 
 
 def query_by_snapshot_id(snapshot_id):
-    # query for single author / first author/ last author & coauthor
-    def cypher_author(tx):
-        return list(tx.run(
+
+    def cypher_snapshot(tx):
+        snapshot = (tx.run(
             '''
             // mesh - author - coauthor
-            CALL {
             MATCH (s:Snapshot)
             WHERE ID(s) = $snapshot_id 
             MATCH (d:DBMetadata)
             WHERE d.version = s.database_version
+            WITH 
+            properties(s) AS s,
+            properties(d) AS d
+            
             RETURN s, d
-            }
-            
-            MATCH (mesh_heading: MeshHeading) <-[:CATEGORISED_BY]- (article: Article)
-            WHERE SIZE(s.mesh_heading) = 0 OR toLower(mesh_heading.name) = toLower(s.mesh_heading) 
-            
-            MATCH (author:Author) - [a: AUTHOR_OF] -> (article)
-            WHERE 
-            //no author
-            (SIZE(s.author)=0 
-                AND SIZE(s.first_author)=0 
-                AND SIZE(s.last_author)=0 
-                AND a.is_first_author = true)            
-            
-            //author
-            OR (SIZE(s.author)<>0 
-                AND toLower(author.name) 
-                    CONTAINS toLower(s.author))
-            
-            //first author
-            OR (SIZE(s.author)=0 
-                AND SIZE(s.first_author)<>0 
-                AND toLower(author.name) 
-                    CONTAINS toLower(s.first_author) AND a.is_first_author = true)                        
-            
-                    
-            //last author
-            OR (SIZE(s.author)=0 
-                AND SIZE(s.first_author)=0 
-                AND SIZE(s.last_author)<>0 
-                AND toLower(author.name) 
-                    CONTAINS toLower(s.last_author) AND a.is_last_author = true)            
-            
-            //coauthor
-            MATCH (coauthor: Author) - [c:AUTHOR_OF] -> (article)          
-            WHERE coauthor <> author
-            
-            MATCH (article) - [: PUBLISHED_IN] -> (journal : Journal)
-            WHERE 
-            (article.date >= date({year: s.published_after.year, month:s.published_after.month, 
-                    day:s.published_after.day}))
-            AND (article.date <= date({year: s.published_before.year, month:s.published_before.month, 
-                    day:s.published_before.day}))
-            AND (SIZE(s.journal) = 0 OR toLower(journal.title) CONTAINS toLower(s.journal))
-            AND (SIZE(s.article) = 0 OR toLower(article.title) CONTAINS toLower(s.article))
-            
-            WITH
-            article, a,c,mesh_heading,
-            {
-                label: author.name,
-                id: author.id
-            } AS author,
-            {
-                coauthor: {label: coauthor.name, id: coauthor.id},
-                coauthor_position: c.author_position           
-            } AS coauthor
-            
-            WITH
-            author,
-            {
-                article: article.title,
-                date: article.date,
-                author_position: a.author_position,
-                mesh_heading: COLLECT(DISTINCT mesh_heading.name),
-                coauthors: COLLECT(DISTINCT coauthor)
-            } AS articles
-                        
-            RETURN 
-            DISTINCT properties(author) AS author,
-            COLLECT (DISTINCT properties(articles)) AS articles
-            LIMIT 100
             ''',
             {'snapshot_id': snapshot_id}
         ))
+        snapshot = snapshot.single()['s']
+        return snapshot
+    filters = neo4j_session.read_transaction(cypher_snapshot)
+    return query_by_filters(filters)
 
-    return process_query_author(cypher_author)

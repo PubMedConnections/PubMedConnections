@@ -1,6 +1,6 @@
 from flask import request
 from flask_restx import Namespace, Resource, fields
-from app.controller.snapshot_visualise import query_by_filters, query_by_snapshot_id
+from app.controller.snapshot_visualise import query_by_filters, query_by_snapshot_id, set_default_date
 from app.controller.snapshot_create import create_by_filters
 from app.controller.snapshot_get import get_snapshot
 from app.controller.snapshot_delete import delete_by_snapshot_id
@@ -50,7 +50,6 @@ class DeleteSnapshot(Resource):
         return delete_by_snapshot_id(snapshot_id)
 
 
-
 @ns.route('/visualise/')
 class VisualiseSnapshot(Resource):
     @staticmethod
@@ -63,8 +62,8 @@ class VisualiseSnapshot(Resource):
     @ns.expect(filters)
     def post():
         filter_params = request.json
+        filter_params = set_default_date(filter_params)
         return query_by_filters(filter_params)
-
 
 
 @ns.route('/analyse/<int:snapshot_id>')
