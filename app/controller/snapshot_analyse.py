@@ -1,7 +1,7 @@
 from neo4j import GraphDatabase
 from neo4j.exceptions import ClientError
 from graphdatascience import GraphDataScience
-from config import NEO4J_DATABASE, NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD
+from config import NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD
 from app import db
 from app.snapshot_models import Snapshot, DegreeCentrality
 from flask import jsonify
@@ -110,7 +110,7 @@ def _project_graph_and_run_analytics(graph_name: str, node_query: str, relations
     # print(node_query)
     # print(relationship_query)
 
-    with driver.session(database=NEO4J_DATABASE) as session:
+    with driver.session() as session:
         # try project graph into memory
         try:
             G, _ = gds.graph.project.cypher(
@@ -300,7 +300,7 @@ def retrieve_analytics(snapshot_id: int):
     """
 
     driver = GraphDatabase.driver(uri=NEO4J_URI)
-    with driver.session(database=NEO4J_DATABASE) as session:
+    with driver.session() as session:
 
         # retrieve the degree centrality record
         degree_centrality_record = session.read_transaction(_retrieve_degree_centrality, snapshot_id)
