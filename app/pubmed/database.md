@@ -83,6 +83,11 @@ Citations to other papers
   * degree_centrality distribution: list
 * DB version number (relationship to the DBMetadataNode)
 
+#### Users
+`User`
+* username
+* password: The SHA256 hash of the user's password
+
 ### Relationships between nodes
 * `AUTHOR_OF`: `Author` --> `Article`
   * Properties: `position`
