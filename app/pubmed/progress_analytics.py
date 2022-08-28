@@ -3,7 +3,7 @@ Calculates download analytics on the fly.
 """
 import numpy as np
 
-from app.utils import format_minutes
+from app.utils import format_minutes, flush_print
 
 
 class DownloadAnalytics:
@@ -59,7 +59,7 @@ class DownloadAnalytics:
         bias = self.prediction_size_bias
         estimated_remaining = (1 - bias) * estimated_remaining_by_files + bias * estimated_remaining_by_size
 
-        print(prefix + "{} {} of {} files. Estimated {} remaining ({:.2f} MB/s)\n".format(
+        flush_print(prefix + "{} {} of {} files. Estimated {} remaining ({:.2f} MB/s)\n".format(
             verb, self.num_processed, self.total_files,
             format_minutes(estimated_remaining / 60), avg_mb_per_sec
         ))

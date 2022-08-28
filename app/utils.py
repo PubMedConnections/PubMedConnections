@@ -3,6 +3,8 @@ This file contains general utility functions that don't
 really fit anywhere else.
 """
 import hashlib
+import os
+import sys
 from multiprocessing.pool import ThreadPool
 from typing import TypeVar
 
@@ -67,3 +69,11 @@ def run_over_threads(fn, args):
     """
     with ThreadPool() as pool:
         return pool.starmap(fn, args)
+
+
+def err_print(*args, **kwargs):
+    print(*args, file=sys.stderr, flush=True, **kwargs)
+
+
+def flush_print(*args, **kwargs):
+    print(*args, flush=True, **kwargs)
