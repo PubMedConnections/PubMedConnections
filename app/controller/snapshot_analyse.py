@@ -117,10 +117,6 @@ def _project_graph_and_run_analytics(graph_name: str, node_query: str, relations
             res = gds.degree.stream(G)
             res = res.sort_values(by=['score'], ascending=False, ignore_index=True)
 
-            # for row in res.itertuples():
-            #     print(gds.util.asNode(row.nodeId).get('name'), row.score)
-            # print(len(res))
-
             # get the top 5 nodes by degree centrality
             top_5_degree = []
             for row in res.head(5).itertuples():
@@ -189,7 +185,9 @@ def _project_graph_and_run_analytics(graph_name: str, node_query: str, relations
             # TODO
             # other centrality measures
             #   could also use a weighted degree centrality (by collaborations) 
-            # first/last author should be a string not boolean
+            # first/last author should be a boolean or string?
+            # when the number of nodes are limited: ensure that the projected graph is the same as the one being visualised
+            #   solution: pass in ids of nodes from visualised graph to the node projection
 
             G.drop()
 
@@ -210,6 +208,9 @@ def run_analytics(graph_type: str, snapshot_id: int, filters):
 
     print("starting analytics")
 
+    # TODO confirm expected behaviour when num_nodes == 0 
+    nodes_limit_string = str(filters['num_nodes']) if filters['num_nodes'] != 0 else "100"
+
     if graph_type == "authors":
         graph_name = "coauthors"
 
@@ -227,7 +228,8 @@ def run_analytics(graph_type: str, snapshot_id: int, filters):
             WITH COLLECT(DISTINCT id(a1)) + COLLECT(DISTINCT id(a2)) AS ids
             UNWIND ids as id
             RETURN id
-            """.format(filter_query_string)
+            LIMIT {}
+            """.format(filter_query_string, nodes_limit_string)
 
         # create direct author-author relations based on the 3 hop neighbourhood
         relationship_query = \
@@ -265,7 +267,8 @@ def run_analytics(graph_type: str, snapshot_id: int, filters):
                 }}
             }}
             RETURN id(m) as id
-            """.format(filter_query_string)
+            LIMIT {}
+            """.format(filter_query_string, nodes_limit_string)
 
         # create direct mesh heading-mesh heading relations based on the 3 hop neighbourhood
         relationship_query = \

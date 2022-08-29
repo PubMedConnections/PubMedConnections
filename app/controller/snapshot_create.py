@@ -49,7 +49,7 @@ def create_by_filters(graph_type: str, filters):
              'creation_time': filters['creation_time'],
              'num_nodes': filters['num_nodes'],
              'degree_centrality': filters['degree_centrality'],
-             'graph_type':filters['graph_type']
+             'graph_type': graph_type
              }
         )
         if result is None:
