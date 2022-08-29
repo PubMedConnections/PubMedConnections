@@ -6,11 +6,13 @@ from flask import jsonify
 import json
 import threading
 
+
 class AnalyticsThreading(object):
     def __init__(self, graph_type: str, snapshot_id: int, filters):
         thread = threading.Thread(target=run_analytics, args=(graph_type, snapshot_id, filters))
         thread.daemon = True
         thread.start()
+
 
 def _update_snapshot_degree_centrality(tx, snapshot_id, degree_centrality_record):
     """
@@ -31,6 +33,7 @@ def _update_snapshot_degree_centrality(tx, snapshot_id, degree_centrality_record
 
     # TODO error handling
 
+
 def _retrieve_degree_centrality(tx, snapshot_id):
     """
     Helper function to retrieve the degree centrality results.
@@ -50,6 +53,7 @@ def _retrieve_degree_centrality(tx, snapshot_id):
 
     return result.single()
 
+
 def _create_query_from_filters(filters):
     """
     Helper function to map the input filters to query conditions. The query conditions are returned as a string.
@@ -62,13 +66,21 @@ def _create_query_from_filters(filters):
     if filters['author'] != "":
         filter_queries.append("toLower(a1.name) CONTAINS '{}'".format(filters['author'].lower()))
     if filters['first_author'] != "":
-        filter_queries.append("w.is_first_author = {}".format(filters['first_author']))
+        filter_queries.append("w.is_first_author = '{}'".format(filters['first_author']))
     if filters['last_author'] != "":
-        filter_queries.append("w.is_last_author = {}".format(filters['last_author']))
+        filter_queries.append("w.is_last_author = '{}'".format(filters['last_author']))
     if filters['published_after'] != "":
-        filter_queries.append("ar1.date >= date({})".format(filters['published_after']))
+        filter_queries.append(
+            "ar1.date >= date({year: %i, month:%i, day:%i})" % (
+                filters['published_after'].year,
+                filters['published_after'].month,
+                filters['published_after'].day))
     if filters['published_before'] != "":
-        filter_queries.append("ar1.date <= date({})".format(filters['published_before']))
+        filter_queries.append(
+            "ar1.date <= date({year: %i, month:%i, day:%i})" % (
+                filters['published_before'].year,
+                filters['published_before'].month,
+                filters['published_before'].day))
     if filters['journal'] != "":
         filter_queries.append(
             """
@@ -83,8 +95,8 @@ def _create_query_from_filters(filters):
 
     return " AND ".join(filter_queries)
 
+
 def _project_graph_and_run_analytics(graph_name: str, node_query: str, relationship_query: str, snapshot_id: int):
-    
     driver = GraphDatabase.driver(uri=NEO4J_URI)
     gds = GraphDataScience(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
 
@@ -186,7 +198,7 @@ def _project_graph_and_run_analytics(graph_name: str, node_query: str, relations
             # TODO
             print(err)
             pass
-    
+
     driver.close()
 
 
@@ -295,7 +307,7 @@ def retrieve_analytics(snapshot_id: int):
 
                 # construct response
                 analytics_response = {
-                    "principle_connectors": degree_centrality 
+                    "principle_connectors": degree_centrality
                 }
 
                 return jsonify(analytics_response)
