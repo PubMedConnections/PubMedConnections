@@ -26,91 +26,7 @@ def add_node_value(nodes, author):
     return nodes
 
 
-def process_query_author(results):
-    nodes = []
-    edges = []
-    author_set = set()
-    for i in range(len(results)):
-        author = results[i]['author']
-        author['value'] = 0
-
-        # a new author
-        new_author = False
-        if author['id'] not in author_set:
-            author_set.add(author['id'])
-            new_author = True
-
-        # author - collect (article)
-        # article = {article, author_position, collect(coauthors)}
-        for article in results[i]['articles']:
-
-            # no coauthor
-            if len(article['coauthors']) == 0:
-                edges.append({'from': author['id'],
-                              'to': author['id'],
-                              'title':
-                                  'Mesh Heading:' + ' & '.join(article['mesh_heading']) + '\n' +
-                                  'Article Name:' + article['article'] + '\n' +
-                                  'Positions: \n' +
-                                  '#' + str(article['author_position']) + ' ' + author['label'] + '\n'
-                              })
-                continue
-
-            # article - collect(coauthor)
-            # coauthor = {coauthor, coauthor_position}
-            for coauthor in article['coauthors']:
-
-                # old coauthor, new author
-                #   1. old coauthor value + 1   2. new author value + 1
-                if coauthor['coauthor']['id'] in author_set and new_author:
-                    author['value'] += 1
-                    nodes = add_node_value(nodes, coauthor['coauthor'])
-
-                # old coauthor, old author
-                # todo: edge value + 1
-                # elif coauthor['coauthor']['id'] in author_set and not new_author:
-                #     pass
-
-                # new coauthor, old author
-                # 1. add coauthor to set, 2. old author value + 1, 3. add coauthor to nodes
-                elif coauthor['coauthor']['id'] not in author_set and not new_author:
-                    author_set.add(coauthor['coauthor']['id'])
-                    nodes = add_node_value(nodes, author)
-                    coauthor['coauthor']['value'] = 1
-                    nodes.append(coauthor['coauthor'])
-
-                # new coauthor, new author
-                # 1. add coauthor to set, 2. new author value + 1, 3. add coauthor to nodes
-                elif coauthor['coauthor']['id'] not in author_set and new_author:
-                    author_set.add(coauthor['coauthor']['id'])
-                    author['value'] += 1
-                    coauthor['coauthor']['value'] = 1
-                    nodes.append(coauthor['coauthor'])
-                # edges
-                edges.append({'from': author['id'],
-                              'to': coauthor['coauthor']['id'],
-                              'title':
-                                  'Mesh Heading: ' + ' & '.join(article['mesh_heading']) + '\n' +
-                                  'Article Title: ' + article['article'] + '\n' +
-                                  'date: ' + str(article['date']) + '\n' +
-                                  'Positions: \n' +
-                                  '#' + str(article['author_position']) + ' ' + author['label'] + '\n' +
-                                  '#' + str(coauthor['coauthor_position']) + ' ' + coauthor['coauthor']['label']
-                              })
-        # add new author
-        if new_author:
-            nodes.append(author)
-    return jsonify({"nodes": nodes,
-                    "edges": edges,
-                    'counts': {'nodes num': len(nodes),
-                               'edges num': len(edges),
-                               'records num': len(results)
-                               }
-                    })
-
-
 def query_by_filters(filters):
-
     # query for single author / first author/ last author & coauthor
     def cypher_author(tx):
         return list(tx.run(
@@ -160,7 +76,7 @@ def query_by_filters(filters):
             AND (SIZE($article) = 0 OR toLower(article.title) CONTAINS toLower($article))
             
             WITH
-            article, a,c,mesh_heading,
+            article, a,c,mesh_heading, journal,
             {
                 label: author.name,
                 id: author.id
@@ -174,6 +90,7 @@ def query_by_filters(filters):
             author,
             {
                 article: article.title,
+                journal: journal.title,
                 date: article.date,
                 author_position: a.author_position,
                 mesh_heading: COLLECT(DISTINCT mesh_heading.name),
@@ -196,12 +113,97 @@ def query_by_filters(filters):
              'num_nodes': filters['num_nodes'],
              'degree_centrality': filters['degree_centrality']}
         ))
+
     results = neo4j_session.read_transaction(cypher_author)
     return process_query_author(results)
 
 
-def query_by_snapshot_id(snapshot_id):
+def process_query_author(results):
+    nodes = []
+    edges = []
+    author_set = set()
+    for record in results:
+        record = record.data()
+        author = record['author']
+        author['value'] = 0
 
+        # a new author
+        new_author = False
+        if author['id'] not in author_set:
+            author_set.add(author['id'])
+            new_author = True
+
+        # author - collect (article)
+        # article = {article, author_position, collect(coauthors)}
+        for article in record['articles']:
+            # no coauthor
+            if len(article['coauthors']) == 0:
+                edges.append({'from': author['id'],
+                              'to': author['id'],
+                              'title':
+                                  'Mesh Heading:' + ' \n'.join(article['mesh_heading']) + '\n' +
+                                  'Article Title:' + article['article'] + '\n' +
+                                  'Journal Title:' + article['journal'] + '\n' +
+                                  'Positions: \n' +
+                                  '#' + str(article['author_position']) + ' ' + author['label'] + '\n'
+                              })
+                continue
+
+            # article - collect(coauthor)
+            # coauthor = {coauthor, coauthor_position}
+            for coauthor in article['coauthors']:
+
+                # old coauthor, new author
+                #   1. old coauthor value + 1   2. new author value + 1
+                if coauthor['coauthor']['id'] in author_set and new_author:
+                    author['value'] += 1
+                    nodes = add_node_value(nodes, coauthor['coauthor'])
+
+                # old coauthor, old author
+                # todo: edge value + 1
+                # elif coauthor['coauthor']['id'] in author_set and not new_author:
+                #     pass
+
+                # new coauthor, old author
+                # 1. add coauthor to set, 2. old author value + 1, 3. add coauthor to nodes
+                elif coauthor['coauthor']['id'] not in author_set and not new_author:
+                    author_set.add(coauthor['coauthor']['id'])
+                    nodes = add_node_value(nodes, author)
+                    coauthor['coauthor']['value'] = 1
+                    nodes.append(coauthor['coauthor'])
+
+                # new coauthor, new author
+                # 1. add coauthor to set, 2. new author value + 1, 3. add coauthor to nodes
+                elif coauthor['coauthor']['id'] not in author_set and new_author:
+                    author_set.add(coauthor['coauthor']['id'])
+                    author['value'] += 1
+                    coauthor['coauthor']['value'] = 1
+                    nodes.append(coauthor['coauthor'])
+                # edges
+                edges.append({'from': author['id'],
+                              'to': coauthor['coauthor']['id'],
+                              'title':
+                                  'Mesh Heading: ' + ' & '.join(article['mesh_heading']) + '\n' +
+                                  'Article Title: ' + article['article'] + '\n' +
+                                  'Journal Title:' + article['journal'] + '\n' +
+                                  'date: ' + str(article['date']) + '\n' +
+                                  'Positions: \n' +
+                                  '#' + str(article['author_position']) + ' ' + author['label'] + '\n' +
+                                  '#' + str(coauthor['coauthor_position']) + ' ' + coauthor['coauthor']['label']
+                              })
+        # add new author
+        if new_author:
+            nodes.append(author)
+    return jsonify({"nodes": nodes,
+                    "edges": edges,
+                    'counts': {'nodes num': len(nodes),
+                               'edges num': len(edges),
+                               'records num': len(results)
+                               }
+                    })
+
+
+def query_by_snapshot_id(snapshot_id):
     def cypher_snapshot(tx):
         snapshot = (tx.run(
             '''
@@ -212,14 +214,13 @@ def query_by_snapshot_id(snapshot_id):
             WHERE d.version = s.database_version
             WITH 
             properties(s) AS s,
-            properties(d) AS d
-            
+            properties(d) AS d           
             RETURN s, d
             ''',
             {'snapshot_id': snapshot_id}
         ))
         snapshot = snapshot.single()['s']
         return snapshot
+
     filters = neo4j_session.read_transaction(cypher_snapshot)
     return query_by_filters(filters)
-
