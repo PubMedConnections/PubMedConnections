@@ -63,7 +63,7 @@ def query_by_filters(filters):
                     CONTAINS toLower($last_author) AND a.is_last_author = true)            
             
             //coauthor
-            MATCH (coauthor: Author) - [c:AUTHOR_OF] -> (article)          
+            OPTIONAL MATCH (coauthor: Author) - [c:AUTHOR_OF] -> (article)          
             WHERE coauthor <> author
             
             MATCH (article) - [: PUBLISHED_IN] -> (journal : Journal)
@@ -110,8 +110,7 @@ def query_by_filters(filters):
              'published_after': filters['published_after'],
              'journal': filters['journal'],
              'article': filters['article'],
-             'num_nodes': filters['num_nodes'],
-             'degree_centrality': filters['degree_centrality']}
+             'num_nodes': filters['num_nodes']}
         ))
 
     results = neo4j_session.read_transaction(cypher_author)
@@ -137,7 +136,7 @@ def process_query_author(results):
         # article = {article, author_position, collect(coauthors)}
         for article in record['articles']:
             # no coauthor
-            if len(article['coauthors']) == 0:
+            if article['coauthors'][0]['coauthor_position'] is None:
                 edges.append({'from': author['id'],
                               'to': author['id'],
                               'title':
