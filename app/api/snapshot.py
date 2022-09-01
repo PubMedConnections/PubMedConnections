@@ -18,7 +18,6 @@ filters = ns.model('filters',
                     'journal': fields.String(required=False, default=""),
                     'article': fields.String(required=False, default=""),
                     'num_nodes': fields.Integer(required=False, default=100),
-                    'degree_centrality': fields.String(required=False, default=""),
                     'graph_type': fields.String(required=False, default="author")
                     })
 

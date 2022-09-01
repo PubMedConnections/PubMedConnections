@@ -48,7 +48,6 @@ def create_by_filters(graph_type: str, filters):
              'article': filters['article'],
              'creation_time': filters['creation_time'],
              'num_nodes': filters['num_nodes'],
-             'degree_centrality': filters['degree_centrality'],
              'graph_type': graph_type
              }
         )
