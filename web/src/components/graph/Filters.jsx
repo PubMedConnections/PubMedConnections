@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {Add, Delete} from '@mui/icons-material'
-import {Button, TextField, IconButton, Checkbox, Select, MenuItem, ListItemText} from '@mui/material'
+import {Button, TextField, IconButton, Checkbox, Select, MenuItem, ListItemText, Slider} from '@mui/material'
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker'
@@ -14,7 +14,7 @@ const default_filters = {
     published_after: null,
     journal: "",
     article: "",
-    num_nodes: 100,
+    graph_size: 100,
     graph_type: "author",
 };
 
@@ -76,7 +76,7 @@ const Filters = () => {
         published_after: "Published after",
         journal: "Journal name",
         article: "Article name",
-        num_nodes: "Node limit",
+        graph_size: "Graph size",
         graph_type: "Graph type",
     }
 
@@ -101,10 +101,15 @@ const Filters = () => {
         />),
         journal: makeTextFieldEntry(filterCategories.Article,"journal", "Journal"),
         article: makeTextFieldEntry(filterCategories.Article,"article", "Title"),
-        num_nodes: makeFilterEntry(filterCategories.Author,"num_nodes", <TextField
-            type="number"
-            value={filters.num_nodes}
-            onChange={updateStateCallbackGenerator("num_nodes")}
+        graph_size: makeFilterEntry(filterCategories.Author,"graph_size", <Slider
+                aria-label="Temperature"
+                defaultValue={filters.graph_size}
+                onChange={updateStateCallbackGenerator("graph_size")}
+                valueLabelDisplay="auto"
+                step={10}
+                marks
+                min={0}
+                max={100}
             />
             ),
         graph_type: makeFilterEntry(filterCategories.Graph,"graph_type", <Select
