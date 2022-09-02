@@ -5,6 +5,19 @@ import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker'
 
+let filterNames = {
+    mesh_heading: "MESH Heading",
+    author: "Author name",
+    first_author: "First author",
+    last_author: "Last author",
+    published_before: "Published before",
+    published_after: "Published after",
+    journal: "Journal name",
+    article: "Article name",
+    graph_size: "Graph size",
+    graph_type: "Graph type",
+}
+
 const default_filters = {
     mesh_heading: "",
     author: "",
@@ -50,9 +63,15 @@ const Filters = () => {
         </div>
     }
 
-    function updateStateCallbackGenerator(identifier) {
+    function updateStateDateCallbackGenerator(identifier) {
         return (newValue) => {
-            setFilters({...filters, [identifier]: newValue.target.value});
+            setFilters({...filters, [identifier]: newValue.format("YYYY-MM-DD")});
+        }
+    }
+
+    function updateStateCallbackGenerator(identifier) {
+        return (event) => {
+            setFilters({...filters, [identifier]: event.target.value});
         }
     }
 
@@ -67,19 +86,6 @@ const Filters = () => {
         return makeFilterEntry(classifier, identifier, textInput);
     }
 
-    let filterNames = {
-        mesh_heading: "MESH Heading",
-        author: "Author name",
-        first_author: "First author",
-        last_author: "Last author",
-        published_before: "Published before",
-        published_after: "Published after",
-        journal: "Journal name",
-        article: "Article name",
-        graph_size: "Graph size",
-        graph_type: "Graph type",
-    }
-
     let filterComponents = {
         mesh_heading: makeTextFieldEntry(filterCategories.Article,"mesh_heading", "MESH"),
         author: makeTextFieldEntry(filterCategories.Author,"author", "Name"),
@@ -88,14 +94,14 @@ const Filters = () => {
         published_after: makeFilterEntry(filterCategories.Article,"published_after", <DatePicker
             label="After"
             value={filters.published_after}
-            onChange={updateStateCallbackGenerator("published_after")}
+            onChange={updateStateDateCallbackGenerator("published_after")}
             renderInput={(params) => <TextField {...params} />}
             inputFormat="DD/MM/YYYY"
         />),
         published_before: makeFilterEntry(filterCategories.Article,"published_before", <DatePicker
             label="Before"
             value={filters.published_before}
-            onChange={updateStateCallbackGenerator("published_before")}
+            onChange={updateStateDateCallbackGenerator("published_before")}
             renderInput={(params) => <TextField {...params} />}
             inputFormat="DD/MM/YYYY"
         />),
