@@ -7,6 +7,7 @@ dependencies:
   - pip
   - pip:
     - flask==2.1.2
+    - types-Flask
     - atomics
     - flask-restx
     - graphdatascience

@@ -18,7 +18,7 @@ from app.pubmed.progress_analytics import DownloadAnalytics
 from app.pubmed.pubmed_db_conn import PubmedCacheConn
 from app.pubmed.source_files import list_downloaded_pubmed_files, read_all_pubmed_files
 from app.pubmed.source_ftp import PubMedFTP
-from app.utils import format_minutes, calc_md5_hash_of_file
+from app.utils import format_minutes, calc_md5_hash_of_file, flush_print
 
 
 class PubMedManager:
@@ -31,7 +31,7 @@ class PubMedManager:
 
     def _report_regenerate_instructions(self):
         """ Reports instructs to re-generate the database. """
-        print(
+        flush_print(
             f"Please re-generate your database or change the version of\n"
             f"PubMedConnections that you are running.\n"
             f"\n"
@@ -52,7 +52,7 @@ class PubMedManager:
         Reports to the user when what is stored in the database is incompatible
         with the current version of PubMedConnections.
         """
-        print(
+        flush_print(
             f"Your database has an unsupported version. Expected version {LATEST_PUBMED_DB_VERSION},\n"
             f"but the database has version {current_pubmed_db_version}.\n\n",
             file=sys.stderr
@@ -64,7 +64,7 @@ class PubMedManager:
         Reports to the user when the data stored in the database is from a previous
         year to what has been synchronised to disk.
         """
-        print(
+        flush_print(
             f"Your database is outdated. Your database contains data from {current_pubmed_db_year},\n"
             f"but the latest downloaded data is from {expected_pubmed_db_year}.\n\n",
             file=sys.stderr
@@ -77,13 +77,13 @@ class PubMedManager:
         """
         with PubMedFTP() as ftp:
             targets = ftp.sync(target_directory)
-            print()
+            flush_print()
 
         # Write an example file for us to look at the available data.
         example_target = targets[0]
         example_target_parts = pathlib.Path(example_target).parts
 
-        print("PubMedSync: Reading example file from", example_target)
+        flush_print("PubMedSync: Reading example file from", example_target)
         with gzip.open(targets[0], "rb") as file:
             example_file_contents = file.read()
 
@@ -92,7 +92,7 @@ class PubMedManager:
         example_file_prefix = os.path.join(target_directory, "pubmed", "example.")
         example_file_xml = example_file_prefix + example_filename + ".xml"
 
-        print("PubMedSync: Writing example file to", example_file_xml)
+        flush_print("PubMedSync: Writing example file to", example_file_xml)
         with open(example_file_xml, "w") as f:
             f.write(example_file_contents.decode("utf8"))
 
@@ -102,23 +102,23 @@ class PubMedManager:
         """
         Clears the content of the Neo4J database.
         """
-        print("Are you sure you wish to delete all of the data in your Neo4J Database (y/N):")
+        flush_print("Are you sure you wish to delete all of the data in your Neo4J Database (y/N):")
         value = input()
         if value.lower() != "y":
-            print("Aborted")
+            flush_print("Aborted")
             return
 
-        print()
+        flush_print()
         with PubmedCacheConn(database=self.db_name) as conn:
             if conn.count_nodes() > 1_000_000:
-                print("Your database is too large to clear using this command.")
-                print("Please delete the data manually from your file system.")
-                print("See: https://neo4j.com/developer/kb/large-delete-transaction-best-practices-in-neo4j/")
+                flush_print("Your database is too large to clear using this command.")
+                flush_print("Please delete the data manually from your file system.")
+                flush_print("See: https://neo4j.com/developer/kb/large-delete-transaction-best-practices-in-neo4j/")
                 return
 
-            print("Deleting the entire contents of the Neo4J database... (This may take a while)")
+            flush_print("Deleting the entire contents of the Neo4J database... (This may take a while)")
             conn.delete_entire_database_contents()
-            print("Success")
+            flush_print("Success")
 
     def run_extract(
             self, *,
@@ -137,7 +137,7 @@ class PubMedManager:
 
         # Check that the baseline and updatefiles years match.
         if latest_baseline_year != latest_update_year:
-            print(
+            flush_print(
                 f"The latest baseline dataset and the latest updatefiles dataset\n"
                 f"do not match. (latest_baseline={latest_baseline_year}, latest_update={latest_update_year})\n"
                 f"Has the sync of a new year's dataset not completed successfully?",
@@ -200,7 +200,7 @@ class PubMedManager:
                 meta.mesh_file = existing_meta_mesh
 
             # Skip the files that have already been processed and haven't changed.
-            print("\nPubMedExtract: Detecting the data files that have changed...")
+            flush_print("\nPubMedExtract: Detecting the data files that have changed...")
             start_file_index = 0
             for index, meta_pubmed_file in enumerate(meta_pubmed):
                 matching_meta_pubmed_file = None
@@ -249,7 +249,7 @@ class PubMedManager:
                     f"have already been processed. They will not be processed again."
                 )
             if len(previous_work_detection_report) > 0:
-                print("\n" + "\n".join(previous_work_detection_report))
+                flush_print("\n" + "\n".join(previous_work_detection_report))
 
             # Mark that the database is being updated.
             conn.push_new_db_metadata(meta)
@@ -263,7 +263,7 @@ class PubMedManager:
 
             # Then, we get started on the data files...
             new_pubmed_files = pubmed_files[start_file_index:]
-            print(f"\nPubMedExtract: Extracting data from {len(new_pubmed_files)} PubMed files\n")
+            flush_print(f"\nPubMedExtract: Extracting data from {len(new_pubmed_files)} PubMed files\n")
 
             file_queue = read_all_pubmed_files(log_dir, target_directory, new_pubmed_files)
 
@@ -278,7 +278,7 @@ class PubMedManager:
                 try:
                     conn.insert_article_batch(file.articles)
                 except Exception as e:
-                    print(f"Error occurred in file {analytics.num_processed + 1}:", file=sys.stderr)
+                    flush_print(f"Error occurred in file {analytics.num_processed + 1}:", file=sys.stderr)
                     raise e
 
                 file_meta = meta_pubmed[file_index]
@@ -302,7 +302,7 @@ class PubMedManager:
             conn.push_new_db_metadata(meta)
 
         overall_duration = time.time() - overall_start
-        print(
+        flush_print(
             f"PubMedExtract: Completed extraction of {len(new_pubmed_files)} "
             f"data files in {format_minutes(overall_duration / 60)}\n"
         )

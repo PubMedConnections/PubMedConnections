@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Final
 from app.pubmed.progress_analytics import DownloadAnalytics
 from app.pubmed.download import DownloadTempFile
+from app.utils import flush_print
 from config import PUBMED_ACCESS_EMAIL, PUBMED_FTP_DEBUG
 
 PUBMED_FTP_URL: Final[str] = "ftp.ncbi.nlm.nih.gov"
@@ -235,12 +236,12 @@ class PubMedFTP:
                 if attempt == retries - 1:
                     raise e
 
-                print(
+                flush_print(
                     " .. " + type(e).__name__ + " on attempt " + str(attempt + 1) + ": " + message,
                     file=sys.stderr
                 )
                 if attempt == 1 or attempt == 3 or is_broken_conn:
-                    print(" .. Re-opening connection to the FTP server...")
+                    flush_print(" .. Re-opening connection to the FTP server...")
                     self.reopen_connection(delay=0.5)  # Small delay can't hurt
 
                 time.sleep(1)
@@ -257,7 +258,7 @@ class PubMedFTP:
             return
 
         target_dir_with_prefix = os.path.join(target_directory, dir_prefix)
-        print("PubMedSync: Downloading {} data files into {}...".format(len(pairs), target_dir_with_prefix))
+        flush_print("PubMedSync: Downloading {} data files into {}...".format(len(pairs), target_dir_with_prefix))
         if connection_pool_size > len(pairs):
             connection_pool_size = len(pairs)
 
@@ -315,7 +316,7 @@ class PubMedFTP:
 
             time.sleep(1)
 
-        print("PubMedSync: Successfully downloaded {} data files into {}!".format(len(pairs), target_dir_with_prefix))
+        flush_print("PubMedSync: Successfully downloaded {} data files into {}!".format(len(pairs), target_dir_with_prefix))
 
     def sync(self, target_directory):
         """
@@ -324,18 +325,18 @@ class PubMedFTP:
         files that already exist locally.
         :return: All available baseline and update files.
         """
-        print("PubMedSync: Fetching available files...")
+        flush_print("PubMedSync: Fetching available files...")
         baseline_pairs = self.read_baseline_file_pairs()
         updates_pairs = self.read_updates_file_pairs()
-        print("PubMedSync: Found", len(baseline_pairs), "baseline files, and", len(updates_pairs), "update files")
+        flush_print("PubMedSync: Found", len(baseline_pairs), "baseline files, and", len(updates_pairs), "update files")
 
         baseline_prefix = PubMedFTP.get_datafiles_prefix(baseline_pairs)
         updates_prefix = PubMedFTP.get_datafiles_prefix(updates_pairs)
 
         baseline_path = os.path.join(target_directory, baseline_prefix)
         updates_path = os.path.join(target_directory, updates_prefix)
-        print("PubMedSync: Baseline file path =", baseline_path)
-        print("PubMedSync: Update file path =", updates_path)
+        flush_print("PubMedSync: Baseline file path =", baseline_path)
+        flush_print("PubMedSync: Update file path =", updates_path)
 
         os.makedirs(baseline_path, exist_ok=True)
         os.makedirs(updates_path, exist_ok=True)
@@ -349,8 +350,8 @@ class PubMedFTP:
         updates_pairs_filtered = PubMedFTP.filter_out_existing(
             target_directory, updates_prefix, updates_pairs, updates_existing
         )
-        print("PubMedSync: Found", len(baseline_pairs_filtered), "new baseline files to download")
-        print("PubMedSync: Found", len(updates_pairs_filtered), "new update files to download")
+        flush_print("PubMedSync: Found", len(baseline_pairs_filtered), "new baseline files to download")
+        flush_print("PubMedSync: Found", len(updates_pairs_filtered), "new update files to download")
 
         self.download_pairs(target_directory, baseline_prefix, baseline_pairs_filtered)
         self.download_pairs(target_directory, updates_prefix, updates_pairs_filtered)

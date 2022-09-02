@@ -2,15 +2,16 @@ import sys
 
 from app import app as application
 from app.pubmed.manager import PubMedManager
+from app.utils import err_print
 
 
 def print_valid_modes():
-    print("Valid Modes:", file=sys.stderr)
-    print(" - update: Synchronise from the PubMed FTP server, and extract the new data")
-    print(" - sync: Synchronise the data files from the PubMed FTP server", file=sys.stderr)
-    print(" - extract: Extracts the data files into a Neo4J database", file=sys.stderr)
-    print(" - clear: Clears the content of the Neo4J database", file=sys.stderr)
-    print(" - test: Run the test Flask webserver", file=sys.stderr)
+    err_print("Valid Modes:")
+    err_print(" - update: Synchronise from the PubMed FTP server, and extract the new data")
+    err_print(" - sync: Synchronise the data files from the PubMed FTP server")
+    err_print(" - extract: Extracts the data files into a Neo4J database")
+    err_print(" - clear: Clears the content of the Neo4J database")
+    err_print(" - test: Run the test Flask webserver")
 
 
 def run_test():
@@ -23,14 +24,14 @@ def run_test():
 if __name__ == "__main__":
     args = sys.argv
     if len(args) < 2:
-        print("Expected a run-mode to be supplied.", file=sys.stderr)
+        err_print("Expected a run-mode to be supplied.")
         print_valid_modes()
         sys.exit(1)
 
     mode = args[1]
     if mode == "update":
         if len(args) != 2:
-            print("Expected no arguments to update", file=sys.stderr)
+            err_print("Expected no arguments to update")
             sys.exit(1)
 
         manager = PubMedManager()
@@ -43,7 +44,7 @@ if __name__ == "__main__":
 
     elif mode == "sync":
         if len(args) != 2:
-            print("Expected no arguments to sync", file=sys.stderr)
+            err_print("Expected no arguments to sync")
             sys.exit(1)
 
         manager = PubMedManager()
@@ -52,7 +53,7 @@ if __name__ == "__main__":
 
     elif mode == "extract":
         if len(args) != 2:
-            print("Expected no arguments to extract", file=sys.stderr)
+            err_print("Expected no arguments to extract")
             sys.exit(1)
 
         manager = PubMedManager()
@@ -61,7 +62,7 @@ if __name__ == "__main__":
 
     elif mode == "clear":
         if len(args) != 2:
-            print("Expected no arguments to clear", file=sys.stderr)
+            err_print("Expected no arguments to clear")
             sys.exit(1)
 
         manager = PubMedManager()
@@ -69,10 +70,10 @@ if __name__ == "__main__":
 
     elif mode == "test":
         if len(args) != 2:
-            print("Expected no arguments to test", file=sys.stderr)
+            err_print("Expected no arguments to test")
             sys.exit(1)
         run_test()
 
     else:
-        print("Unknown run-mode", mode, file=sys.stderr)
+        err_print("Unknown run-mode", mode)
         sys.exit(1)
