@@ -17,7 +17,7 @@ filters = ns.model('filters',
                     'published_after': fields.String(required=False, default=""),
                     'journal': fields.String(required=False, default=""),
                     'article': fields.String(required=False, default=""),
-                    'num_nodes': fields.Integer(required=False, default=100),
+                    'graph_size': fields.Integer(required=False, default=100),
                     'graph_type': fields.String(required=False, default="author")
                     })
 

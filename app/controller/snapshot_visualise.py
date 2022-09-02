@@ -26,6 +26,25 @@ def add_node_value(nodes, author):
     return nodes
 
 
+def add_edge_value(edges, author, coauthor, article):
+    for j in range(len(edges)):
+        if (edges[j]['from'] == author['id'] and edges[j]['to'] == coauthor['coauthor']['id']) or \
+                (edges[j]['from'] == coauthor['coauthor']['id'] and edges[j]['to'] == author['id']):
+            edges[j]['value'] += 1
+            new_label = edges[j]['title'] + '\n\n' + \
+                        'Mesh Heading:' + ' \n'.join(article['mesh_heading']) + '\n' + \
+                        'Article Title:' + article['article'] + '\n' + \
+                        'Journal Title:' + article['journal'] + '\n'
+            if author['id'] != coauthor['coauthor']['id']:
+                new_label = new_label + 'Positions: \n' + \
+                            '#' + str(article['author_position']) + ' ' + author['label'] + '\n' + \
+                            '#' + str(coauthor['author_position']) + ' ' + coauthor['coauthor']['label']
+
+            edges[j]['title'] = new_label
+            break
+    return edges
+
+
 def query_by_filters(filters):
     # query for single author / first author/ last author & coauthor
     def cypher_author(tx):
@@ -33,7 +52,7 @@ def query_by_filters(filters):
             '''
             // mesh - author - coauthor           
             MATCH (mesh_heading: MeshHeading) <-[:CATEGORISED_BY]- (article: Article)
-            WHERE SIZE($mesh_heading) = 0 OR toLower(mesh_heading.name) = toLower($mesh_heading) 
+            WHERE SIZE($mesh_heading) = 0 OR toLower(mesh_heading.name) CONTAINS toLower($mesh_heading) 
             
             MATCH (author:Author) - [a: AUTHOR_OF] -> (article)
             WHERE 
@@ -83,7 +102,7 @@ def query_by_filters(filters):
             } AS author,
             {
                 coauthor: {label: coauthor.name, id: coauthor.id},
-                coauthor_position: c.author_position           
+                author_position: c.author_position           
             } AS coauthor
             
             WITH
@@ -100,7 +119,7 @@ def query_by_filters(filters):
             RETURN 
             DISTINCT properties(author) AS author,
             COLLECT (DISTINCT properties(articles)) AS articles
-            LIMIT 100
+            LIMIT $graph_size
             ''',
             {'mesh_heading': filters['mesh_heading'],
              'author': filters['author'],
@@ -110,7 +129,7 @@ def query_by_filters(filters):
              'published_after': filters['published_after'],
              'journal': filters['journal'],
              'article': filters['article'],
-             'num_nodes': filters['num_nodes']}
+             'graph_size': filters['graph_size']}
         ))
 
     results = neo4j_session.read_transaction(cypher_author)
@@ -136,20 +155,22 @@ def process_query_author(results):
         # article = {article, author_position, collect(coauthors)}
         for article in record['articles']:
             # no coauthor
-            if article['coauthors'][0]['coauthor_position'] is None:
-                edges.append({'from': author['id'],
-                              'to': author['id'],
-                              'title':
-                                  'Mesh Heading:' + ' \n'.join(article['mesh_heading']) + '\n' +
-                                  'Article Title:' + article['article'] + '\n' +
-                                  'Journal Title:' + article['journal'] + '\n' +
-                                  'Positions: \n' +
-                                  '#' + str(article['author_position']) + ' ' + author['label'] + '\n'
-                              })
+            if article['coauthors'][0]['author_position'] is None:
+                if new_author:
+                    edges.append({'from': author['id'],
+                                  'to': author['id'],
+                                  'value': 1,
+                                  'title':
+                                      'Mesh Heading:' + ' \n'.join(article['mesh_heading']) + '\n' +
+                                      'Article Title:' + article['article'] + '\n' +
+                                      'Journal Title:' + article['journal'] + '\n'
+                                  })
+                else:
+                    edges = add_edge_value(edges, author, author, article)
                 continue
 
             # article - collect(coauthor)
-            # coauthor = {coauthor, coauthor_position}
+            # coauthor = {coauthor, author_position}
             for coauthor in article['coauthors']:
 
                 # old coauthor, new author
@@ -157,11 +178,6 @@ def process_query_author(results):
                 if coauthor['coauthor']['id'] in author_set and new_author:
                     author['value'] += 1
                     nodes = add_node_value(nodes, coauthor['coauthor'])
-
-                # old coauthor, old author
-                # todo: edge value + 1
-                # elif coauthor['coauthor']['id'] in author_set and not new_author:
-                #     pass
 
                 # new coauthor, old author
                 # 1. add coauthor to set, 2. old author value + 1, 3. add coauthor to nodes
@@ -178,9 +194,16 @@ def process_query_author(results):
                     author['value'] += 1
                     coauthor['coauthor']['value'] = 1
                     nodes.append(coauthor['coauthor'])
+
+                # old coauthor, old author
+                elif coauthor['coauthor']['id'] in author_set and not new_author:
+                    edges = add_edge_value(edges, author, coauthor, article)
+                    continue
+
                 # edges
                 edges.append({'from': author['id'],
                               'to': coauthor['coauthor']['id'],
+                              'value': 1,
                               'title':
                                   'Mesh Heading: ' + ' & '.join(article['mesh_heading']) + '\n' +
                                   'Article Title: ' + article['article'] + '\n' +
@@ -188,7 +211,7 @@ def process_query_author(results):
                                   'date: ' + str(article['date']) + '\n' +
                                   'Positions: \n' +
                                   '#' + str(article['author_position']) + ' ' + author['label'] + '\n' +
-                                  '#' + str(coauthor['coauthor_position']) + ' ' + coauthor['coauthor']['label']
+                                  '#' + str(coauthor['author_position']) + ' ' + coauthor['coauthor']['label']
                               })
         # add new author
         if new_author:
