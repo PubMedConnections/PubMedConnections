@@ -209,7 +209,7 @@ def run_analytics(graph_type: str, snapshot_id: int, filters):
     print("starting analytics")
 
     # TODO confirm expected behaviour when num_nodes == 0 
-    nodes_limit_string = str(filters['num_nodes']) if filters['num_nodes'] != 0 else "100"
+    # nodes_limit_string = str(filters['num_nodes']) if filters['num_nodes'] != 0 else "100"
 
     if graph_type == "authors":
         graph_name = "coauthors"
@@ -228,8 +228,7 @@ def run_analytics(graph_type: str, snapshot_id: int, filters):
             WITH COLLECT(DISTINCT id(a1)) + COLLECT(DISTINCT id(a2)) AS ids
             UNWIND ids as id
             RETURN id
-            LIMIT {}
-            """.format(filter_query_string, nodes_limit_string)
+            """.format(filter_query_string)
 
         # create direct author-author relations based on the 3 hop neighbourhood
         relationship_query = \
@@ -267,8 +266,7 @@ def run_analytics(graph_type: str, snapshot_id: int, filters):
                 }}
             }}
             RETURN id(m) as id
-            LIMIT {}
-            """.format(filter_query_string, nodes_limit_string)
+            """.format(filter_query_string)
 
         # create direct mesh heading-mesh heading relations based on the 3 hop neighbourhood
         relationship_query = \

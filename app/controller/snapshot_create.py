@@ -31,7 +31,6 @@ def create_by_filters(graph_type: str, filters):
             journal: $journal,
             article: $article,
             num_nodes: $num_nodes,
-            degree_centrality: $degree_centrality,
             graph_type: $graph_type,
             database_version: max_version
             })
@@ -47,7 +46,7 @@ def create_by_filters(graph_type: str, filters):
              'journal': filters['journal'],
              'article': filters['article'],
              'creation_time': filters['creation_time'],
-             'num_nodes': filters['num_nodes'],
+             'num_nodes': filters['graph_size'],
              'graph_type': graph_type
              }
         )
