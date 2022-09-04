@@ -27,12 +27,12 @@ def exist_edge(edge, author, coauthor):
 
 
 def add_edge_node_value(nodes, edges, author, coauthor, coauthor_position, article):
-    new_title = 'Mesh Heading: ' + ' \n'.join(article['mesh_heading']) + '\n' + \
+    new_title = 'Mesh Heading: ' + '; '.join(article['mesh_heading']) + '\n' + \
                 'Article Title: ' + article['article'] + '\n' + \
                 'Date: ' + str(article['date']) + '\n' + \
                 'Journal Title: ' + article['journal'] + '\n' + \
-                'Positions: \n' + \
-                '#' + str(article['author_position']) + ' ' + author['label'] + '\n' + \
+                'Positions: ' + \
+                '#' + str(article['author_position']) + ' ' + author['label'] + '; ' + \
                 '#' + str(coauthor_position) + ' ' + coauthor['label']
     # exists an edge between two nodes
     for j in range(len(edges)):
@@ -166,7 +166,7 @@ def process_query_author(results):
             if article['coauthors'][0]['author_position'] is None:
                 for j in range(len(nodes)):
                     if nodes[j]['id'] == author['id']:
-                        new_title = 'Mesh Heading:' + ' \n'.join(article['mesh_heading']) + '\n' + \
+                        new_title = 'Mesh Heading:' + '; '.join(article['mesh_heading']) + '\n' + \
                                     'Article Title:' + article['article'] + '\n' + \
                                     'Date: ' + str(article['date']) + '\n' + \
                                     'Journal Title:' + article['journal'] + '\n'
@@ -293,7 +293,7 @@ def process_author_records(records):
                     'to': author2['id'],
                     'value': num_articles_coauthored,
                     'title':
-                        'Mesh Heading:' + ' \n'.join(article['meshes']) + '\n' +
+                        'Mesh Heading:' + '; '.join(article['meshes']) + '\n' +
                         'Article Title:' + article['article_title'] + '\n' +
                         'Journal Title:' + article['journal_title'] + '\n'
 
