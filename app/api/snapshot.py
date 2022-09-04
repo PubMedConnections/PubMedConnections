@@ -65,7 +65,7 @@ class VisualiseSnapshot(Resource):
         return query_by_filters(filter_params)
 
 
-@ns.route('/visualiseThreeHop/')
+@ns.route('/visualise_three_hop/')
 class VisualiseThreeHopNeighbourhoodSnapshot(Resource):
     @staticmethod
     @ns.expect(filters)
