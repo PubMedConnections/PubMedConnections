@@ -10,8 +10,8 @@ ns = Namespace('snapshot', description='snapshot related operations')
 
 filters = ns.model('filters',
                    {'mesh_heading': fields.String(required=False, default="Skin Neoplasms"),
-                    'author': fields.String(required=False, default=""),
-                    'first_author': fields.String(required=False, default="Vittorio Bolcato"),
+                    'author': fields.String(required=False, default="Vittorio Bolcato"),
+                    'first_author': fields.String(required=False, default=""),
                     'last_author': fields.String(required=False, default=""),
                     'published_before': fields.String(required=False, default=""),
                     'published_after': fields.String(required=False, default=""),
@@ -62,8 +62,17 @@ class VisualiseSnapshot(Resource):
     def post():
         filter_params = request.json
         filter_params = set_default_date(filter_params)
+        return query_by_filters(filter_params)
+
+
+@ns.route('/visualiseThreeHop/')
+class VisualiseThreeHopNeighbourhoodSnapshot(Resource):
+    @staticmethod
+    @ns.expect(filters)
+    def post():
+        filter_params = request.json
+        filter_params = set_default_date(filter_params)
         return get_author_graph(filter_params)
-        # return query_by_filters(filter_params)
 
 
 @ns.route('/analyse/<int:snapshot_id>')

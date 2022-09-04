@@ -2,6 +2,7 @@ from app import neo4j_session
 from flask import jsonify
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
+from app.controller.snapshot_analyse import _create_query_from_filters
 
 
 def set_default_date(filters):
@@ -18,31 +19,40 @@ def set_default_date(filters):
     return filters
 
 
-def add_node_value(nodes, author):
-    for j in range(len(nodes)):
-        if nodes[j]['id'] == author['id']:
-            nodes[j]['value'] += 1
-            break
-    return nodes
+def exist_edge(edge, author, coauthor):
+    if (edge['from'] == author['id'] and edge['to'] == coauthor['id']) or \
+            (edge['from'] == coauthor['id'] and edge['to'] == author['id']):
+        return True
+    return False
 
 
-def add_edge_value(edges, author, coauthor, article):
+def add_edge_node_value(nodes, edges, author, coauthor, coauthor_position, article):
+    new_title = 'Mesh Heading:' + ' \n'.join(article['mesh_heading']) + '\n' + \
+                'Article Title:' + article['article'] + '\n' + \
+                'Journal Title:' + article['journal'] + '\n' + \
+                'Positions: \n' + \
+                '#' + str(article['author_position']) + ' ' + author['label'] + '\n' + \
+                '#' + str(coauthor_position) + ' ' + coauthor['label']
+    # exists an edge between two nodes
     for j in range(len(edges)):
-        if (edges[j]['from'] == author['id'] and edges[j]['to'] == coauthor['coauthor']['id']) or \
-                (edges[j]['from'] == coauthor['coauthor']['id'] and edges[j]['to'] == author['id']):
+        if exist_edge(edges[j], author, coauthor):
             edges[j]['value'] += 1
-            new_label = edges[j]['title'] + '\n\n' + \
-                        'Mesh Heading:' + ' \n'.join(article['mesh_heading']) + '\n' + \
-                        'Article Title:' + article['article'] + '\n' + \
-                        'Journal Title:' + article['journal'] + '\n'
-            if author['id'] != coauthor['coauthor']['id']:
-                new_label = new_label + 'Positions: \n' + \
-                            '#' + str(article['author_position']) + ' ' + author['label'] + '\n' + \
-                            '#' + str(coauthor['author_position']) + ' ' + coauthor['coauthor']['label']
-
-            edges[j]['title'] = new_label
-            break
-    return edges
+            new_title = edges[j]['title'] + '\n\n' + new_title
+            edges[j]['title'] = new_title
+            return nodes, edges
+    # no edges between two nodes
+    # 1. add edge
+    # 2. 2 nodes value + 1
+    # 3. insert into nodes list
+    edges.append({'from': author['id'],
+                  'to': coauthor['id'],
+                  'value': 1,
+                  'title': new_title
+                  })
+    for j in range(len(nodes)):
+        if nodes[j]['id'] == author['id'] or nodes[j]['id'] == coauthor['id']:
+            nodes[j]['value'] += 1
+    return nodes, edges
 
 
 def query_by_filters(filters):
@@ -139,83 +149,43 @@ def query_by_filters(filters):
 def process_query_author(results):
     nodes = []
     edges = []
-    author_set = set()
+    author_coauthor_set = set()
     for record in results:
         record = record.data()
         author = record['author']
-        author['value'] = 0
-
+        author['value'] = 1
         # a new author
-        new_author = False
-        if author['id'] not in author_set:
-            author_set.add(author['id'])
-            new_author = True
-
+        if author['id'] not in author_coauthor_set:
+            author_coauthor_set.add(author['id'])
+            nodes.append(author)
         # author - collect (article)
         # article = {article, author_position, collect(coauthors)}
         for article in record['articles']:
-            # no coauthor
+            # author who have no coauthor
             if article['coauthors'][0]['author_position'] is None:
-                if new_author:
-                    edges.append({'from': author['id'],
-                                  'to': author['id'],
-                                  'value': 1,
-                                  'title':
-                                      'Mesh Heading:' + ' \n'.join(article['mesh_heading']) + '\n' +
-                                      'Article Title:' + article['article'] + '\n' +
-                                      'Journal Title:' + article['journal'] + '\n'
-                                  })
-                else:
-                    edges = add_edge_value(edges, author, author, article)
+                for j in range(len(nodes)):
+                    if nodes[j]['id'] == author['id']:
+                        new_title = 'Mesh Heading:' + ' \n'.join(article['mesh_heading']) + '\n' + \
+                                    'Article Title:' + article['article'] + '\n' + \
+                                    'Journal Title:' + article['journal'] + '\n'
+                        if 'title' not in nodes[j]:
+                            nodes[j]['title'] = new_title
+                        else:
+                            nodes[j]['title'] = nodes[j]['title'] + '\n\n' + new_title
+                        break
                 continue
 
             # article - collect(coauthor)
             # coauthor = {coauthor, author_position}
             for coauthor in article['coauthors']:
+                coauthor_position = coauthor['author_position']
+                coauthor = coauthor['coauthor']
+                coauthor['value'] = 1
+                if coauthor['id'] not in author_coauthor_set:
+                    author_coauthor_set.add(coauthor['id'])
+                    nodes.append(coauthor)
+                nodes, edges = add_edge_node_value(nodes, edges, author, coauthor, coauthor_position, article)
 
-                # old coauthor, new author
-                #   1. old coauthor value + 1   2. new author value + 1
-                if coauthor['coauthor']['id'] in author_set and new_author:
-                    author['value'] += 1
-                    nodes = add_node_value(nodes, coauthor['coauthor'])
-
-                # new coauthor, old author
-                # 1. add coauthor to set, 2. old author value + 1, 3. add coauthor to nodes
-                elif coauthor['coauthor']['id'] not in author_set and not new_author:
-                    author_set.add(coauthor['coauthor']['id'])
-                    nodes = add_node_value(nodes, author)
-                    coauthor['coauthor']['value'] = 1
-                    nodes.append(coauthor['coauthor'])
-
-                # new coauthor, new author
-                # 1. add coauthor to set, 2. new author value + 1, 3. add coauthor to nodes
-                elif coauthor['coauthor']['id'] not in author_set and new_author:
-                    author_set.add(coauthor['coauthor']['id'])
-                    author['value'] += 1
-                    coauthor['coauthor']['value'] = 1
-                    nodes.append(coauthor['coauthor'])
-
-                # old coauthor, old author
-                elif coauthor['coauthor']['id'] in author_set and not new_author:
-                    edges = add_edge_value(edges, author, coauthor, article)
-                    continue
-
-                # edges
-                edges.append({'from': author['id'],
-                              'to': coauthor['coauthor']['id'],
-                              'value': 1,
-                              'title':
-                                  'Mesh Heading: ' + ' & '.join(article['mesh_heading']) + '\n' +
-                                  'Article Title: ' + article['article'] + '\n' +
-                                  'Journal Title:' + article['journal'] + '\n' +
-                                  'date: ' + str(article['date']) + '\n' +
-                                  'Positions: \n' +
-                                  '#' + str(article['author_position']) + ' ' + author['label'] + '\n' +
-                                  '#' + str(coauthor['author_position']) + ' ' + coauthor['coauthor']['label']
-                              })
-        # add new author
-        if new_author:
-            nodes.append(author)
     return jsonify({"nodes": nodes,
                     "edges": edges,
                     'counts': {'nodes num': len(nodes),
@@ -247,10 +217,10 @@ def query_by_snapshot_id(snapshot_id):
     filters = neo4j_session.read_transaction(cypher_snapshot)
     return query_by_filters(filters)
 
-from app.controller.snapshot_analyse import _create_query_from_filters
 
 def get_author_graph(filters):
     filter_query_string = _create_query_from_filters(filters)
+
     def three_hop_author_neighbourhood_query(tx):
         return list(
             tx.run(
@@ -274,13 +244,13 @@ def get_author_graph(filters):
                 """.format(filter_query_string)
             )
         )
-    
+
     res = neo4j_session.read_transaction(three_hop_author_neighbourhood_query)
 
     return process_author_records(res)
 
-def process_author_records(records):
 
+def process_author_records(records):
     nodes = []
     edges = []
 
@@ -297,7 +267,7 @@ def process_author_records(records):
 
         if author1['id'] not in author_and_coauthors:
             # it's the first time we have seen this author
-            author_and_coauthors[author1['id']] = { author2['id'] }
+            author_and_coauthors[author1['id']] = {author2['id']}
             author_id_to_name[author1['id']] = author1['name']
         else:
             # we have seen this edge before
@@ -306,10 +276,9 @@ def process_author_records(records):
             else:
                 author_and_coauthors[author1['id']].add(author2['id'])
 
-
         if author2['id'] not in author_and_coauthors:
             # it's the first time we have seen this author
-            author_and_coauthors[author2['id']] = { author1['id'] }
+            author_and_coauthors[author2['id']] = {author1['id']}
             author_id_to_name[author2['id']] = author2['name']
         else:
             author_and_coauthors[author2['id']].add(author1['id'])
@@ -334,18 +303,17 @@ def process_author_records(records):
             {
                 'id': author_id,
                 'label': author_id_to_name[author_id],
-                'value': len(author_and_coauthors[author_id]) 
+                'value': len(author_and_coauthors[author_id])
             }
         )
 
-    
     # TODO what should records num equal to?
 
     return jsonify(
         {
             'nodes': nodes,
             'edges': edges,
-            'counts': 
+            'counts':
                 {
                     'nodes num': len(nodes),
                     'edges num': len(edges),
@@ -353,4 +321,3 @@ def process_author_records(records):
                 }
         }
     )
-        
