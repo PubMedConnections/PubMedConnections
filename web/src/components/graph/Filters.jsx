@@ -1,9 +1,22 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {Add, Delete} from '@mui/icons-material'
-import {Button, TextField, IconButton, Checkbox, Select, MenuItem, ListItemText} from '@mui/material'
+import {Button, TextField, IconButton, Checkbox, Select, MenuItem, ListItemText, Slider} from '@mui/material'
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker'
+
+let filterNames = {
+    mesh_heading: "MESH Heading",
+    author: "Author name",
+    first_author: "First author",
+    last_author: "Last author",
+    published_before: "Published before",
+    published_after: "Published after",
+    journal: "Journal name",
+    article: "Article name",
+    graph_size: "Graph size",
+    graph_type: "Graph type",
+}
 
 const default_filters = {
     mesh_heading: "",
@@ -14,7 +27,7 @@ const default_filters = {
     published_after: null,
     journal: "",
     article: "",
-    num_nodes: 100,
+    graph_size: 100,
     graph_type: "author",
 };
 
@@ -50,9 +63,15 @@ const Filters = () => {
         </div>
     }
 
-    function updateStateCallbackGenerator(identifier) {
+    function updateStateDateCallbackGenerator(identifier) {
         return (newValue) => {
-            setFilters({...filters, [identifier]: newValue.target.value});
+            setFilters({...filters, [identifier]: newValue.format("YYYY-MM-DD")});
+        }
+    }
+
+    function updateStateCallbackGenerator(identifier) {
+        return (event) => {
+            setFilters({...filters, [identifier]: event.target.value});
         }
     }
 
@@ -67,19 +86,6 @@ const Filters = () => {
         return makeFilterEntry(classifier, identifier, textInput);
     }
 
-    let filterNames = {
-        mesh_heading: "MESH Heading",
-        author: "Author name",
-        first_author: "First author",
-        last_author: "Last author",
-        published_before: "Published before",
-        published_after: "Published after",
-        journal: "Journal name",
-        article: "Article name",
-        num_nodes: "Node limit",
-        graph_type: "Graph type",
-    }
-
     let filterComponents = {
         mesh_heading: makeTextFieldEntry(filterCategories.Article,"mesh_heading", "MESH"),
         author: makeTextFieldEntry(filterCategories.Author,"author", "Name"),
@@ -88,23 +94,28 @@ const Filters = () => {
         published_after: makeFilterEntry(filterCategories.Article,"published_after", <DatePicker
             label="After"
             value={filters.published_after}
-            onChange={updateStateCallbackGenerator("published_after")}
+            onChange={updateStateDateCallbackGenerator("published_after")}
             renderInput={(params) => <TextField {...params} />}
             inputFormat="DD/MM/YYYY"
         />),
         published_before: makeFilterEntry(filterCategories.Article,"published_before", <DatePicker
             label="Before"
             value={filters.published_before}
-            onChange={updateStateCallbackGenerator("published_before")}
+            onChange={updateStateDateCallbackGenerator("published_before")}
             renderInput={(params) => <TextField {...params} />}
             inputFormat="DD/MM/YYYY"
         />),
         journal: makeTextFieldEntry(filterCategories.Article,"journal", "Journal"),
         article: makeTextFieldEntry(filterCategories.Article,"article", "Title"),
-        num_nodes: makeFilterEntry(filterCategories.Author,"num_nodes", <TextField
-            type="number"
-            value={filters.num_nodes}
-            onChange={updateStateCallbackGenerator("num_nodes")}
+        graph_size: makeFilterEntry(filterCategories.Author,"graph_size", <Slider
+                aria-label="Temperature"
+                defaultValue={filters.graph_size}
+                onChange={updateStateCallbackGenerator("graph_size")}
+                valueLabelDisplay="auto"
+                step={10}
+                marks
+                min={0}
+                max={100}
             />
             ),
         graph_type: makeFilterEntry(filterCategories.Graph,"graph_type", <Select

@@ -29,6 +29,8 @@ def get_user(username: str):
 
 def clean_up_expired_tokens(username):
     user = get_user(username)
+    if user is None:
+        return
     revoked_tokens = json.loads(user['revoked_tokens'])
     expired_jtis = []
     for jti, expiry in revoked_tokens.items():
@@ -60,7 +62,8 @@ def authenticate_user(username: str, password: str) -> bool :
     session = driver.session()
     result = session.read_transaction(cypher)
 
-    clean_up_expired_tokens(username)
+    if len(result) == 1:
+        clean_up_expired_tokens(username)
 
     return len(result) == 1
 
