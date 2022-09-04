@@ -27,9 +27,10 @@ def exist_edge(edge, author, coauthor):
 
 
 def add_edge_node_value(nodes, edges, author, coauthor, coauthor_position, article):
-    new_title = 'Mesh Heading:' + ' \n'.join(article['mesh_heading']) + '\n' + \
-                'Article Title:' + article['article'] + '\n' + \
-                'Journal Title:' + article['journal'] + '\n' + \
+    new_title = 'Mesh Heading: ' + ' \n'.join(article['mesh_heading']) + '\n' + \
+                'Article Title: ' + article['article'] + '\n' + \
+                'Date: ' + str(article['date']) + '\n' + \
+                'Journal Title: ' + article['journal'] + '\n' + \
                 'Positions: \n' + \
                 '#' + str(article['author_position']) + ' ' + author['label'] + '\n' + \
                 '#' + str(coauthor_position) + ' ' + coauthor['label']
@@ -167,6 +168,7 @@ def process_query_author(results):
                     if nodes[j]['id'] == author['id']:
                         new_title = 'Mesh Heading:' + ' \n'.join(article['mesh_heading']) + '\n' + \
                                     'Article Title:' + article['article'] + '\n' + \
+                                    'Date: ' + str(article['date']) + '\n' + \
                                     'Journal Title:' + article['journal'] + '\n'
                         if 'title' not in nodes[j]:
                             nodes[j]['title'] = new_title
