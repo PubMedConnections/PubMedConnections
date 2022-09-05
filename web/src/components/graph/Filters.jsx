@@ -4,6 +4,9 @@ import {Button, TextField, IconButton, Checkbox, Select, MenuItem, ListItemText,
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker'
+import {useSelector, useDispatch} from 'react-redux'
+import { setFilter, resetFilter, setActiveFilters, removeActiveFilter } from '../../store/slices/filterSlice'
+
 
 let filterNames = {
     mesh_heading: "MESH Heading",
@@ -18,23 +21,11 @@ let filterNames = {
     graph_type: "Graph type",
 }
 
-const default_filters = {
-    mesh_heading: "",
-    author: "",
-    first_author: "",
-    last_author: "",
-    published_before: null,
-    published_after: null,
-    journal: "",
-    article: "",
-    graph_size: 100,
-    graph_type: "author",
-};
-
 const Filters = () => {
-    const [filters, setFilters] = useState(default_filters)
+    const filters = useSelector((state) => state.filters.filters);
+    const dispatch = useDispatch();
 
-    const [activeFilters, setActiveFilters] = useState([])
+    const activeFilters = useSelector((state) => state.filters.activeFilters)
 
     const filterCategories = {
         Author: ["Author", "rgba(234, 47, 30, 0.6)"],
@@ -65,13 +56,13 @@ const Filters = () => {
 
     function updateStateDateCallbackGenerator(identifier) {
         return (newValue) => {
-            setFilters({...filters, [identifier]: newValue.format("YYYY-MM-DD")});
+            dispatch(setFilter({[identifier]: newValue.format("YYYY-MM-DD")}));
         }
     }
 
     function updateStateCallbackGenerator(identifier) {
         return (event) => {
-            setFilters({...filters, [identifier]: event.target.value});
+            dispatch(setFilter({[identifier]: event.target.value}));
         }
     }
 
@@ -86,25 +77,25 @@ const Filters = () => {
         return makeFilterEntry(classifier, identifier, textInput);
     }
 
+    function makeDateFieldEntry(classifier,identifier, label) {
+        let picker = <DatePicker
+            label={label}
+            value={filters[identifier]}
+            onChange={updateStateDateCallbackGenerator(identifier)}
+            renderInput={(params) => <TextField {...params} />}
+            inputFormat="DD/MM/YYYY"
+        />
+
+        return makeFilterEntry(classifier, identifier, picker)
+    }
+
     let filterComponents = {
         mesh_heading: makeTextFieldEntry(filterCategories.Article,"mesh_heading", "MESH"),
         author: makeTextFieldEntry(filterCategories.Author,"author", "Name"),
         first_author: makeTextFieldEntry(filterCategories.Author,"first_author", "First author"),
         last_author: makeTextFieldEntry(filterCategories.Author,"last_author", "Last author"),
-        published_after: makeFilterEntry(filterCategories.Article,"published_after", <DatePicker
-            label="After"
-            value={filters.published_after}
-            onChange={updateStateDateCallbackGenerator("published_after")}
-            renderInput={(params) => <TextField {...params} />}
-            inputFormat="DD/MM/YYYY"
-        />),
-        published_before: makeFilterEntry(filterCategories.Article,"published_before", <DatePicker
-            label="Before"
-            value={filters.published_before}
-            onChange={updateStateDateCallbackGenerator("published_before")}
-            renderInput={(params) => <TextField {...params} />}
-            inputFormat="DD/MM/YYYY"
-        />),
+        published_after: makeDateFieldEntry(filterCategories.Article,"published_after", "After"),
+        published_before: makeDateFieldEntry(filterCategories.Article,"published_before", "Before"),
         journal: makeTextFieldEntry(filterCategories.Article,"journal", "Journal"),
         article: makeTextFieldEntry(filterCategories.Article,"article", "Title"),
         graph_size: makeFilterEntry(filterCategories.Author,"graph_size", <Slider
@@ -127,21 +118,25 @@ const Filters = () => {
         </Select>)
 
     }
-
     let selectedFilterComponents = activeFilters.map(f => filterComponents[f]);
 
     function deleteFilter(identifier) {
-        setActiveFilters(activeFilters.filter(f => f !== identifier));
-        setFilters({...filters, [identifier]: default_filters[identifier]}); // Reset to the default value
+        dispatch(removeActiveFilter({filter: identifier}));
+        dispatch(resetFilter({filter: identifier}));
     }
 
     const handleFilterSelectionChange = (event) => {
         const {
             target: { value },
         } = event;
-        setActiveFilters(
-            typeof value === 'string' ? value.split(',') : value,
-        );
+        let oldFilters = [...activeFilters]
+
+        let removedFilters = oldFilters.filter(f => !value.includes(f))
+        removedFilters.forEach(f => {
+            dispatch(resetFilter({filter: f}))
+        })
+
+        dispatch(setActiveFilters({filters: value}))
     };
 
     return <div id="filters">
