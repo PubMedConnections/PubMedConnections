@@ -1,5 +1,5 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
-import axios from 'axios';
+import {POST} from "../../utils/APIRequests";
 
 const initialState = {
   isLoading: false,
@@ -14,20 +14,10 @@ export const login = createAsyncThunk(
   'auth/login',
   async ({ user, password }, { rejectWithValue }) => {
     try {
-      const config = {
-        method: 'post',
-        url: `${process.env.REACT_APP_API_ENDPOINT}auth/login`,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
-        data: {
-          username: user,
-          password: password,
-        },
-      };
-
-      const { data } = await axios(config);
+      const { data } = await POST('auth/login', {
+        username: user,
+        password: password,
+      });
 
       localStorage.setItem('access_token', data.access_token);
 

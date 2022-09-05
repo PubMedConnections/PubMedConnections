@@ -21,12 +21,8 @@ function Login() {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-    try {
-      await dispatch(login({ user, password }));
-      navigate('/connections');
-    } catch (err) {
-      console.error(err);
-    }
+    await dispatch(login({ user, password }));
+    navigate('/connections');
   };
 
   useEffect(() => {
