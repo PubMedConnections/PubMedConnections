@@ -2,8 +2,8 @@ import { createSlice } from '@reduxjs/toolkit';
 
 const initialState = {
     filters: {
-        mesh_heading: "Cancer",
-        author: "",
+        mesh_heading: "Neoplasms",
+        author: "Bolcato",
         first_author: "",
         last_author: "",
         published_before: "",
@@ -13,7 +13,7 @@ const initialState = {
         graph_size: 100,
         graph_type: "author",
     },
-    activeFilters: ['mesh_heading']
+    activeFilters: ['mesh_heading', "author"]
 };
 
 export const filterSlice = createSlice({

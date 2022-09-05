@@ -31,10 +31,9 @@ const Graph = () => {
         shape: 'dot',
       },
       edges: {
-          arrows: {
-              to: {
-                  enabled: false
-              }
+          arrows: {to: {enabled: false}},
+          scaling: {
+              label: true
           }
       },
       interaction: {
@@ -51,34 +50,24 @@ const Graph = () => {
   });
 
   function loadGraphData() {
-    if (VISJSNetwork == null) {
-        return
-    }
-    setLoadingProgress(-1);
+    const delayDebounceLoad = setTimeout(() => {
+        if (VISJSNetwork == null) {
+            return
+        }
+        setLoadingProgress(-1);
 
-    startLoadingBar(VISJSNetwork);
+        POST('snapshot/visualise/', filters)
+            .then((resp) => {
+                let graphData = {
+                    nodes: resp.data.nodes,
+                    edges: resp.data.edges
+                }
+                setGraphInfo({...graphInfo, data: graphData});
+                setLoadingProgress(100)
+            })
+    }, 1500)
 
-    POST('snapshot/visualise/', filters)
-        .then((resp) => {
-          let graphData = {
-            nodes: resp.data.nodes,
-            edges: resp.data.edges
-          }
-          setGraphInfo({...graphInfo, data: graphData});
-        })
-  }
-
-  function startLoadingBar(network) {
-      network.on('stabilizationProgress', function (params) {
-          console.log('stabilizationProgress')
-      //   document.getElementById("visjs-loading-cover").style.opacity = 1;
-      //   document.getElementById("visjs-loading-cover").style.display = "show";
-      //   setLoadingProgress(100 * params.iterations / params.total);
-      });
-
-      network.once('startStabilizing', function() {
-          setLoadingProgress(100);
-      })
+      return () => clearTimeout(delayDebounceLoad);
   }
 
   useEffect(loadGraphData, [VISJSNetwork, filters])
@@ -86,10 +75,6 @@ const Graph = () => {
   return <div>
     <VisJSGraph graph={graphInfo.data} options={graphInfo.options}
       getNetwork={(network) => {
-          if (network.nodes) {
-            startLoadingBar(network);
-          }
-
           setNetwork(network);
       }}
     />
