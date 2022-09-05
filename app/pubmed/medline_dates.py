@@ -62,6 +62,7 @@ def parse_medline_date(medline_date: str) -> datetime.date:
      * 2000 Dec 23- 30     ->  2000 Dec 23
      * Summer 2000         ->  2000
      * 1975, 1977          ->  1975
+     * TODO: 1782 Oct-Dec  ->  1782 Oct
     """
     # Since these dates don't follow a standard, we want to fail with extra information to help update this function.
     try:
@@ -107,8 +108,8 @@ def parse_medline_date(medline_date: str) -> datetime.date:
 
         # We always expect YYYY to start.
         year = int(parts[0])
-        if year < 1800:
-            raise MedlineDateParseException("Year before 1800 is unlikely to be correct...")
+        if year < 1500:
+            raise MedlineDateParseException("Year before 1500 is unlikely to be correct...")
         if len(parts) == 1:
             return datetime.date(year, 1, 1)
 

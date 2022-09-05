@@ -1,12 +1,11 @@
 from neo4j import GraphDatabase
 from neo4j.exceptions import ClientError
 from graphdatascience import GraphDataScience
-from config import NEO4J_DATABASE, NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD
-from app import db
-from app.snapshot_models import Snapshot, DegreeCentrality
+from config import NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD
 from flask import jsonify
 import json
 import threading
+
 
 class AnalyticsThreading(object):
     def __init__(self, graph_type: str, snapshot_id: int, filters):
@@ -14,22 +13,6 @@ class AnalyticsThreading(object):
         thread.daemon = True
         thread.start()
 
-def _map_centrality_results(centrality_res: list[DegreeCentrality]):
-    """
-    Helper function which maps centrality results retrieved from the db into the required
-    response format.
-    """
-    top_nodes = []
-
-    # TODO might need to sort by rank if not returned by order
-    for db_node in centrality_res:
-        node = {}
-        node['id'] = db_node.node_id
-        node['name'] = db_node.node_name
-        node['centrality'] = db_node.node_score
-        top_nodes.append(node)
-
-    return top_nodes
 
 def _update_snapshot_degree_centrality(tx, snapshot_id, degree_centrality_record):
     """
@@ -50,6 +33,7 @@ def _update_snapshot_degree_centrality(tx, snapshot_id, degree_centrality_record
 
     # TODO error handling
 
+
 def _retrieve_degree_centrality(tx, snapshot_id):
     """
     Helper function to retrieve the degree centrality results.
@@ -69,6 +53,7 @@ def _retrieve_degree_centrality(tx, snapshot_id):
 
     return result.single()
 
+
 def _create_query_from_filters(filters):
     """
     Helper function to map the input filters to query conditions. The query conditions are returned as a string.
@@ -81,13 +66,21 @@ def _create_query_from_filters(filters):
     if filters['author'] != "":
         filter_queries.append("toLower(a1.name) CONTAINS '{}'".format(filters['author'].lower()))
     if filters['first_author'] != "":
-        filter_queries.append("w.is_first_author = {}".format(filters['first_author']))
+        filter_queries.append("w.is_first_author = '{}'".format(filters['first_author']))
     if filters['last_author'] != "":
-        filter_queries.append("w.is_last_author = {}".format(filters['last_author']))
+        filter_queries.append("w.is_last_author = '{}'".format(filters['last_author']))
     if filters['published_after'] != "":
-        filter_queries.append("ar1.date >= date({})".format(filters['published_after']))
+        filter_queries.append(
+            "ar1.date >= date({year: %i, month:%i, day:%i})" % (
+                filters['published_after'].year,
+                filters['published_after'].month,
+                filters['published_after'].day))
     if filters['published_before'] != "":
-        filter_queries.append("ar1.date <= date({})".format(filters['published_before']))
+        filter_queries.append(
+            "ar1.date <= date({year: %i, month:%i, day:%i})" % (
+                filters['published_before'].year,
+                filters['published_before'].month,
+                filters['published_before'].day))
     if filters['journal'] != "":
         filter_queries.append(
             """
@@ -102,15 +95,15 @@ def _create_query_from_filters(filters):
 
     return " AND ".join(filter_queries)
 
+
 def _project_graph_and_run_analytics(graph_name: str, node_query: str, relationship_query: str, snapshot_id: int):
-    
     driver = GraphDatabase.driver(uri=NEO4J_URI)
     gds = GraphDataScience(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
 
     # print(node_query)
     # print(relationship_query)
 
-    with driver.session(database=NEO4J_DATABASE) as session:
+    with driver.session() as session:
         # try project graph into memory
         try:
             G, _ = gds.graph.project.cypher(
@@ -123,10 +116,6 @@ def _project_graph_and_run_analytics(graph_name: str, node_query: str, relations
             # compute degree centrality
             res = gds.degree.stream(G)
             res = res.sort_values(by=['score'], ascending=False, ignore_index=True)
-
-            # for row in res.itertuples():
-            #     print(gds.util.asNode(row.nodeId).get('name'), row.score)
-            # print(len(res))
 
             # get the top 5 nodes by degree centrality
             top_5_degree = []
@@ -196,7 +185,9 @@ def _project_graph_and_run_analytics(graph_name: str, node_query: str, relations
             # TODO
             # other centrality measures
             #   could also use a weighted degree centrality (by collaborations) 
-            # first/last author should be a string not boolean
+            # first/last author should be a boolean or string?
+            # when the number of nodes are limited: ensure that the projected graph is the same as the one being visualised
+            #   solution: pass in ids of nodes from visualised graph to the node projection
 
             G.drop()
 
@@ -205,7 +196,7 @@ def _project_graph_and_run_analytics(graph_name: str, node_query: str, relations
             # TODO
             print(err)
             pass
-    
+
     driver.close()
 
 
@@ -216,6 +207,9 @@ def run_analytics(graph_type: str, snapshot_id: int, filters):
     """
 
     print("starting analytics")
+
+    # TODO confirm expected behaviour when num_nodes == 0 
+    # nodes_limit_string = str(filters['num_nodes']) if filters['num_nodes'] != 0 else "100"
 
     if graph_type == "authors":
         graph_name = "coauthors"
@@ -300,7 +294,7 @@ def retrieve_analytics(snapshot_id: int):
     """
 
     driver = GraphDatabase.driver(uri=NEO4J_URI)
-    with driver.session(database=NEO4J_DATABASE) as session:
+    with driver.session() as session:
 
         # retrieve the degree centrality record
         degree_centrality_record = session.read_transaction(_retrieve_degree_centrality, snapshot_id)
@@ -314,7 +308,7 @@ def retrieve_analytics(snapshot_id: int):
 
                 # construct response
                 analytics_response = {
-                    "principle_connectors": degree_centrality 
+                    "principle_connectors": degree_centrality
                 }
 
                 return jsonify(analytics_response)

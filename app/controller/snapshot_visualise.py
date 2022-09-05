@@ -2,6 +2,7 @@ from app import neo4j_session
 from flask import jsonify
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
+from app.controller.snapshot_analyse import _create_query_from_filters
 
 
 def set_default_date(filters):
@@ -18,112 +19,51 @@ def set_default_date(filters):
     return filters
 
 
-def add_node_value(nodes, author):
+def exist_edge(edge, author, coauthor):
+    if (edge['from'] == author['id'] and edge['to'] == coauthor['id']) or \
+            (edge['from'] == coauthor['id'] and edge['to'] == author['id']):
+        return True
+    return False
+
+
+def add_edge_node_value(nodes, edges, author, coauthor, coauthor_position, article):
+    new_title = 'Mesh Heading: ' + '; '.join(article['mesh_heading']) + '\n' + \
+                'Article Title: ' + article['article'] + '\n' + \
+                'Date: ' + str(article['date']) + '\n' + \
+                'Journal Title: ' + article['journal'] + '\n' + \
+                'Positions: ' + \
+                '#' + str(article['author_position']) + ' ' + author['label'] + '; ' + \
+                '#' + str(coauthor_position) + ' ' + coauthor['label']
+    # exists an edge between two nodes
+    for j in range(len(edges)):
+        if exist_edge(edges[j], author, coauthor):
+            edges[j]['value'] += 1
+            new_title = edges[j]['title'] + '\n\n' + new_title
+            edges[j]['title'] = new_title
+            return nodes, edges
+    # no edges between two nodes
+    # 1. add edge
+    # 2. 2 nodes value + 1
+    # 3. insert into nodes list
+    edges.append({'from': author['id'],
+                  'to': coauthor['id'],
+                  'value': 1,
+                  'title': new_title
+                  })
     for j in range(len(nodes)):
-        if nodes[j]['id'] == author['id']:
+        if nodes[j]['id'] == author['id'] or nodes[j]['id'] == coauthor['id']:
             nodes[j]['value'] += 1
-            break
-    return nodes
-
-
-def process_query_author(cypher):
-    """
-    set up a graph database connection session
-    """
-    results = neo4j_session.read_transaction(cypher)
-    nodes = []
-    edges = []
-    author_set = set()
-    for i in range(len(results)):
-        author = results[i]['author']
-        author['value'] = 0
-
-        # a new author
-        new_author = False
-        if author['id'] not in author_set:
-            author_set.add(author['id'])
-            new_author = True
-
-        # author - collect (article)
-        # article = {article, author_position, collect(coauthors)}
-        for article in results[i]['articles']:
-
-            # no coauthor
-            if len(article['coauthors']) == 0:
-                print(author['id'])
-                edges.append({'from': author['id'],
-                              'to': author['id'],
-                              'title':
-                                  'Mesh Heading:' + ' & '.join(article['mesh_heading']) + '\n' +
-                                  'Article Name:' + article['article'] + '\n' +
-                                  'Positions: \n' +
-                                  '#' + str(article['author_position']) + ' ' + author['label'] + '\n'
-                              })
-                continue
-
-            # article - collect(coauthor)
-            # coauthor = {coauthor, coauthor_position}
-            for coauthor in article['coauthors']:
-
-                # old coauthor, new author
-                #   1. old coauthor value + 1   2. new author value + 1
-                if coauthor['coauthor']['id'] in author_set and new_author:
-                    author['value'] += 1
-                    nodes = add_node_value(nodes, coauthor['coauthor'])
-
-                # old coauthor, old author
-                # todo: edge value + 1
-                # elif coauthor['coauthor']['id'] in author_set and not new_author:
-                #     pass
-
-                # new coauthor, old author
-                # 1. add coauthor to set, 2. old author value + 1, 3. add coauthor to nodes
-                elif coauthor['coauthor']['id'] not in author_set and not new_author:
-                    author_set.add(coauthor['coauthor']['id'])
-                    nodes = add_node_value(nodes, author)
-                    coauthor['coauthor']['value'] = 1
-                    nodes.append(coauthor['coauthor'])
-
-                # new coauthor, new author
-                # 1. add coauthor to set, 2. new author value + 1, 3. add coauthor to nodes
-                elif coauthor['coauthor']['id'] not in author_set and new_author:
-                    author_set.add(coauthor['coauthor']['id'])
-                    author['value'] += 1
-                    coauthor['coauthor']['value'] = 1
-                    nodes.append(coauthor['coauthor'])
-                # edges
-                edges.append({'from': author['id'],
-                              'to': coauthor['coauthor']['id'],
-                              'title':
-                                  'Mesh Heading: ' + ' & '.join(article['mesh_heading']) + '\n' +
-                                  'Article Title: ' + article['article'] + '\n' +
-                                  'date: ' + str(article['date']) + '\n' +
-                                  'Positions: \n' +
-                                  '#' + str(article['author_position']) + ' ' + author['label'] + '\n' +
-                                  '#' + str(coauthor['coauthor_position']) + ' ' + coauthor['coauthor']['label']
-                              })
-        # add new author
-        if new_author:
-            nodes.append(author)
-    return jsonify({"nodes": nodes,
-                    "edges": edges,
-                    'counts': {'nodes num': len(nodes),
-                               'edges num': len(edges),
-                               'records num': len(results)
-                               }
-                    })
+    return nodes, edges
 
 
 def query_by_filters(filters):
-    filters = set_default_date(filters)
-
     # query for single author / first author/ last author & coauthor
     def cypher_author(tx):
         return list(tx.run(
             '''
             // mesh - author - coauthor           
             MATCH (mesh_heading: MeshHeading) <-[:CATEGORISED_BY]- (article: Article)
-            WHERE SIZE($mesh_heading) = 0 OR toLower(mesh_heading.name) = toLower($mesh_heading) 
+            WHERE SIZE($mesh_heading) = 0 OR toLower(mesh_heading.name) CONTAINS toLower($mesh_heading) 
             
             MATCH (author:Author) - [a: AUTHOR_OF] -> (article)
             WHERE 
@@ -153,7 +93,7 @@ def query_by_filters(filters):
                     CONTAINS toLower($last_author) AND a.is_last_author = true)            
             
             //coauthor
-            MATCH (coauthor: Author) - [c:AUTHOR_OF] -> (article)          
+            OPTIONAL MATCH (coauthor: Author) - [c:AUTHOR_OF] -> (article)          
             WHERE coauthor <> author
             
             MATCH (article) - [: PUBLISHED_IN] -> (journal : Journal)
@@ -166,20 +106,21 @@ def query_by_filters(filters):
             AND (SIZE($article) = 0 OR toLower(article.title) CONTAINS toLower($article))
             
             WITH
-            article, a,c,mesh_heading,
+            article, a,c,mesh_heading, journal,
             {
                 label: author.name,
                 id: author.id
             } AS author,
             {
                 coauthor: {label: coauthor.name, id: coauthor.id},
-                coauthor_position: c.author_position           
+                author_position: c.author_position           
             } AS coauthor
             
             WITH
             author,
             {
                 article: article.title,
+                journal: journal.title,
                 date: article.date,
                 author_position: a.author_position,
                 mesh_heading: COLLECT(DISTINCT mesh_heading.name),
@@ -189,7 +130,7 @@ def query_by_filters(filters):
             RETURN 
             DISTINCT properties(author) AS author,
             COLLECT (DISTINCT properties(articles)) AS articles
-            LIMIT 100
+            LIMIT $graph_size
             ''',
             {'mesh_heading': filters['mesh_heading'],
              'author': filters['author'],
@@ -199,97 +140,186 @@ def query_by_filters(filters):
              'published_after': filters['published_after'],
              'journal': filters['journal'],
              'article': filters['article'],
-             'num_nodes': filters['num_nodes'],
-             'degree_centrality': filters['degree_centrality']}
+             'graph_size': filters['graph_size']}
         ))
 
-    return process_query_author(cypher_author)
+    results = neo4j_session.read_transaction(cypher_author)
+    return process_query_author(results)
+
+
+def process_query_author(results):
+    nodes = []
+    edges = []
+    author_coauthor_set = set()
+    for record in results:
+        record = record.data()
+        author = record['author']
+        author['value'] = 1
+        # a new author
+        if author['id'] not in author_coauthor_set:
+            author_coauthor_set.add(author['id'])
+            nodes.append(author)
+        # author - collect (article)
+        # article = {article, author_position, collect(coauthors)}
+        for article in record['articles']:
+            # author who have no coauthor
+            if article['coauthors'][0]['author_position'] is None:
+                for j in range(len(nodes)):
+                    if nodes[j]['id'] == author['id']:
+                        new_title = 'Mesh Heading:' + '; '.join(article['mesh_heading']) + '\n' + \
+                                    'Article Title:' + article['article'] + '\n' + \
+                                    'Date: ' + str(article['date']) + '\n' + \
+                                    'Journal Title:' + article['journal'] + '\n'
+                        if 'title' not in nodes[j]:
+                            nodes[j]['title'] = new_title
+                        else:
+                            nodes[j]['title'] = nodes[j]['title'] + '\n\n' + new_title
+                        break
+                continue
+
+            # article - collect(coauthor)
+            # coauthor = {coauthor, author_position}
+            for coauthor in article['coauthors']:
+                coauthor_position = coauthor['author_position']
+                coauthor = coauthor['coauthor']
+                coauthor['value'] = 1
+                if coauthor['id'] not in author_coauthor_set:
+                    author_coauthor_set.add(coauthor['id'])
+                    nodes.append(coauthor)
+                nodes, edges = add_edge_node_value(nodes, edges, author, coauthor, coauthor_position, article)
+
+    return jsonify({"nodes": nodes,
+                    "edges": edges,
+                    'counts': {'nodes num': len(nodes),
+                               'edges num': len(edges),
+                               'records num': len(results)
+                               }
+                    })
 
 
 def query_by_snapshot_id(snapshot_id):
-    # query for single author / first author/ last author & coauthor
-    def cypher_author(tx):
-        return list(tx.run(
+    def cypher_snapshot(tx):
+        snapshot = (tx.run(
             '''
             // mesh - author - coauthor
-            CALL {
             MATCH (s:Snapshot)
             WHERE ID(s) = $snapshot_id 
             MATCH (d:DBMetadata)
             WHERE d.version = s.database_version
+            WITH 
+            properties(s) AS s,
+            properties(d) AS d           
             RETURN s, d
-            }
-            
-            MATCH (mesh_heading: MeshHeading) <-[:CATEGORISED_BY]- (article: Article)
-            WHERE SIZE(s.mesh_heading) = 0 OR toLower(mesh_heading.name) = toLower(s.mesh_heading) 
-            
-            MATCH (author:Author) - [a: AUTHOR_OF] -> (article)
-            WHERE 
-            //no author
-            (SIZE(s.author)=0 
-                AND SIZE(s.first_author)=0 
-                AND SIZE(s.last_author)=0 
-                AND a.is_first_author = true)            
-            
-            //author
-            OR (SIZE(s.author)<>0 
-                AND toLower(author.name) 
-                    CONTAINS toLower(s.author))
-            
-            //first author
-            OR (SIZE(s.author)=0 
-                AND SIZE(s.first_author)<>0 
-                AND toLower(author.name) 
-                    CONTAINS toLower(s.first_author) AND a.is_first_author = true)                        
-            
-                    
-            //last author
-            OR (SIZE(s.author)=0 
-                AND SIZE(s.first_author)=0 
-                AND SIZE(s.last_author)<>0 
-                AND toLower(author.name) 
-                    CONTAINS toLower(s.last_author) AND a.is_last_author = true)            
-            
-            //coauthor
-            MATCH (coauthor: Author) - [c:AUTHOR_OF] -> (article)          
-            WHERE coauthor <> author
-            
-            MATCH (article) - [: PUBLISHED_IN] -> (journal : Journal)
-            WHERE 
-            (article.date >= date({year: s.published_after.year, month:s.published_after.month, 
-                    day:s.published_after.day}))
-            AND (article.date <= date({year: s.published_before.year, month:s.published_before.month, 
-                    day:s.published_before.day}))
-            AND (SIZE(s.journal) = 0 OR toLower(journal.title) CONTAINS toLower(s.journal))
-            AND (SIZE(s.article) = 0 OR toLower(article.title) CONTAINS toLower(s.article))
-            
-            WITH
-            article, a,c,mesh_heading,
-            {
-                label: author.name,
-                id: author.id
-            } AS author,
-            {
-                coauthor: {label: coauthor.name, id: coauthor.id},
-                coauthor_position: c.author_position           
-            } AS coauthor
-            
-            WITH
-            author,
-            {
-                article: article.title,
-                date: article.date,
-                author_position: a.author_position,
-                mesh_heading: COLLECT(DISTINCT mesh_heading.name),
-                coauthors: COLLECT(DISTINCT coauthor)
-            } AS articles
-                        
-            RETURN 
-            DISTINCT properties(author) AS author,
-            COLLECT (DISTINCT properties(articles)) AS articles
-            LIMIT 100
             ''',
             {'snapshot_id': snapshot_id}
         ))
+        snapshot = snapshot.single()['s']
+        return snapshot
 
-    return process_query_author(cypher_author)
+    filters = neo4j_session.read_transaction(cypher_snapshot)
+    return query_by_filters(filters)
+
+
+def get_author_graph(filters):
+    filter_query_string = _create_query_from_filters(filters)
+
+    def three_hop_author_neighbourhood_query(tx):
+        return list(
+            tx.run(
+                """
+                CALL {{
+                    MATCH (a1:Author)-[:AUTHOR_OF*1..3]-(ar:Article)<--(a2:Author)
+                    WHERE EXISTS {{
+                        MATCH (a1)-[w:AUTHOR_OF]->(ar1:Article)-[:CATEGORISED_BY]->(m1:MeshHeading)
+                        WHERE {}
+                    }}
+                    RETURN ar
+                }}
+
+                MATCH (a1:Author)-[ao1:AUTHOR_OF]->(ar:Article)<-[ao2:AUTHOR_OF]-(a2:Author)
+                MATCH (ar)-[:PUBLISHED_IN]->(j:Journal)
+                MATCH (ar)-[:CATEGORISED_BY]->(m:MeshHeading)
+
+                WITH {{ id: a1.id, name: a1.name }} as author1, {{ id: a2.id, name: a2.name }} as author2, {{ article_title: ar.title, journal_title: j.title, article_date: ar.date, a1_pos: ao1.author_position, a2_pos: ao2.author_position, meshes: COLLECT( DISTINCT m.name) }} as articles
+
+                RETURN author1, author2, COLLECT(DISTINCT properties(articles)) AS articles
+                """.format(filter_query_string)
+            )
+        )
+
+    res = neo4j_session.read_transaction(three_hop_author_neighbourhood_query)
+
+    return process_author_records(res)
+
+
+def process_author_records(records):
+    nodes = []
+    edges = []
+
+    author_and_coauthors = {}
+    author_id_to_name = {}
+
+    for record in records:
+        record = record.data()
+
+        author1 = record['author1']
+        author2 = record['author2']
+
+        num_articles_coauthored = len(record['articles'])
+
+        if author1['id'] not in author_and_coauthors:
+            # it's the first time we have seen this author
+            author_and_coauthors[author1['id']] = {author2['id']}
+            author_id_to_name[author1['id']] = author1['name']
+        else:
+            # we have seen this edge before
+            if author2['id'] in author_and_coauthors[author1['id']]:
+                continue
+            else:
+                author_and_coauthors[author1['id']].add(author2['id'])
+
+        if author2['id'] not in author_and_coauthors:
+            # it's the first time we have seen this author
+            author_and_coauthors[author2['id']] = {author1['id']}
+            author_id_to_name[author2['id']] = author2['name']
+        else:
+            author_and_coauthors[author2['id']].add(author1['id'])
+
+        # construct edges
+        for article in record['articles']:
+            edges.append(
+                {
+                    'from': author1['id'],
+                    'to': author2['id'],
+                    'value': num_articles_coauthored,
+                    'title':
+                        'Mesh Heading:' + '; '.join(article['meshes']) + '\n' +
+                        'Article Title:' + article['article_title'] + '\n' +
+                        'Journal Title:' + article['journal_title'] + '\n'
+
+                }
+            )
+
+    for author_id in author_and_coauthors:
+        nodes.append(
+            {
+                'id': author_id,
+                'label': author_id_to_name[author_id],
+                'value': len(author_and_coauthors[author_id])
+            }
+        )
+
+    # TODO what should records num equal to?
+
+    return jsonify(
+        {
+            'nodes': nodes,
+            'edges': edges,
+            'counts':
+                {
+                    'nodes num': len(nodes),
+                    'edges num': len(edges),
+                    'records num': 0
+                }
+        }
+    )

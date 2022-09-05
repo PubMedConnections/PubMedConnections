@@ -1,6 +1,6 @@
 from flask import request
 from flask_restx import Namespace, Resource, fields
-from app.controller.snapshot_visualise import query_by_filters, query_by_snapshot_id
+from app.controller.snapshot_visualise import query_by_filters, query_by_snapshot_id, set_default_date, get_author_graph
 from app.controller.snapshot_create import create_by_filters
 from app.controller.snapshot_get import get_snapshot
 from app.controller.snapshot_delete import delete_by_snapshot_id
@@ -10,15 +10,14 @@ ns = Namespace('snapshot', description='snapshot related operations')
 
 filters = ns.model('filters',
                    {'mesh_heading': fields.String(required=False, default="Skin Neoplasms"),
-                    'author': fields.String(required=False, default=""),
-                    'first_author': fields.String(required=False, default="Vittorio Bolcato"),
+                    'author': fields.String(required=False, default="Vittorio Bolcato"),
+                    'first_author': fields.String(required=False, default=""),
                     'last_author': fields.String(required=False, default=""),
                     'published_before': fields.String(required=False, default=""),
                     'published_after': fields.String(required=False, default=""),
                     'journal': fields.String(required=False, default=""),
                     'article': fields.String(required=False, default=""),
-                    'num_nodes': fields.Integer(required=False, default=100),
-                    'degree_centrality': fields.String(required=False, default=""),
+                    'graph_size': fields.Integer(required=False, default=100),
                     'graph_type': fields.String(required=False, default="author")
                     })
 
@@ -50,7 +49,6 @@ class DeleteSnapshot(Resource):
         return delete_by_snapshot_id(snapshot_id)
 
 
-
 @ns.route('/visualise/')
 class VisualiseSnapshot(Resource):
     @staticmethod
@@ -63,8 +61,18 @@ class VisualiseSnapshot(Resource):
     @ns.expect(filters)
     def post():
         filter_params = request.json
+        filter_params = set_default_date(filter_params)
         return query_by_filters(filter_params)
 
+
+@ns.route('/visualise_three_hop/')
+class VisualiseThreeHopNeighbourhoodSnapshot(Resource):
+    @staticmethod
+    @ns.expect(filters)
+    def post():
+        filter_params = request.json
+        filter_params = set_default_date(filter_params)
+        return get_author_graph(filter_params)
 
 
 @ns.route('/analyse/<int:snapshot_id>')

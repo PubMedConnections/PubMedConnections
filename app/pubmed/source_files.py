@@ -96,22 +96,34 @@ def read_all_pubmed_files(
     # indices are used to verify that the next file has been read and
     # is in the queue.
     unordered_queue_lock = multiprocessing.Lock()
-    unordered_output_queue = queue.PriorityQueue(maxsize=read_thread_count)
-    unordered_output_indices = set()
+    unordered_outputs = []
 
     def process_files():
         while True:
-            try:
-                process_index, process_file = input_queue.get_nowait()
-            except queue.Empty:
+            # Grab the next input file to process.
+            while True:
+                # Wait until there is space for the output of the next file.
+                with unordered_queue_lock:
+                    # Check if there is space in the unordered outputs list.
+                    if len(unordered_outputs) < read_thread_count:
+                        try:
+                            process_index, process_file = input_queue.get_nowait()
+                            is_empty = False
+                        except queue.Empty:
+                            is_empty = True
+                        break
+
+                # Wait until there is space for new files on the queue.
+                time.sleep(0.1)
+
+            if is_empty:
                 break
 
             articles = parse_pubmed_xml(log_dir, target_directory, process_file)
             md5_hash = calc_md5_hash_of_file(process_file)
             output = ReadPubMedItem(process_index, md5_hash, articles)
             with unordered_queue_lock:
-                unordered_output_queue.put(output)
-                unordered_output_indices.add(process_index)
+                unordered_outputs.append(output)
 
     threads = []
     for thread_no in range(read_thread_count):
@@ -125,13 +137,23 @@ def read_all_pubmed_files(
         next_index = 0
         while next_index < len(file_paths):
             # Check if the next_index has been read yet.
-            if next_index in unordered_output_indices:
-                next_file = unordered_output_queue.get()
+            with unordered_queue_lock:
+                next_file = None
+                next_file_index = None
+                for output_index, output_file in enumerate(unordered_outputs):
+                    if output_file.index == next_index:
+                        next_file = output_file
+                        next_file_index = output_index
+                        break
+
+                if next_file is not None:
+                    del unordered_outputs[next_file_index]
+
+            if next_file is not None:
                 ordered_output_queue.put(next_file)
                 next_index += 1
             else:
-                # Sleep for 10 milliseconds.
-                time.sleep(0.01)
+                time.sleep(0.1)
 
         ordered_output_queue.put(ReadPubMedItem(next_index, None, None))
 
