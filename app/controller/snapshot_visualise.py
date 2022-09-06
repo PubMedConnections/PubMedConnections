@@ -3,6 +3,7 @@ from flask import jsonify
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 from app.controller.snapshot_analyse import _create_query_from_filters
+import json
 
 
 def set_default_date(filters):
@@ -26,8 +27,21 @@ def exist_edge(edge, author, coauthor):
     return False
 
 
+def add_root_mesh_headings(node, root_mesh_headings):
+    if 'mesh' not in node:
+        node['mesh'] = {}
+        [node['mesh'].update({m: 1}) for m in root_mesh_headings]
+    else:
+        for m in root_mesh_headings:
+            if m in node['mesh']:
+                node['mesh'][m] += 1
+            else:
+                node['mesh'].update({m: 1})
+    return node
+
+
 def add_edge_node_value(nodes, edges, author, coauthor, coauthor_position, article):
-    new_title = 'Mesh Heading: ' + '; '.join(article['mesh_heading']) + '\n' + \
+    new_title = 'Mesh Heading: ' + ';'.join(article['mesh_heading']) + '\n' + \
                 'Article Title: ' + article['article'] + '\n' + \
                 'Date: ' + str(article['date']) + '\n' + \
                 'Journal Title: ' + article['journal'] + '\n' + \
@@ -53,6 +67,7 @@ def add_edge_node_value(nodes, edges, author, coauthor, coauthor_position, artic
     for j in range(len(nodes)):
         if nodes[j]['id'] == author['id'] or nodes[j]['id'] == coauthor['id']:
             nodes[j]['value'] += 1
+            nodes[j] = add_root_mesh_headings(nodes[j], article['root_mesh_heading'])
     return nodes, edges
 
 
@@ -64,7 +79,8 @@ def query_by_filters(filters):
             // mesh - author - coauthor           
             MATCH (mesh_heading: MeshHeading) <-[:CATEGORISED_BY]- (article: Article)
             WHERE SIZE($mesh_heading) = 0 OR toLower(mesh_heading.name) CONTAINS toLower($mesh_heading) 
-            
+            MATCH (root_mesh_heading:MeshHeading) 
+            WHERE root_mesh_heading.tree_numbers[0]=substring(mesh_heading.tree_numbers[0], 0, 3)
             MATCH (author:Author) - [a: AUTHOR_OF] -> (article)
             WHERE 
             //no author
@@ -106,7 +122,7 @@ def query_by_filters(filters):
             AND (SIZE($article) = 0 OR toLower(article.title) CONTAINS toLower($article))
             
             WITH
-            article, a,c,mesh_heading, journal,
+            article, a,c,mesh_heading,root_mesh_heading, journal,
             {
                 label: author.name,
                 id: author.id
@@ -124,6 +140,7 @@ def query_by_filters(filters):
                 date: article.date,
                 author_position: a.author_position,
                 mesh_heading: COLLECT(DISTINCT mesh_heading.name),
+                root_mesh_heading: COLLECT(DISTINCT root_mesh_heading.name),
                 coauthors: COLLECT(DISTINCT coauthor)
             } AS articles
                         
@@ -174,6 +191,7 @@ def process_query_author(results):
                             nodes[j]['title'] = new_title
                         else:
                             nodes[j]['title'] = nodes[j]['title'] + '\n\n' + new_title
+                        nodes[j] = add_root_mesh_headings(nodes[j], article['root_mesh_heading'])
                         break
                 continue
 
@@ -187,6 +205,9 @@ def process_query_author(results):
                     author_coauthor_set.add(coauthor['id'])
                     nodes.append(coauthor)
                 nodes, edges = add_edge_node_value(nodes, edges, author, coauthor, coauthor_position, article)
+
+    for node in nodes:
+        node['title'] = json.dumps(node['mesh'], indent=4)
 
     return jsonify({"nodes": nodes,
                     "edges": edges,
