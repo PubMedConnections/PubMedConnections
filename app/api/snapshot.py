@@ -38,6 +38,8 @@ class CreateSnapshot(Resource):
     def put():
         filter_params = request.json
         return create_by_filters(filter_params)
+        snapshot = create_by_filters(filter_params)
+        return {"id": snapshot, "success": type(snapshot) == int}
 
 
 @ns.route('/get_snapshot/')
