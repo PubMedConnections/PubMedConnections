@@ -33,7 +33,7 @@ def create_by_filters(filters, current_user):
             published_after: $published_after,
             journal: $journal,
             article: $article,
-            num_nodes: $num_nodes,
+            graph_size: $graph_size,
             graph_type: $graph_type,
             database_version: max_version
             })
@@ -49,7 +49,7 @@ def create_by_filters(filters, current_user):
              'journal': filters['journal'],
              'article': filters['article'],
              'creation_time': filters['creation_time'],
-             'num_nodes': filters['graph_size'],
+             'graph_size': filters['graph_size'],
              'graph_type': filters['graph_type'],
              'username': current_user
              }

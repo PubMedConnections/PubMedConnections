@@ -2,7 +2,7 @@ from flask import request
 from flask_restx import Namespace, Resource, fields
 from app.controller.snapshot_visualise import query_by_filters, query_by_snapshot_id, set_default_date, get_author_graph
 from app.controller.snapshot_create import create_by_filters
-from app.controller.snapshot_get import get_snapshot
+from app.controller.snapshot_get import get_snapshot, get_user_snapshots
 from app.controller.snapshot_delete import delete_by_snapshot_id
 from app.controller.snapshot_analyse import retrieve_analytics
 from flask_jwt_extended import jwt_required, get_jwt_identity
@@ -99,3 +99,12 @@ class AnalyseSnapshot(Resource):
     @ns.doc(params={'snapshot_id': {'default': '1'}}, security="api_key")
     def get(snapshot_id: int):
         return retrieve_analytics(snapshot_id)
+
+@ns.route('/list/')
+class VisualiseSnapshot(Resource):
+    @staticmethod
+    @jwt_required()
+    @ns.doc(security='api_key')
+    def get():
+        current_user = get_jwt_identity()
+        return get_user_snapshots(current_user)

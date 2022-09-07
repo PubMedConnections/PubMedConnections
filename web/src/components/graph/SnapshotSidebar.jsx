@@ -9,39 +9,20 @@ import ListItemText from '@mui/material/ListItemText';
 import Button from '@mui/material/Button';
 import { CONNECTIONS_NAVBAR_HEIGHT } from '../../constants';
 import Filters from "./Filters";
-import {POST} from "../../utils/APIRequests";
+import {GET, POST} from "../../utils/APIRequests";
 import {useDispatch, useSelector} from 'react-redux'
 import {clearAuth} from "../../store/slices/userSlice";
+import {setFilters} from '../../store/slices/filterSlice'
 
 const drawerWidth = 450;
 
-// TODO: Update with real data
-const test_snapshots = [
-  {
-    id: 1,
-    title: 'Medical Entries',
-  },
-  {
-    id: 2,
-    title: 'Dr Marc Tennant',
-  },
-  {
-    id: 3,
-    title: 'Aliston and Co',
-  },
-  {
-    id: 4,
-    title: 'Dr Mike Tennant',
-  },
-];
-
-
 function SnapshotSidebar() {
-  const [selectedSnapshot, setSelectedSnapshot] = useState(0);
+  const [selectedSnapshot, setSelectedSnapshot] = useState(-1);
   const user = useSelector((state) => state.user.username);
+  const filters = useSelector((state) => state.filters);
   const dispatch = useDispatch();
 
-  const [snapshots, setSnapshots] = useState(test_snapshots);
+  const [snapshots, setSnapshots] = useState([]);
 
   function logout()  {
     POST('auth/logout')
@@ -55,6 +36,11 @@ function SnapshotSidebar() {
   useEffect(() => {
     document.getElementById('sidebar-contents').style.marginBottom =
         document.getElementById('sidebar-user-details').clientHeight;
+
+    GET('snapshot/list/')
+        .then((resp) => {
+          setSnapshots(resp.data)
+        })
   }, [])
 
 
@@ -80,7 +66,24 @@ function SnapshotSidebar() {
                     sx={{
                       background: selectedSnapshot === index ? '#c9c5f8' : '#fffff',
                     }}
-                    onClick={() => setSelectedSnapshot(index)}
+                    onClick={() => {
+                      setSelectedSnapshot(index);
+                      let new_filters = {}
+                      Object.keys(snapshot).forEach(f => {
+                        if (f in filters.filters) {
+                          new_filters[f] = snapshot[f]
+                        }
+                      });
+
+                      ["published_before", "published_after"].forEach(f => {
+                        if (f in new_filters) {
+                          new_filters[f] = new_filters[f].substring(0,10);
+                        }
+                      })
+
+                      dispatch(setFilters(new_filters));
+                    }
+                    }
                 >
                   <ListItemText
                       primaryTypographyProps={{
@@ -89,7 +92,7 @@ function SnapshotSidebar() {
                         color: '#333333',
                         letterSpacing: 0,
                       }}
-                      primary={snapshot.title}
+                      primary={"Snapshot " + snapshot.id}
                   />
                 </ListItemButton>
               </ListItem>
