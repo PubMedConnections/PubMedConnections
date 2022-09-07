@@ -5,7 +5,7 @@ from app.controller.snapshot_create import create_by_filters
 from app.controller.snapshot_get import get_snapshot
 from app.controller.snapshot_delete import delete_by_snapshot_id
 from app.controller.snapshot_analyse import retrieve_analytics
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import jwt_required, get_jwt_identity
 
 ns = Namespace('snapshot', description='snapshot related operations',
                authorizations={'api_key':
@@ -37,8 +37,8 @@ class CreateSnapshot(Resource):
     @ns.doc(security='api_key')
     def put():
         filter_params = request.json
-        return create_by_filters(filter_params)
-        snapshot = create_by_filters(filter_params)
+        current_user = get_jwt_identity()
+        snapshot = create_by_filters(filter_params, current_user)
         return {"id": snapshot, "success": type(snapshot) == int}
 
 

@@ -4,7 +4,7 @@ from app import neo4j_session
 from app.controller.snapshot_analyse import AnalyticsThreading
 
 
-def create_by_filters(filters):
+def create_by_filters(filters, current_user):
     filters = set_default_date(filters)
 
     filters['creation_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -19,8 +19,11 @@ def create_by_filters(filters):
             WITH max(m.version) AS max_version
             MATCH (d:DBMetadata)
             WHERE d.version = max_version
+            
+            MATCH (u: User)
+            WHERE u.username = $username
 
-            CREATE (s:Snapshot {
+            CREATE (u)-[:USER_SNAPSHOT]->(s:Snapshot {
             creation_time: $creation_time,
             mesh_heading: $mesh_heading,
             author: $author,
@@ -47,7 +50,8 @@ def create_by_filters(filters):
              'article': filters['article'],
              'creation_time': filters['creation_time'],
              'num_nodes': filters['graph_size'],
-             'graph_type': filters['graph_type']
+             'graph_type': filters['graph_type'],
+             'username': current_user
              }
         )
         if result is None:
