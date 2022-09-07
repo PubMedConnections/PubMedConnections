@@ -239,6 +239,7 @@ a:focus,
 .intro {
   display: table;
   width: 100%;
+  height: 100%;
   padding: 0;
   background: url(../img/intro-bg.jpg) center center no-repeat;
   background-color: #e5e5e5;
@@ -250,6 +251,7 @@ a:focus,
 
 .intro .overlay {
   background: rgba(0, 0, 0, 0.2);
+  height: 100%;
 }
 
 .intro h1 {
@@ -276,10 +278,13 @@ a:focus,
   margin-bottom: 60px;
 }
 
-header .intro-text {
-  padding-top: 350px;
-  padding-bottom: 200px;
+header .row {
+  display: flex;
+  justify-content: center;
+  align-items: center;
   text-align: center;
+  height: 100%;
+  margin: 0;
 }
 
 /* Login Section */

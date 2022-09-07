@@ -7,7 +7,7 @@ const Header = (props) => {
         <div className='overlay hero-img'>
           <div className='container'>
             <div className='row'>
-              <div className='col-md-8 col-md-offset-2 intro-text'>
+              <div className='col-md-8 intro-text'>
                 <img src='img/logo.png' style={{ height: '200px' }} />
                 <h1>PubMed Connections</h1>
                 <p>PMC</p>
