@@ -114,7 +114,7 @@ const Filters = () => {
             onChange={updateStateCallbackGenerator("graph_type")}
             >
                 <MenuItem value={"author"}>Author</MenuItem>
-                <MenuItem value={"journal"}>Journal</MenuItem>
+                <MenuItem value={"mesh"}>Journal</MenuItem>
         </Select>)
 
     }

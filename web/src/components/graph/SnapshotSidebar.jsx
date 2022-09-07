@@ -16,7 +16,7 @@ import {clearAuth} from "../../store/slices/userSlice";
 const drawerWidth = 450;
 
 // TODO: Update with real data
-const snapshots = [
+const test_snapshots = [
   {
     id: 1,
     title: 'Medical Entries',
@@ -40,6 +40,8 @@ function SnapshotSidebar() {
   const [selectedSnapshot, setSelectedSnapshot] = useState(0);
   const user = useSelector((state) => state.user.username);
   const dispatch = useDispatch();
+
+  const [snapshots, setSnapshots] = useState(test_snapshots);
 
   function logout()  {
     POST('auth/logout')

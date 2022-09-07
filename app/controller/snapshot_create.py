@@ -4,7 +4,7 @@ from app import neo4j_session
 from app.controller.snapshot_analyse import AnalyticsThreading
 
 
-def create_by_filters(graph_type: str, filters):
+def create_by_filters(filters):
     filters = set_default_date(filters)
 
     filters['creation_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -47,7 +47,7 @@ def create_by_filters(graph_type: str, filters):
              'article': filters['article'],
              'creation_time': filters['creation_time'],
              'num_nodes': filters['graph_size'],
-             'graph_type': graph_type
+             'graph_type': filters['graph_type']
              }
         )
         if result is None:
@@ -55,7 +55,7 @@ def create_by_filters(graph_type: str, filters):
         record = result.single()
 
         # run analytics on graph 
-        AnalyticsThreading(graph_type=graph_type, filters=filters, snapshot_id=record['snapshot_id'])
+        AnalyticsThreading(graph_type=filters['graph_type'], filters=filters, snapshot_id=record['snapshot_id'])
 
         return record['snapshot_id']
 

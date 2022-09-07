@@ -155,3 +155,10 @@ code {
 #sidebar-contents {
   overflow-y: auto;
 }
+
+#save-snapshot-button {
+  z-index: 1000;
+  position: absolute;
+  right: 20px;
+  top: 95px;
+}
