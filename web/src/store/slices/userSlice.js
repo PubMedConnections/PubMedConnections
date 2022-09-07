@@ -4,9 +4,9 @@ import {POST} from "../../utils/APIRequests";
 const initialState = {
   isLoading: false,
   username: null,
-  access_token: null, // for storing the JWT
+  access_token: localStorage.getItem('access_token'), // the JWT
   error: null,
-  success: false, // for monitoring the registration process.
+  success: false,
 };
 
 // async thunks

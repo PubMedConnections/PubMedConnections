@@ -53,7 +53,7 @@ class CheckAuthentication(Resource):
     @ns.doc(security='api_key')
     def get():
         current_user = get_jwt_identity()
-        return make_response(jsonify({'current_user': current_user}), 200)
+        return make_response(jsonify({'current_user': current_user, 'success': True}), 200)
 
 
 @ns.route('/register')
