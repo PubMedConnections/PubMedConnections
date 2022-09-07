@@ -145,9 +145,13 @@ code {
 #user-details {
   padding-left: 20px;
   padding-right: 20px;
-  padding-bottom: 5px;
+  padding-bottom: 20px;
+}
+
+#logout-button {
+  width: 100%;
 }
 
 #sidebar-contents {
-  overflow-y: scroll;
+  overflow-y: auto;
 }

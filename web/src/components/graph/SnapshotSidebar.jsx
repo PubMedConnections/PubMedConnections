@@ -115,9 +115,9 @@ function SnapshotSidebar() {
             sx={{ background: '#c4c4c4', width: '100%', height: '1px' }}
         />
         <div id="user-details">
-          <h4>Signed in as</h4>
-          <p>{user}</p>
-          <Button variant="contained" onClick={logout}>Log out</Button>
+          <p>Signed in as</p>
+          <h4>{user}</h4>
+          <Button variant="contained" onClick={logout} id="logout-button">Log out</Button>
         </div>
       </div>
     </Drawer>
