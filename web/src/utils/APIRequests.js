@@ -1,7 +1,6 @@
 import axios from 'axios'
 
 
-
 function POST(route, data) {
     return makeRequest('post', route, data)
 }
@@ -17,6 +16,7 @@ function makeRequest(method, route, data) {
         headers: {
             'Content-Type': 'application/json',
             'Access-Control-Allow-Origin': '*',
+            'Authorization': localStorage.getItem('access_token')
         },
         data: data,
     };
