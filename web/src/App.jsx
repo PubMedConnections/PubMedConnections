@@ -1,4 +1,4 @@
-import React from 'react';
+import React, {useEffect, useState} from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Home from './containers/Home';
 import Login from './containers/Login';
@@ -10,6 +10,11 @@ import {
 import PrivateRoutes from './utils/PrivateRoutes';
 import { createTheme, ThemeProvider } from '@mui/material';
 import { useSelector } from 'react-redux/es/exports';
+import Register from "./containers/Register";
+import {useDispatch} from "react-redux";
+import {GET} from "./utils/APIRequests";
+import {setAuth} from "./store/slices/userSlice";
+import LinearProgress from "@mui/material/LinearProgress";
 
 const MUITheme = createTheme({
   palette: {
@@ -24,15 +29,40 @@ const MUITheme = createTheme({
 });
 
 function App() {
-  const isLoggedIn = useSelector((store) => store.user.success);
+  const userLoggedIn = useSelector((store) => store.user.success);
+  const dispatch = useDispatch()
+
+  const [loading, setLoading] = useState(!userLoggedIn)
+
+  useEffect(() => {
+    if (!userLoggedIn) {  // E.g. on reload, or coming back to the website later on
+      GET('auth/check_authentication')
+          .then((resp) => {
+            if (resp.data.success) {
+              dispatch(setAuth({success: true, username: resp.data.current_user}))
+              setLoading(false);
+            }
+          })
+          .catch(err => {
+            setLoading(false);
+          });
+    }
+  }, [userLoggedIn, dispatch])
+
   return (
     <ThemeProvider theme={MUITheme}>
+      {loading ? <LinearProgress /> :
+          (
       <Routes>
         <Route path='/' element={<Home />} exact></Route>
         <Route
           path='/login'
-          element={isLoggedIn ? <Navigate to='/connections' /> : <Login />}
-        ></Route>
+          element={userLoggedIn ? <Navigate to='/connections' /> : <Login />}
+        />
+        <Route
+            path='/register'
+            element={userLoggedIn ? <Navigate to='/connections' /> : <Register />}
+        />
         <Route element={<PrivateRoutes />}>
           <Route path='/connections' element={<ConnectionsWrapper />}>
             <Route index element={<Navigate to='explore' />} />
@@ -40,7 +70,7 @@ function App() {
             <Route path='explore' element={<Explore />} />
           </Route>
         </Route>
-      </Routes>
+      </Routes>)}
     </ThemeProvider>
   );
 }

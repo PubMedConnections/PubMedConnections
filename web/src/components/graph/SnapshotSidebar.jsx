@@ -9,9 +9,8 @@ import ListItemText from '@mui/material/ListItemText';
 import Button from '@mui/material/Button';
 import { CONNECTIONS_NAVBAR_HEIGHT } from '../../constants';
 import Filters from "./Filters";
-import {GET, POST} from "../../utils/APIRequests";
-import {useNavigate} from "react-router-dom";
-import {useDispatch} from 'react-redux'
+import {POST} from "../../utils/APIRequests";
+import {useDispatch, useSelector} from 'react-redux'
 import {clearAuth} from "../../store/slices/userSlice";
 
 const drawerWidth = 450;
@@ -39,16 +38,8 @@ const snapshots = [
 
 function SnapshotSidebar() {
   const [selectedSnapshot, setSelectedSnapshot] = useState(0);
-  const [user, setUser] = useState('')
+  const user = useSelector((state) => state.user.username);
   const dispatch = useDispatch();
-
-  useEffect(() => {
-    GET('auth/check_authentication').then(resp => {
-      if (resp.data.success) {
-        setUser(resp.data.current_user)
-      }
-    })
-  }, [])
 
   function logout()  {
     POST('auth/logout')

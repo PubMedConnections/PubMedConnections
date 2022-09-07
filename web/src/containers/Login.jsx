@@ -30,13 +30,14 @@ function Login() {
   }, []);
 
   return (
-    <Container component='main' sx={{ width: '50%' }}>
+    <Container component='main' sx={{ width: '100%' }}>
       <Box
         sx={{
-          marginTop: '30vh',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
+          height: '100%',
+          overflow: 'auto',
         }}
       >
         <Box
@@ -54,6 +55,7 @@ function Login() {
         <Typography component='h1' variant='h5'>
           Sign in
         </Typography>
+
         <Box
           component='form'
           onSubmit={handleSubmit}
@@ -100,6 +102,8 @@ function Login() {
             label='Remember me'
           /> */
           }
+           <br/>
+            <p style={{fontSize: "small"}}>Don't have an account? <a href="/register">Sign up &gt;</a></p>
           <Button
             type='submit'
             fullWidth
