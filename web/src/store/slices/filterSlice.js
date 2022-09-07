@@ -1,9 +1,9 @@
 import { createSlice } from '@reduxjs/toolkit';
 
-const initialState = {
+const resetState = {
     filters: {
-        mesh_heading: "Neoplasms",
-        author: "Bolcato",
+        mesh_heading: "",
+        author: "",
         first_author: "",
         last_author: "",
         published_before: "",
@@ -12,6 +12,15 @@ const initialState = {
         article: "",
         graph_size: 100,
         graph_type: "author",
+    },
+    activeFilters: []
+}
+
+const initialState = {
+    filters: {
+        ...resetState.filters,
+        mesh_heading: "Neoplasms",
+        author: "Bolcato",
     },
     activeFilters: ['mesh_heading', "author"]
 };
@@ -25,7 +34,7 @@ export const filterSlice = createSlice({
             return state;
         },
         resetFilter: (state, action) => {
-            state.filters = { ...state.filters, [action.payload.filter]: initialState.filters[action.payload.filter] };
+            state.filters = { ...state.filters, [action.payload.filter]: resetState.filters[action.payload.filter] };
             return state;
         },
         setActiveFilters: (state, action) => {
@@ -36,6 +45,7 @@ export const filterSlice = createSlice({
             let index = state.activeFilters.indexOf(action.payload.filter);
             if (index > -1) {
                 state.activeFilters.splice(index, 1)
+                state.filters = { ...state.filters, [action.payload.filter]: resetState.filters[action.payload.filter] };
             }
             return state;
         },

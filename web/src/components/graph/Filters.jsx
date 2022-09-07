@@ -122,7 +122,6 @@ const Filters = () => {
 
     function deleteFilter(identifier) {
         dispatch(removeActiveFilter({filter: identifier}));
-        dispatch(resetFilter({filter: identifier}));
     }
 
     const handleFilterSelectionChange = (event) => {
