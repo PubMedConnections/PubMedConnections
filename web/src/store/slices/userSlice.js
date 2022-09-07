@@ -40,6 +40,7 @@ export const userSlice = createSlice({
       return { ...state, ...action.payload };
     },
     clearAuth: () => {
+      localStorage.removeItem('access_token');
       return initialState;
     },
   },

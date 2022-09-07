@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, {useEffect, useState} from 'react';
 import Drawer from '@mui/material/Drawer';
 import Toolbar from '@mui/material/Toolbar';
 import List from '@mui/material/List';
@@ -9,6 +9,10 @@ import ListItemText from '@mui/material/ListItemText';
 import Button from '@mui/material/Button';
 import { CONNECTIONS_NAVBAR_HEIGHT } from '../../constants';
 import Filters from "./Filters";
+import {GET, POST} from "../../utils/APIRequests";
+import {useNavigate} from "react-router-dom";
+import {useDispatch} from 'react-redux'
+import {clearAuth} from "../../store/slices/userSlice";
 
 const drawerWidth = 450;
 
@@ -32,14 +36,29 @@ const snapshots = [
   },
 ];
 
-// TODO: Update with real data
-const currentFilter = [
-  { field: 'Author Name', value: 'Tennant' },
-  { field: 'Date Range', value: '02/04/2022 - 15/04/2022' },
-];
 
 function SnapshotSidebar() {
   const [selectedSnapshot, setSelectedSnapshot] = useState(0);
+  const [user, setUser] = useState('')
+  const dispatch = useDispatch();
+
+  useEffect(() => {
+    GET('auth/check_authentication').then(resp => {
+      if (resp.data.success) {
+        setUser(resp.data.current_user)
+      }
+    })
+  }, [])
+
+  function logout()  {
+    POST('auth/logout')
+        .then((resp) => {
+          if (resp.data.success) {
+            dispatch(clearAuth());
+          }
+    });
+  }
+
 
   return (
     <Drawer
@@ -82,6 +101,18 @@ function SnapshotSidebar() {
         sx={{ background: '#c4c4c4', width: '100%', height: '1px' }}
       />
       <Filters />
+
+      <div id="sidebar-user-details">
+        <Divider
+            variant='fullWidth'
+            sx={{ background: '#c4c4c4', width: '100%', height: '1px' }}
+        />
+        <div id="user-details">
+          <p>Signed in as</p>
+          <p>{user}</p>
+          <Button variant="contained" onClick={logout}>Log out</Button>
+        </div>
+      </div>
     </Drawer>
   );
 }

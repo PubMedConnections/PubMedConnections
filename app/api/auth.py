@@ -89,4 +89,4 @@ class Logout(Resource):
         jti = jwt_payload["jti"]
         expiry = jwt_payload["exp"]
         expire_token(username, jti, expiry)
-        return make_response(jsonify({"message": "Access token revoked"}))
+        return make_response(jsonify({"message": "Access token revoked", "success": True}))

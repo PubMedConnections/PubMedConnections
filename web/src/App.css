@@ -133,3 +133,17 @@ code {
 .filter-delete {
   width: 10%;
 }
+
+#sidebar-user-details {
+  position: sticky;
+  bottom: 0;
+  background: white;
+  width: 100%;
+  z-index: 999;
+}
+
+#user-details {
+  padding-left: 20px;
+  padding-right: 20px;
+  padding-bottom: 5px;
+}

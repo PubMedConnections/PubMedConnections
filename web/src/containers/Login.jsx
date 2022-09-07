@@ -43,9 +43,13 @@ function Login() {
           sx={{
             width: 250,
             paddingY: 1,
+            cursor: 'hand'
           }}
           component='img'
           src='/img/logo-with-text.png'
+          onClick={() => {
+              navigate('/')
+          }}
         />
         <Typography component='h1' variant='h5'>
           Sign in
