@@ -135,7 +135,7 @@ code {
 }
 
 #sidebar-user-details {
-  position: sticky;
+  position: absolute;
   bottom: 0;
   background: white;
   width: 100%;
@@ -146,4 +146,8 @@ code {
   padding-left: 20px;
   padding-right: 20px;
   padding-bottom: 5px;
+}
+
+#sidebar-contents {
+  overflow-y: scroll;
 }

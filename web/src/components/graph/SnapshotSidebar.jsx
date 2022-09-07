@@ -59,6 +59,11 @@ function SnapshotSidebar() {
     });
   }
 
+  useEffect(() => {
+    document.getElementById('sidebar-contents').style.marginBottom =
+        document.getElementById('sidebar-user-details').clientHeight;
+  }, [])
+
 
   return (
     <Drawer
@@ -73,34 +78,36 @@ function SnapshotSidebar() {
       variant='permanent'
       anchor='left'
     >
-      <Toolbar sx={{ height: CONNECTIONS_NAVBAR_HEIGHT }} />
-      <List>
-        {snapshots.map((snapshot, index) => (
-          <ListItem key={snapshot.id} disablePadding>
-            <ListItemButton
-              sx={{
-                background: selectedSnapshot === index ? '#c9c5f8' : '#fffff',
-              }}
-              onClick={() => setSelectedSnapshot(index)}
-            >
-              <ListItemText
-                primaryTypographyProps={{
-                  fontSize: 15,
+      <div id="sidebar-contents">
+        <Toolbar sx={{ height: CONNECTIONS_NAVBAR_HEIGHT }} />
+        <List>
+          {snapshots.map((snapshot, index) => (
+              <ListItem key={snapshot.id} disablePadding>
+                <ListItemButton
+                    sx={{
+                      background: selectedSnapshot === index ? '#c9c5f8' : '#fffff',
+                    }}
+                    onClick={() => setSelectedSnapshot(index)}
+                >
+                  <ListItemText
+                      primaryTypographyProps={{
+                        fontSize: 15,
 
-                  color: '#333333',
-                  letterSpacing: 0,
-                }}
-                primary={snapshot.title}
-              />
-            </ListItemButton>
-          </ListItem>
-        ))}
-      </List>
-      <Divider
-        variant='fullWidth'
-        sx={{ background: '#c4c4c4', width: '100%', height: '1px' }}
-      />
-      <Filters />
+                        color: '#333333',
+                        letterSpacing: 0,
+                      }}
+                      primary={snapshot.title}
+                  />
+                </ListItemButton>
+              </ListItem>
+          ))}
+        </List>
+        <Divider
+            variant='fullWidth'
+            sx={{ background: '#c4c4c4', width: '100%', height: '1px' }}
+        />
+        <Filters />
+      </div>
 
       <div id="sidebar-user-details">
         <Divider
@@ -108,7 +115,7 @@ function SnapshotSidebar() {
             sx={{ background: '#c4c4c4', width: '100%', height: '1px' }}
         />
         <div id="user-details">
-          <p>Signed in as</p>
+          <h4>Signed in as</h4>
           <p>{user}</p>
           <Button variant="contained" onClick={logout}>Log out</Button>
         </div>
