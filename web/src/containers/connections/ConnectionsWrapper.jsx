@@ -3,7 +3,7 @@ import { Outlet } from 'react-router-dom';
 
 function ConnectionsWrapper() {
   return (
-    <div>
+    <div className="full-size">
       <ConnectionsNavigation />
       <Outlet />
     </div>

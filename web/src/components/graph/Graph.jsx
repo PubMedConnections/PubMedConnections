@@ -72,8 +72,8 @@ const Graph = () => {
 
   useEffect(loadGraphData, [VISJSNetwork, filters])
 
-  return <div>
-    <VisJSGraph graph={graphInfo.data} options={graphInfo.options}
+  return <div className="full-size">
+    <VisJSGraph className="full-size" graph={graphInfo.data} options={graphInfo.options}
       getNetwork={(network) => {
           setNetwork(network);
       }}
