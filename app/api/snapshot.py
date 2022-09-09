@@ -4,7 +4,7 @@ from app.controller.snapshot_visualise import query_by_filters, query_by_snapsho
 from app.controller.snapshot_create import create_by_filters
 from app.controller.snapshot_get import get_snapshot
 from app.controller.snapshot_delete import delete_by_snapshot_id
-from app.controller.snapshot_analyse import retrieve_analytics
+from app.controller.snapshot_analyse import run_analytics
 
 ns = Namespace('snapshot', description='snapshot related operations')
 
@@ -80,4 +80,4 @@ class AnalyseSnapshot(Resource):
     @staticmethod
     @ns.doc(params={'snapshot_id': {'default': '1'}})
     def get(snapshot_id: int):
-        return retrieve_analytics(snapshot_id)
+        return run_analytics(snapshot_id)
