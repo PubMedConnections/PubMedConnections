@@ -34,6 +34,7 @@ if __name__ == "__main__":
             err_print("Expected no arguments to update")
             sys.exit(1)
 
+        print("PubMedConnections: Updating the database...\n")
         manager = PubMedManager()
         exit_code = manager.run_sync()
         if exit_code != 0:
