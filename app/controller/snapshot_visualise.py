@@ -1,221 +1,202 @@
-from app import neo4j_session
+import textwrap
+from typing import Any
+
+from app import neo4j_conn, PubMedCacheConn
 from flask import jsonify
-from datetime import datetime
-from dateutil.relativedelta import relativedelta
+from datetime import datetime, date
+
+from app.controller.graph_builder import GraphBuilder
 from app.controller.snapshot_analyse import _create_query_from_filters
-import json
+
+from app.pubmed.filtering import PubMedFilterBuilder
+from app.pubmed.model import MeSHHeading, Article
 
 
-def set_default_date(filters):
+def parse_dates(filters):
     if filters['published_after'] == '':
-        # default: 40 years ago
-        filters['published_after'] = datetime.now() - relativedelta(years=40)
+        del filters['published_after']
     else:
         filters['published_after'] = datetime.strptime(filters['published_after'], '%Y-%m-%d')
+
     if filters['published_before'] == '':
-        # default: now
-        filters['published_before'] = datetime.now()
+        del filters['published_before']
     else:
         filters['published_before'] = datetime.strptime(filters['published_before'], '%Y-%m-%d')
     return filters
 
 
-def exist_edge(edge, author, coauthor):
-    if (edge['from'] == author['id'] and edge['to'] == coauthor['id']) or \
-            (edge['from'] == coauthor['id'] and edge['to'] == author['id']):
-        return True
-    return False
+def construct_graph_filter(filters: dict[str, Any]) -> PubMedFilterBuilder:
+    """
+    Constructs a PubMedFilterBuilder that applies a set of filters to the PubMed graph
+    to fetch a set of IDs corresponding to the nodes that match the filters.
+    These IDs can then later be used to build graphs for visualisation.
+    """
+    filter_builder = PubMedFilterBuilder()
+
+    if "journal" in filters:
+        journal_name = filters["journal"]
+        del filters["journal"]
+        if len(journal_name.strip()) > 0:
+            filter_builder.add_journal_name_filter(journal_name)
+
+    if "mesh_heading" in filters:
+        mesh_name = filters["mesh_heading"]
+        del filters["mesh_heading"]
+
+        # Find all the matching MeSH headings.
+        if len(mesh_name.strip()) > 0:
+            mesh_headings = MeSHHeading.search(neo4j_conn.get_mesh_headings(), mesh_name)
+            mesh_desc_ids = [m.descriptor_id for m in mesh_headings]
+            filter_builder.add_mesh_descriptor_id_filter(mesh_desc_ids)
+
+    if "author" in filters:
+        author_name = filters["author"]
+        del filters["author"]
+        if len(author_name.strip()) > 0:
+            filter_builder.add_author_name_filter(author_name)
+
+    # TODO : Should be changed to a boolean flag
+    if "first_author" in filters:
+        author_name = filters["first_author"]
+        del filters["first_author"]
+        if len(author_name.strip()) > 0:
+            filter_builder.add_first_author_name_filter(author_name)
+
+    # TODO : Should be changed to a boolean flag
+    if "last_author" in filters:
+        author_name = filters["last_author"]
+        del filters["last_author"]
+        if len(author_name.strip()) > 0:
+            filter_builder.add_last_author_name_filter(author_name)
+
+    if "article" in filters:
+        article_name = filters["article"]
+        del filters["article"]
+        if len(article_name.strip()) > 0:
+            filter_builder.add_article_name_filter(article_name)
+
+    if "published_after" in filters:
+        filter_date = filters["published_after"]
+        boundary_date = date(year=filter_date.year, month=filter_date.month, day=filter_date.day)
+        filter_builder.add_published_after_filter(boundary_date)
+
+    if "published_before" in filters:
+        filter_date = filters["published_before"]
+        boundary_date = date(year=filter_date.year, month=filter_date.month, day=filter_date.day)
+        filter_builder.add_published_before_filter(boundary_date)
+
+    return filter_builder
 
 
-def add_root_mesh_headings(node, root_mesh_headings):
-    if 'mesh' not in node:
-        node['mesh'] = {}
-        [node['mesh'].update({m: 1}) for m in root_mesh_headings]
-    else:
-        for m in root_mesh_headings:
-            if m in node['mesh']:
-                node['mesh'][m] += 1
-            else:
-                node['mesh'].update({m: 1})
-    return node
+def list_articles_for_description(articles: list[Article], *, max_article_lines=8) -> str:
+    """
+    Lists the articles in a list to be added to the description of an edge or node.
+    Assumes that duplicate articles are not present.
+    """
+    article_titles = []
+
+    # Collect the titles of all the articles.
+    for article in articles:
+        date_str = article.date.strftime('%Y')
+        truncated_title = textwrap.shorten(article.title, width=64, placeholder="...")
+        article_titles.append(f"{date_str}: {truncated_title}")
+
+    # Sort them by date (as the date shows up first in the string).
+    article_titles = list(sorted(article_titles))[::-1]
+
+    # Decide if we need to truncate the number of articles that are shown.
+    too_many_articles = len(article_titles) > max_article_lines
+    article_names_to_show = article_titles[:max_article_lines - 1] if too_many_articles else article_titles
+    if too_many_articles:
+        article_names_to_show.append(f"+ {len(article_titles) - max_article_lines + 1} more")
+
+    return " - " + "\n - ".join(article_names_to_show)
 
 
-def add_edge_node_value(nodes, edges, author, coauthor, coauthor_position, article):
-    new_title = 'Mesh Heading: ' + ';'.join(article['mesh_heading']) + '\n' + \
-                'Article Title: ' + article['article'] + '\n' + \
-                'Date: ' + str(article['date']) + '\n' + \
-                'Journal Title: ' + article['journal'] + '\n' + \
-                'Positions: ' + \
-                '#' + str(article['author_position']) + ' ' + author['label'] + '; ' + \
-                '#' + str(coauthor_position) + ' ' + coauthor['label']
-    # exists an edge between two nodes
-    for j in range(len(edges)):
-        if exist_edge(edges[j], author, coauthor):
-            edges[j]['value'] += 1
-            new_title = edges[j]['title'] + '\n\n' + new_title
-            edges[j]['title'] = new_title
-            return nodes, edges
-    # no edges between two nodes
-    # 1. add edge
-    # 2. 2 nodes value + 1
-    # 3. insert into nodes list
-    edges.append({'from': author['id'],
-                  'to': coauthor['id'],
-                  'value': 1,
-                  'title': new_title
-                  })
-    for j in range(len(nodes)):
-        if nodes[j]['id'] == author['id'] or nodes[j]['id'] == coauthor['id']:
-            nodes[j]['value'] += 1
-            nodes[j] = add_root_mesh_headings(nodes[j], article['root_mesh_heading'])
-    return nodes, edges
+def query_coauthor_graph(filters: dict[str, Any]):
+    """
+    Builds a co-author graph based upon a set of filters
+    that returns the central authors to expand upon.
+    """
+    graph_filter = construct_graph_filter(filters)
+    graph_filter.set_node_limit(1000)
+    with neo4j_conn.new_session() as session:
+        filter_results = graph_filter.build(force_authors=True).run(session)
+        co_author_graph_results = session.run(
+            """
+            CYPHER planner=dp
+            MATCH (author:Author)
+            WHERE id(author) IN $author_ids
+            MATCH (author) -[author_rel:AUTHOR_OF]-> (article:Article)
+            WHERE id(article) in $article_ids
+            OPTIONAL MATCH (article) <-[coauthor_rel:AUTHOR_OF]- (coauthor)
+            WHERE author <> coauthor
+            RETURN author, author_rel, article, coauthor_rel, coauthor
+            """,
+            author_ids=filter_results.author_ids,
+            article_ids=filter_results.article_ids
+        )
 
+        graph = GraphBuilder()
+        for record in co_author_graph_results:
+            graph.add_record()
+            author, author_rel, article, coauthor_rel, coauthor = record
 
-def query_by_filters(filters):
-    # query for single author / first author/ last author & coauthor
-    def cypher_author(tx):
-        return list(tx.run(
-            '''
-            // mesh - author - coauthor           
-            MATCH (mesh_heading: MeshHeading) <-[:CATEGORISED_BY]- (article: Article)
-            WHERE SIZE($mesh_heading) = 0 OR toLower(mesh_heading.name) CONTAINS toLower($mesh_heading) 
-            MATCH (root_mesh_heading:MeshHeading) 
-            WHERE root_mesh_heading.tree_numbers[0]=substring(mesh_heading.tree_numbers[0], 0, 3)
-            MATCH (author:Author) - [a: AUTHOR_OF] -> (article)
-            WHERE 
-            //no author
-            (SIZE($author)=0 
-                AND SIZE($first_author)=0 
-                AND SIZE($last_author)=0 
-                AND a.is_first_author = true)            
-            
-            //author
-            OR (SIZE($author)<>0 
-                AND toLower(author.name) 
-                    CONTAINS toLower($author))
-            
-            //first author
-            OR (SIZE($author)=0 
-                AND SIZE($first_author)<>0 
-                AND toLower(author.name) 
-                    CONTAINS toLower($first_author) AND a.is_first_author = true)                        
-            
-                    
-            //last author
-            OR (SIZE($author)=0 
-                AND SIZE($first_author)=0 
-                AND SIZE($last_author)<>0 
-                AND toLower(author.name) 
-                    CONTAINS toLower($last_author) AND a.is_last_author = true)            
-            
-            //coauthor
-            OPTIONAL MATCH (coauthor: Author) - [c:AUTHOR_OF] -> (article)          
-            WHERE coauthor <> author
-            
-            MATCH (article) - [: PUBLISHED_IN] -> (journal : Journal)
-            WHERE 
-            (article.date >= date({year: $published_after.year, month:$published_after.month, 
-                    day:$published_after.day}))
-            AND (article.date <= date({year: $published_before.year, month:$published_before.month, 
-                    day:$published_before.day}))
-            AND (SIZE($journal) = 0 OR toLower(journal.title) CONTAINS toLower($journal))
-            AND (SIZE($article) = 0 OR toLower(article.title) CONTAINS toLower($article))
-            
-            WITH
-            article, a,c,mesh_heading,root_mesh_heading, journal,
-            {
-                label: author.name,
-                id: author.id
-            } AS author,
-            {
-                coauthor: {label: coauthor.name, id: coauthor.id},
-                author_position: c.author_position           
-            } AS coauthor
-            
-            WITH
-            author,
-            {
-                article: article.title,
-                journal: journal.title,
-                date: article.date,
-                author_position: a.author_position,
-                mesh_heading: COLLECT(DISTINCT mesh_heading.name),
-                root_mesh_heading: COLLECT(DISTINCT root_mesh_heading.name),
-                coauthors: COLLECT(DISTINCT coauthor)
-            } AS articles
-                        
-            RETURN 
-            DISTINCT properties(author) AS author,
-            COLLECT (DISTINCT properties(articles)) AS articles
-            LIMIT $graph_size
-            ''',
-            {'mesh_heading': filters['mesh_heading'],
-             'author': filters['author'],
-             'first_author': filters['first_author'],
-             'last_author': filters['last_author'],
-             'published_before': filters['published_before'],
-             'published_after': filters['published_after'],
-             'journal': filters['journal'],
-             'article': filters['article'],
-             'graph_size': filters['graph_size']}
-        ))
-
-    results = neo4j_session.read_transaction(cypher_author)
-    return process_query_author(results)
-
-
-def process_query_author(results):
-    nodes = []
-    edges = []
-    author_coauthor_set = set()
-    for record in results:
-        record = record.data()
-        author = record['author']
-        author['value'] = 1
-        # a new author
-        if author['id'] not in author_coauthor_set:
-            author_coauthor_set.add(author['id'])
-            nodes.append(author)
-        # author - collect (article)
-        # article = {article, author_position, collect(coauthors)}
-        for article in record['articles']:
-            # author who have no coauthor
-            if article['coauthors'][0]['author_position'] is None:
-                for j in range(len(nodes)):
-                    if nodes[j]['id'] == author['id']:
-                        new_title = 'Mesh Heading:' + '; '.join(article['mesh_heading']) + '\n' + \
-                                    'Article Title:' + article['article'] + '\n' + \
-                                    'Date: ' + str(article['date']) + '\n' + \
-                                    'Journal Title:' + article['journal'] + '\n'
-                        if 'title' not in nodes[j]:
-                            nodes[j]['title'] = new_title
-                        else:
-                            nodes[j]['title'] = nodes[j]['title'] + '\n\n' + new_title
-                        nodes[j] = add_root_mesh_headings(nodes[j], article['root_mesh_heading'])
-                        break
+            author = PubMedCacheConn.read_author_node(author)
+            article = PubMedCacheConn.read_article_node(article)
+            graph.add_node(author.author_id, (True, author, article))
+            if coauthor is None:
                 continue
 
-            # article - collect(coauthor)
-            # coauthor = {coauthor, author_position}
-            for coauthor in article['coauthors']:
-                coauthor_position = coauthor['author_position']
-                coauthor = coauthor['coauthor']
-                coauthor['value'] = 1
-                if coauthor['id'] not in author_coauthor_set:
-                    author_coauthor_set.add(coauthor['id'])
-                    nodes.append(coauthor)
-                nodes, edges = add_edge_node_value(nodes, edges, author, coauthor, coauthor_position, article)
+            coauthor = PubMedCacheConn.read_author_node(coauthor)
+            author_rel = PubMedCacheConn.read_article_author_relation(article, author, author_rel)
+            coauthor_rel = PubMedCacheConn.read_article_author_relation(article, coauthor, coauthor_rel)
 
-    for node in nodes:
-        node['title'] = json.dumps(node['mesh'], indent=4)
+            graph.add_node(coauthor.author_id, (False, coauthor, article))
+            graph.add_edge(
+                author.author_id, coauthor.author_id,
+                (author, author_rel, article, coauthor_rel, coauthor)
+            )
 
-    return jsonify({"nodes": nodes,
-                    "edges": edges,
-                    'counts': {'nodes num': len(nodes),
-                               'edges num': len(edges),
-                               'records num': len(results)
-                               }
-                    })
+    def node_configure(node_data: list[Any]) -> dict:
+        """ Sets the properties of nodes. """
+        is_primary = False
+        name = None
+        article_ids = set()
+        articles = []
+        for entry_is_primary, author, article in node_data:
+            is_primary = is_primary or entry_is_primary
+            name = author.full_name
+            if article.pmid not in article_ids:
+                article_ids.add(article.pmid)
+                articles.append(article)
+
+        title = f"{name}\n" + ("Matching Author" if is_primary else "Co-author") + f" of {len(article_ids)} articles"
+        title += f"\n{list_articles_for_description(articles)}"
+        return {
+            "label": name,
+            "title": title,
+            "borderWidth": 2 if is_primary else 1,
+            "borderWidthSelected": 3 if is_primary else 2,
+            "size": 25 if is_primary else 15
+        }
+
+    def edge_configure(edge_data: list) -> dict:
+        """ Sets the properties of edges. """
+        article_ids = set()
+        articles = []
+        for author, author_rel, article, coauthor_rel, coauthor in edge_data:
+            if article.pmid not in article_ids:
+                article_ids.add(article.pmid)
+                articles.append(article)
+
+        articles_desc = list_articles_for_description(articles)
+        return {
+            "title": f"{len(article_ids)} Co-Authored Articles\n{articles_desc}",
+            "value": len(article_ids)
+        }
+
+    return jsonify(graph.build(node_configure, edge_configure))
 
 
 def query_by_snapshot_id(snapshot_id):
@@ -237,8 +218,9 @@ def query_by_snapshot_id(snapshot_id):
         snapshot = snapshot.single()['s']
         return snapshot
 
-    filters = neo4j_session.read_transaction(cypher_snapshot)
-    return query_by_filters(filters)
+    with neo4j_conn.new_session() as neo4j_session:
+        filters = neo4j_session.read_transaction(cypher_snapshot)
+    return query_coauthor_graph(filters)
 
 
 def get_author_graph(filters):
@@ -268,7 +250,8 @@ def get_author_graph(filters):
             )
         )
 
-    res = neo4j_session.read_transaction(three_hop_author_neighbourhood_query)
+    with neo4j_conn.new_session() as neo4j_session:
+        res = neo4j_session.read_transaction(three_hop_author_neighbourhood_query)
 
     return process_author_records(res)
 

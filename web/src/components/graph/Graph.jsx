@@ -41,6 +41,13 @@ const Graph = () => {
         tooltipDelay: 100,
       },
       physics: {
+          maxVelocity: 20,
+          repulsion: {
+              nodeDistance: 10,
+              centralGravity: 1,
+              damping: 0.05,
+              springConstant: 0.01,
+          },
           stabilization: {
               enabled: true,
               iterations: 10
@@ -54,15 +61,41 @@ const Graph = () => {
         if (VISJSNetwork == null) {
             return
         }
+        setGraphInfo({
+            options: graphInfo.options,
+            data: {
+              nodes: [],
+              edges: [],
+            }
+        });
         setLoadingProgress(-1);
 
         POST('snapshot/visualise/', filters)
             .then((resp) => {
+                if (resp.status !== 200) {
+                    // TODO : Display this to the user.
+                    console.error("Something went wrong: " + resp.status)
+                    console.error(resp);
+                    setLoadingProgress(100)
+                    return;
+                }
+
+                const data = resp.data;
+                if (data.error) {
+                    // TODO : Display this to the user.
+                    console.error(data.error);
+                    setLoadingProgress(100)
+                    return;
+                }
+
                 let graphData = {
                     nodes: resp.data.nodes,
                     edges: resp.data.edges
                 }
-                setGraphInfo({...graphInfo, data: graphData});
+                setGraphInfo({
+                    options: graphInfo.options,
+                    data: graphData
+                });
                 setLoadingProgress(100)
             })
     }, 1500)

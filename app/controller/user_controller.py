@@ -1,5 +1,7 @@
 import json
-from neo4j import GraphDatabase, basic_auth
+from neo4j import basic_auth
+
+from app import neo4j_conn
 from config import NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD
 from hashlib import sha256
 from datetime import datetime
@@ -18,13 +20,12 @@ def get_user(username: str):
             }
         ))
 
-    driver = GraphDatabase.driver(uri=NEO4J_URI, auth=basic_auth(NEO4J_USER, NEO4J_PASSWORD))
-    session = driver.session()
-    result = session.read_transaction(get_users)
-    if len(result) == 1:
-        return result[0].data()['user']
-    else:
-        return None
+    with neo4j_conn.new_session() as session:
+        result = session.read_transaction(get_users)
+        if len(result) == 1:
+            return result[0].data()['user']
+        else:
+            return None
 
 
 def clean_up_expired_tokens(username):
@@ -58,9 +59,8 @@ def authenticate_user(username: str, password: str) -> bool :
             }
         ))
 
-    driver = GraphDatabase.driver(uri=NEO4J_URI, auth=basic_auth(NEO4J_USER, NEO4J_PASSWORD))
-    session = driver.session()
-    result = session.read_transaction(cypher)
+    with neo4j_conn.new_session() as session:
+        result = session.read_transaction(cypher)
 
     if len(result) == 1:
         clean_up_expired_tokens(username)
@@ -87,10 +87,9 @@ def create_user(username: str, password: str) -> bool:
     if get_user(username) is not None:
         return False
     else:
-        driver = GraphDatabase.driver(uri=NEO4J_URI, auth=basic_auth(NEO4J_USER, NEO4J_PASSWORD))
-        session = driver.session()
-        session.write_transaction(cypher)
-        return True
+        with neo4j_conn.new_session() as session:
+            session.write_transaction(cypher)
+            return True
 
 
 def update_revoked_tokens(username, revoked_tokens):
@@ -107,9 +106,8 @@ def update_revoked_tokens(username, revoked_tokens):
             }
         ))
 
-    driver = GraphDatabase.driver(uri=NEO4J_URI, auth=basic_auth(NEO4J_USER, NEO4J_PASSWORD))
-    session = driver.session()
-    session.write_transaction(cypher)
+    with neo4j_conn.new_session() as session:
+        session.write_transaction(cypher)
 
 
 def expire_token(username: str, jti: str, expiry: int):

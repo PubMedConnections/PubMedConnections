@@ -465,7 +465,7 @@ class Article:
         return "<Article {}>".format(str(self))
 
 
-class MeshHeading:
+class MeSHHeading:
     """
     A MeSH Heading from the NLM database
     https://www.nlm.nih.gov/databases/download/mesh.html
@@ -473,7 +473,25 @@ class MeshHeading:
     def __init__(self, descriptor_id: int, name: str, tree_numbers: list[str]):
         self.descriptor_id: int = descriptor_id
         self.name = name
+        self._upper_name = name.upper()
         self.tree_numbers = tree_numbers
+
+    @staticmethod
+    def search(mesh_headings: list['MeSHHeading'], name: str) -> list['MeSHHeading']:
+        """
+        Searches for the MeSH headings within mesh_headings that
+        have the given name, or a similar name.
+        """
+        name = name.strip().upper()
+        if len(name) == 0:
+            return []
+
+        results = []
+        for heading in mesh_headings:
+            if name in heading.name.upper():
+                results.append(heading)
+
+        return results
 
     def __str__(self):
         return f"{self.descriptor_id}: {self.name} ({self.tree_numbers})"

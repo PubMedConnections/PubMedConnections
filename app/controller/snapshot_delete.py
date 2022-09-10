@@ -1,4 +1,4 @@
-from app import neo4j_session
+from app import neo4j_conn
 
 
 def delete_by_snapshot_id(snapshot_id: int):
@@ -18,5 +18,7 @@ def delete_by_snapshot_id(snapshot_id: int):
         record = result.single()
         return record["snapshot_id"]
 
-    snapshot_id = neo4j_session.write_transaction(cypher)
+    with neo4j_conn.new_session() as neo4j_session:
+        snapshot_id = neo4j_session.write_transaction(cypher)
+
     return snapshot_id

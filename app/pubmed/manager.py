@@ -15,7 +15,7 @@ from app.pubmed.mesh import process_mesh_headings, get_latest_mesh_desc_file
 from app.pubmed.model import DBMetadataMeshFile, DBMetadataDataFile, DatabaseStatus, DBMetadata, \
     LATEST_PUBMED_DB_VERSION
 from app.pubmed.progress_analytics import DownloadAnalytics
-from app.pubmed.pubmed_db_conn import PubmedCacheConn
+from app.pubmed.pubmed_db_conn import PubMedCacheConn
 from app.pubmed.source_files import list_downloaded_pubmed_files, read_all_pubmed_files
 from app.pubmed.source_ftp import PubMedFTP
 from app.utils import format_minutes, calc_md5_hash_of_file, flush_print
@@ -109,7 +109,7 @@ class PubMedManager:
             return
 
         flush_print()
-        with PubmedCacheConn(database=self.db_name) as conn:
+        with PubMedCacheConn(database=self.db_name) as conn:
             if conn.count_nodes() > 1_000_000:
                 flush_print("Your database is too large to clear using this command.")
                 flush_print("Please delete the data manually from your file system.")
@@ -175,7 +175,7 @@ class PubMedManager:
         )
 
         # Open a connection to the database!
-        with PubmedCacheConn(database=self.db_name) as conn:
+        with PubMedCacheConn(database=self.db_name) as conn:
 
             # Get the current metadata.
             existing_meta = conn.fetch_db_metadata()

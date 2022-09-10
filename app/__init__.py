@@ -1,8 +1,8 @@
 from flask import Flask
 from flask_jwt_extended import JWTManager
 from flask_cors import CORS
-from neo4j import GraphDatabase, basic_auth
-from config import NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD
+
+from app.pubmed.pubmed_db_conn import PubMedCacheConn
 
 # Our application
 app = Flask(__name__)
@@ -13,11 +13,12 @@ CORS(app)
 # Load the configuration from config.py
 app.config.from_object('config')
 
+# Initialise authentication using JWT.
 jwt = JWTManager(app)
 
-# establish neo4j connection session
-driver = GraphDatabase.driver(uri=NEO4J_URI, auth=basic_auth(NEO4J_USER, NEO4J_PASSWORD))
-neo4j_session = driver.session()
+# Initialise Neo4j connection.
+neo4j_conn = PubMedCacheConn()
+neo4j_conn.__enter__()
 
 # Import blueprints
 from app.api import bp as api_bp
@@ -28,5 +29,4 @@ app.register_blueprint(api_bp, url_prefix='/api')
 app.register_blueprint(controller_bp)
 
 # Register the routes
-
 from app.routes import *
