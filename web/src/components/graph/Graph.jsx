@@ -12,8 +12,6 @@ import LinearProgress from '@mui/material/LinearProgress'
 import {useSelector, useDispatch} from 'react-redux'
 import {POST, PUT} from "../../utils/APIRequests";
 import VisJSGraph from 'react-graph-vis'
-import Button from "@mui/material/Button";
-import {Save} from "@mui/icons-material";
 
 const Graph = () => {
   const filters = useSelector((state) => state.filters.filters);
@@ -74,20 +72,6 @@ const Graph = () => {
 
   useEffect(loadGraphData, [VISJSNetwork, filters])
 
-  function saveSnapshot() {
-    PUT('snapshot/create/', filters)
-        .then((resp) => {
-            if (resp.data.success) {
-                window.alert("Snapshot saved.")
-            } else {
-                window.alert("Could not save snapshot.");
-            }
-        })
-        .catch((err) => {
-            window.alert("Could not save snapshot.", err);
-        })
-  }
-
   return <div>
     <VisJSGraph graph={graphInfo.data} options={graphInfo.options}
       getNetwork={(network) => {
@@ -99,13 +83,6 @@ const Graph = () => {
         <LinearProgress />
       </div>
     </div>}
-      <Button variant={"contained"}
-              endIcon={<Save />}
-              id="save-snapshot-button"
-              size="large"
-              onClick={saveSnapshot}>
-          Save as snapshot
-      </Button>
   </div>;
 };
 
