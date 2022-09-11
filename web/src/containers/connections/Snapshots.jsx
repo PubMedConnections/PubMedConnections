@@ -8,7 +8,7 @@ function Snapshots() {
   }, []);
 
   return (
-    <Fragment>
+    <Fragment className="full-size">
       <SnapshotSidebar />
       <Graph />
     </Fragment>

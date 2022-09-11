@@ -1,4 +1,5 @@
 import sys
+import time
 
 from app import app as application
 from app.pubmed.manager import PubMedManager
@@ -34,6 +35,7 @@ if __name__ == "__main__":
             err_print("Expected no arguments to update")
             sys.exit(1)
 
+        print("PubMedConnections: Updating the database...\n")
         manager = PubMedManager()
         exit_code = manager.run_sync()
         if exit_code != 0:
@@ -73,6 +75,16 @@ if __name__ == "__main__":
             err_print("Expected no arguments to test")
             sys.exit(1)
         run_test()
+
+    elif mode == "wait":
+        if len(args) != 2:
+            err_print("Expected no arguments to wait")
+            sys.exit(1)
+
+
+        print("Waiting until manually stopped...")
+        while True:
+            time.sleep(1)
 
     else:
         err_print("Unknown run-mode", mode)

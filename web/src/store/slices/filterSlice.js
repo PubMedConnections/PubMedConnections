@@ -19,8 +19,8 @@ const resetState = {
 const initialState = {
     filters: {
         ...resetState.filters,
-        mesh_heading: "Neoplasms",
-        author: "Bolcato",
+        mesh_heading: "Brain Stem Neoplasms",
+        author: "J ",
     },
     activeFilters: ['mesh_heading', "author"]
 };

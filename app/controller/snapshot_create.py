@@ -1,11 +1,12 @@
 from datetime import datetime
-from app.controller.snapshot_visualise import set_default_date
-from app import neo4j_session
+
+from app import neo4j_conn
+from app.controller.snapshot_visualise import parse_dates
 from app.controller.snapshot_analyse import AnalyticsThreading
 
 
-def create_by_filters(filters, current_user):
-    filters = set_default_date(filters)
+def create_by_filters(graph_type: str, filters):
+    filters = parse_dates(filters)
 
     filters['creation_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -63,11 +64,8 @@ def create_by_filters(filters, current_user):
 
         return record['snapshot_id']
 
-    """
-    set up a graph database connection session
-    """
-
-    snapshot_id = neo4j_session.write_transaction(cypher)
+    with neo4j_conn.new_session() as neo4j_session:
+        snapshot_id = neo4j_session.write_transaction(cypher)
 
     return snapshot_id
 

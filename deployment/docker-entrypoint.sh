@@ -23,7 +23,7 @@ done
 
 # Start PubMed Connections.
 source activate pubmed-connections
-python3 -m run extract
+python3 -m run wait
 
 # Stop Neo4J.
 echo "Stopping Neo4J..."

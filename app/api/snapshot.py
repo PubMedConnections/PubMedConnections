@@ -1,11 +1,13 @@
 from flask import request
 from flask_restx import Namespace, Resource, fields
-from app.controller.snapshot_visualise import query_by_filters, query_by_snapshot_id, set_default_date, get_author_graph
+from app.controller.snapshot_visualise import query_by_snapshot_id, parse_dates, get_author_graph, \
+    query_coauthor_graph
 from app.controller.snapshot_create import create_by_filters
 from app.controller.snapshot_get import get_snapshot, get_user_snapshots
 from app.controller.snapshot_delete import delete_by_snapshot_id
 from app.controller.snapshot_analyse import retrieve_analytics
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from app.pubmed.filtering import PubMedFilterLimitError, PubMedFilterValueError
 
 ns = Namespace('snapshot', description='snapshot related operations',
                authorizations={'api_key':
@@ -76,8 +78,18 @@ class VisualiseSnapshot(Resource):
     @ns.doc(security="api_key")
     def post():
         filter_params = request.json
-        filter_params = set_default_date(filter_params)
-        return query_by_filters(filter_params)
+        filter_params = parse_dates(filter_params)
+        try:
+            return query_coauthor_graph(filter_params)
+        except PubMedFilterLimitError as e:
+            return {
+                "error": str(e)
+            }
+        except PubMedFilterValueError as e:
+            return {
+                "error": str(e),
+                "error_filter": e.filter_name
+            }
 
 
 @ns.route('/visualise_three_hop/')
@@ -88,7 +100,7 @@ class VisualiseThreeHopNeighbourhoodSnapshot(Resource):
     @ns.doc(security="api_key")
     def post():
         filter_params = request.json
-        filter_params = set_default_date(filter_params)
+        filter_params = parse_dates(filter_params)
         return get_author_graph(filter_params)
 
 

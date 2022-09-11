@@ -6,7 +6,7 @@ import glob
 
 from app.pubmed.extract_xml import extract_mesh_headings
 from app.pubmed.source_files import DTDResolver
-from app.pubmed.pubmed_db_conn import PubmedCacheConn
+from app.pubmed.pubmed_db_conn import PubMedCacheConn
 
 
 def create_mesh_parser(directory: str) -> etree.XMLParser:
@@ -53,7 +53,7 @@ def get_latest_mesh_desc_file(target_directory: str) -> [str, str]:
     return directory, latest_file, latest_year
 
 
-def process_mesh_headings(directory: str, latest_file: str, conn: PubmedCacheConn):
+def process_mesh_headings(directory: str, latest_file: str, conn: PubMedCacheConn):
     # Parse the XML
     print(f"\nPubMedExtract: Parsing MeSH headings from {latest_file}...")
     parser = create_mesh_parser(directory)
