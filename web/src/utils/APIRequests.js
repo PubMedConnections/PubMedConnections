@@ -9,6 +9,10 @@ function GET(route) {
     return makeRequest('get', route)
 }
 
+function PUT(route, data) {
+    return makeRequest('put', route, data)
+}
+
 function makeRequest(method, route, data) {
     const config = {
         method: method,
@@ -27,4 +31,4 @@ function makeRequest(method, route, data) {
     }
 }
 
-export {POST, GET}
+export {POST, GET, PUT}

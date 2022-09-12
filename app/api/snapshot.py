@@ -3,12 +3,19 @@ from flask_restx import Namespace, Resource, fields
 from app.controller.snapshot_visualise import query_by_snapshot_id, parse_dates, get_author_graph, \
     query_coauthor_graph
 from app.controller.snapshot_create import create_by_filters
-from app.controller.snapshot_get import get_snapshot
+from app.controller.snapshot_get import get_snapshot, get_user_snapshots
 from app.controller.snapshot_delete import delete_by_snapshot_id
 from app.controller.snapshot_analyse import retrieve_analytics
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.pubmed.filtering import PubMedFilterLimitError, PubMedFilterValueError
 
-ns = Namespace('snapshot', description='snapshot related operations')
+ns = Namespace('snapshot', description='snapshot related operations',
+               authorizations={'api_key':
+                                   {'type': 'apiKey',
+                                    'in': 'header',
+                                    'name': 'Authorization'}
+                               },
+               security="api_key")
 
 filters = ns.model('filters',
                    {'mesh_heading': fields.String(required=False, default="Skin Neoplasms"),
@@ -24,20 +31,24 @@ filters = ns.model('filters',
                     })
 
 
-@ns.route('/create/<graph_type>')
+@ns.route('/create/')
 class CreateSnapshot(Resource):
     @staticmethod
     @ns.expect(filters)
-    @ns.doc(params={'graph_type': {'description': 'graph type: authors/mesh', 'default': 'authors'}})
-    def put(graph_type):
+    @jwt_required()
+    @ns.doc(security='api_key')
+    def put():
         filter_params = request.json
-        return create_by_filters(graph_type, filter_params)
+        current_user = get_jwt_identity()
+        snapshot = create_by_filters(filter_params, current_user)
+        return {"id": snapshot, "success": type(snapshot) == int}
 
 
 @ns.route('/get_snapshot/')
 class GetSnapshot(Resource):
     @staticmethod
-    @ns.doc(params={'snapshot_id': {'default': '147020'}})
+    @jwt_required()
+    @ns.doc(params={'snapshot_id': {'default': '147020'}}, security='api_key')
     def get():
         snapshot_id = request.args.get('snapshot_id', default=-1, type=int)
         return get_snapshot(snapshot_id)
@@ -46,7 +57,8 @@ class GetSnapshot(Resource):
 @ns.route('/delete/<int:snapshot_id>')
 class DeleteSnapshot(Resource):
     @staticmethod
-    @ns.doc(params={'snapshot_id': {'default': '1'}})
+    @jwt_required()
+    @ns.doc(params={'snapshot_id': {'default': '1'}}, security='api_key')
     def delete(snapshot_id: int):
         return delete_by_snapshot_id(snapshot_id)
 
@@ -54,13 +66,16 @@ class DeleteSnapshot(Resource):
 @ns.route('/visualise/')
 class VisualiseSnapshot(Resource):
     @staticmethod
-    @ns.doc(params={'snapshot_id': {'default': '147020'}})
+    @jwt_required()
+    @ns.doc(params={'snapshot_id': {'default': '147020'}}, security='api_key')
     def get():
         snapshot_id = request.args.get('snapshot_id', type=int)
         return query_by_snapshot_id(snapshot_id)
 
     @staticmethod
     @ns.expect(filters)
+    @jwt_required()
+    @ns.doc(security="api_key")
     def post():
         filter_params = request.json
         filter_params = parse_dates(filter_params)
@@ -81,6 +96,8 @@ class VisualiseSnapshot(Resource):
 class VisualiseThreeHopNeighbourhoodSnapshot(Resource):
     @staticmethod
     @ns.expect(filters)
+    @jwt_required()
+    @ns.doc(security="api_key")
     def post():
         filter_params = request.json
         filter_params = parse_dates(filter_params)
@@ -90,6 +107,16 @@ class VisualiseThreeHopNeighbourhoodSnapshot(Resource):
 @ns.route('/analyse/<int:snapshot_id>')
 class AnalyseSnapshot(Resource):
     @staticmethod
-    @ns.doc(params={'snapshot_id': {'default': '1'}})
+    @jwt_required()
+    @ns.doc(params={'snapshot_id': {'default': '1'}}, security="api_key")
     def get(snapshot_id: int):
         return retrieve_analytics(snapshot_id)
+
+@ns.route('/list/')
+class VisualiseSnapshot(Resource):
+    @staticmethod
+    @jwt_required()
+    @ns.doc(security='api_key')
+    def get():
+        current_user = get_jwt_identity()
+        return get_user_snapshots(current_user)

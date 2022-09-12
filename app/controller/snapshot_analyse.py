@@ -211,7 +211,7 @@ def run_analytics(graph_type: str, snapshot_id: int, filters):
     # TODO confirm expected behaviour when num_nodes == 0 
     # nodes_limit_string = str(filters['num_nodes']) if filters['num_nodes'] != 0 else "100"
 
-    if graph_type == "authors":
+    if graph_type == "author":
         graph_name = "coauthors"
 
         filter_query_string = _create_query_from_filters(filters)

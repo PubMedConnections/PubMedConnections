@@ -20,8 +20,11 @@ def create_by_filters(graph_type: str, filters):
             WITH max(m.version) AS max_version
             MATCH (d:DBMetadata)
             WHERE d.version = max_version
+            
+            MATCH (u: User)
+            WHERE u.username = $username
 
-            CREATE (s:Snapshot {
+            CREATE (u)-[:USER_SNAPSHOT]->(s:Snapshot {
             creation_time: $creation_time,
             mesh_heading: $mesh_heading,
             author: $author,
@@ -31,7 +34,7 @@ def create_by_filters(graph_type: str, filters):
             published_after: $published_after,
             journal: $journal,
             article: $article,
-            num_nodes: $num_nodes,
+            graph_size: $graph_size,
             graph_type: $graph_type,
             database_version: max_version
             })
@@ -47,8 +50,9 @@ def create_by_filters(graph_type: str, filters):
              'journal': filters['journal'],
              'article': filters['article'],
              'creation_time': filters['creation_time'],
-             'num_nodes': filters['graph_size'],
-             'graph_type': graph_type
+             'graph_size': filters['graph_size'],
+             'graph_type': filters['graph_type'],
+             'username': current_user
              }
         )
         if result is None:
@@ -56,7 +60,7 @@ def create_by_filters(graph_type: str, filters):
         record = result.single()
 
         # run analytics on graph 
-        AnalyticsThreading(graph_type=graph_type, filters=filters, snapshot_id=record['snapshot_id'])
+        AnalyticsThreading(graph_type=filters['graph_type'], filters=filters, snapshot_id=record['snapshot_id'])
 
         return record['snapshot_id']
 

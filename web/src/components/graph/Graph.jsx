@@ -10,7 +10,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import LinearProgress from '@mui/material/LinearProgress'
 import {useSelector, useDispatch} from 'react-redux'
-import {POST} from "../../utils/APIRequests";
+import {POST, PUT} from "../../utils/APIRequests";
 import VisJSGraph from 'react-graph-vis'
 
 const Graph = () => {
