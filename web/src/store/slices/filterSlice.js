@@ -19,8 +19,8 @@ const resetState = {
 const initialState = {
     filters: {
         ...resetState.filters,
-        mesh_heading: "Neoplasms",
-        author: "Bolcato",
+        mesh_heading: "Brain Stem Neoplasms",
+        author: "J ",
     },
     activeFilters: ['mesh_heading', "author"]
 };
@@ -49,9 +49,20 @@ export const filterSlice = createSlice({
             }
             return state;
         },
+        setFilters: (state, action) => {
+            state.filters = {...resetState.filters,  ...action.payload};
+            state.activeFilters = []
+            Object.keys(resetState.filters).forEach((f) => {
+                if (resetState.filters[f] !== action.payload[f]) {
+                    state.activeFilters.push(f);
+                }
+            })
+
+            return state;
+        }
     },
 });
 
-export const { setFilter, resetFilter, setActiveFilters, removeActiveFilter } = filterSlice.actions;
+export const { setFilter, resetFilter, setActiveFilters, removeActiveFilter, setFilters } = filterSlice.actions;
 
 export default filterSlice.reducer;

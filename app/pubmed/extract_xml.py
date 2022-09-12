@@ -9,7 +9,7 @@ from typing import Optional
 from lxml import etree
 
 from app.pubmed.medline_dates import parse_month, parse_medline_date
-from app.pubmed.model import Author, Article, Journal, MeshHeading, ArticleAuthorRelation
+from app.pubmed.model import Author, Article, Journal, MeSHHeading, ArticleAuthorRelation
 from app.pubmed.warning_log import WarningLog
 
 
@@ -453,7 +453,7 @@ def extract_mesh_descriptor_id(descriptor_id_str: str) -> int:
     return int(descriptor_id_str[1:])
 
 
-def extract_mesh_headings(tree) -> list[MeshHeading]:
+def extract_mesh_headings(tree) -> list[MeSHHeading]:
     """
     Extracts a list of mesh headings from the XML tree.
     """
@@ -475,6 +475,6 @@ def extract_mesh_headings(tree) -> list[MeshHeading]:
                 if child.tag == "TreeNumber":
                     tree_numbers.append(child.text)
 
-        headings.append(MeshHeading(descriptor_id, descriptor_name, tree_numbers))
+        headings.append(MeSHHeading(descriptor_id, descriptor_name, tree_numbers))
 
     return headings

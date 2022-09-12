@@ -73,7 +73,7 @@ class RegisterUser(Resource):
             return make_response(jsonify({"message": "Please enter a username and password."}), 400)
 
         if create_user(username, password):
-            return make_response(jsonify({"message": f"User '{username}' created."}), 200)
+            return make_response(jsonify({"message": f"User '{username}' created.", "success": True}), 200)
         else:
             return make_response(jsonify({"message": f"Error! User '{username}' already exists."}), 400)
 
@@ -89,4 +89,4 @@ class Logout(Resource):
         jti = jwt_payload["jti"]
         expiry = jwt_payload["exp"]
         expire_token(username, jti, expiry)
-        return make_response(jsonify({"message": "Access token revoked"}))
+        return make_response(jsonify({"message": "Access token revoked", "success": True}))
