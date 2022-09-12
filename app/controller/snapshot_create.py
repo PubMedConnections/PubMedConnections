@@ -59,9 +59,6 @@ def create_by_filters(graph_type: str, filters):
             return 'Failed to create snapshot!'
         record = result.single()
 
-        # run analytics on graph 
-        AnalyticsThreading(graph_type=filters['graph_type'], filters=filters, snapshot_id=record['snapshot_id'])
-
         return record['snapshot_id']
 
     with neo4j_conn.new_session() as neo4j_session:

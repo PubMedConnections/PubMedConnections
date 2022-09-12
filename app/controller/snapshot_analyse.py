@@ -5,6 +5,8 @@ from config import NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD
 from flask import jsonify
 import json
 import threading
+from app.controller.snapshot_get import get_snapshot
+from app.helpers import set_default_date
 
 
 class AnalyticsThreading(object):
@@ -33,6 +35,24 @@ def _update_snapshot_degree_centrality(tx, snapshot_id, degree_centrality_record
 
     # TODO error handling
 
+def _update_snapshot_betweenness_centrality(tx, snapshot_id, betweenness_centrality_record):
+    """
+    Helper function that updates a snapshot with the corresponding betweenness centrality results.
+    """
+    result = tx.run(
+        """
+        MATCH (m:DBMetadata)
+        WITH max(m.version) AS max_version
+        MATCH (d:DBMetadata)
+        WHERE d.version = max_version
+
+        MATCH (s:Snapshot { id: $snapshot_id })
+        SET s.betweenness_centrality = $betweenness_centrality
+        RETURN s
+        """, snapshot_id=snapshot_id, betweenness_centrality=betweenness_centrality_record
+    )
+
+    # TODO error handling
 
 def _retrieve_degree_centrality(tx, snapshot_id):
     """
@@ -53,45 +73,64 @@ def _retrieve_degree_centrality(tx, snapshot_id):
 
     return result.single()
 
-
-def _create_query_from_filters(filters):
+def _retrieve_betweenness_centrality(tx, snapshot_id):
     """
-    Helper function to map the input filters to query conditions. The query conditions are returned as a string.
+    Helper function to retrieve the betweenness centrality results.
+    """
+
+    result = tx.run(
+        """
+        MATCH (m:DBMetadata)
+        WITH max(m.version) AS max_version
+        MATCH (d:DBMetadata)
+        WHERE d.version = max_version
+
+        MATCH (s: Snapshot { id: $snapshot_id })
+        RETURN s.betweenness_centrality AS betweenness_centrality
+        """, snapshot_id=snapshot_id
+    )
+
+    return result.single()
+
+
+def _create_query_from_filters(snapshot):
+    """
+    Helper function to map the snapshot filters to query conditions. The query conditions are returned as a string.
     """
 
     filter_queries = []
 
-    if filters['mesh_heading'] != "":
-        filter_queries.append("toLower(m1.name) CONTAINS '{}'".format(filters['mesh_heading'].lower()))
-    if filters['author'] != "":
-        filter_queries.append("toLower(a1.name) CONTAINS '{}'".format(filters['author'].lower()))
-    if filters['first_author'] != "":
-        filter_queries.append("w.is_first_author = '{}'".format(filters['first_author']))
-    if filters['last_author'] != "":
-        filter_queries.append("w.is_last_author = '{}'".format(filters['last_author']))
-    if filters['published_after'] != "":
+    if snapshot['mesh_heading'] != "":
+        filter_queries.append("toLower(m1.name) CONTAINS '{}'".format(snapshot['mesh_heading'].lower()))
+    if snapshot['author'] != "":
+        filter_queries.append("toLower(a1.name) CONTAINS '{}'".format(snapshot['author'].lower()))
+    if snapshot['first_author'] != "":
+        filter_queries.append("w.is_first_author = '{}'".format(snapshot['first_author']))
+    if snapshot['last_author'] != "":
+        filter_queries.append("w.is_last_author = '{}'".format(snapshot['last_author']))
+    if snapshot['published_after'] != "":
         filter_queries.append(
             "ar1.date >= date({year: %i, month:%i, day:%i})" % (
-                filters['published_after'].year,
-                filters['published_after'].month,
-                filters['published_after'].day))
-    if filters['published_before'] != "":
+                snapshot['published_after'].year,
+                snapshot['published_after'].month,
+                snapshot['published_after'].day))
+    if snapshot['published_before'] != "":
         filter_queries.append(
             "ar1.date <= date({year: %i, month:%i, day:%i})" % (
-                filters['published_before'].year,
-                filters['published_before'].month,
-                filters['published_before'].day))
-    if filters['journal'] != "":
+                snapshot['published_before'].year,
+                snapshot['published_before'].month,
+                snapshot['published_before'].day))
+    if snapshot['journal'] != "":
         filter_queries.append(
             """
             EXISTS {{
                 MATCH (ar)-[:PUBLISHED_IN]->(j:Journal)
                 WHERE toLower(j.title) CONTAINS '{}'
             }}
-            """.format(filters['journal'].lower())
+            """.format(snapshot['journal'].lower())
         )
-    if filters['article'] != "":
-        filter_queries.append("toLower(ar.title) CONTAINS '{}'".format(filters['article'].lower()))
+    if snapshot['article'] != "":
+        filter_queries.append("toLower(ar.title) CONTAINS '{}'".format(snapshot['article'].lower()))
 
     return " AND ".join(filter_queries)
 
@@ -102,6 +141,8 @@ def _project_graph_and_run_analytics(graph_name: str, node_query: str, relations
 
     # print(node_query)
     # print(relationship_query)
+
+    analytics_response = {}
 
     with driver.session() as session:
         # try project graph into memory
@@ -161,7 +202,7 @@ def _project_graph_and_run_analytics(graph_name: str, node_query: str, relations
                     {
                         "id": row.nodeId,
                         "name": gds.util.asNode(row.nodeId).get('name'),
-                        "centrality": row.score
+                        "centrality": int(row.score)
                     }
                 )
 
@@ -173,119 +214,162 @@ def _project_graph_and_run_analytics(graph_name: str, node_query: str, relations
             for score, count in res['score'].value_counts().sort_index().iteritems():
                 betweenness_distributions.append(
                     {
-                        "score": score,
+                        "score": int(score),
                         "count": count
                     }
                 )
 
             # print(betweenness_distributions)
 
+            betweenness_centrality_record = json.dumps(
+                {
+                    "top_5": top_5_betweenness,
+                    "distributions": betweenness_distributions
+                }
+            )
+
+            session.write_transaction(_update_snapshot_betweenness_centrality, snapshot_id, betweenness_centrality_record)
+
             print("analytics completed")
 
             # TODO
-            # other centrality measures
-            #   could also use a weighted degree centrality (by collaborations) 
+            # could also use a weighted degree centrality (by collaborations) 
             # first/last author should be a boolean or string?
             # when the number of nodes are limited: ensure that the projected graph is the same as the one being visualised
             #   solution: pass in ids of nodes from visualised graph to the node projection
 
-            G.drop()
+            analytics_response = {
+                "degree": {
+                    "top_5": top_5_degree,
+                    "distributions": degree_distributions
+                },
+                "betweenness": {
+                    "top_5": top_5_betweenness,
+                    "distributions": betweenness_distributions
+                }
+            }
 
         # unable to project the graph into memory because there are no matches for the given filters
         except ClientError as err:
             # TODO
             print(err)
             pass
+    
+        finally:
+            G.drop()
 
     driver.close()
 
+    return analytics_response
 
-def run_analytics(graph_type: str, snapshot_id: int, filters):
+
+def run_analytics(snapshot_id: int):
     """
     Runs analytics on the graph returned by the query. The graph is either author-author
     or MeSH-MeSH.
     """
 
-    print("starting analytics")
+    # TODO fix retrieve analytics function
 
-    # TODO confirm expected behaviour when num_nodes == 0 
-    # nodes_limit_string = str(filters['num_nodes']) if filters['num_nodes'] != 0 else "100"
+    snapshot = get_snapshot(snapshot_id)
 
-    if graph_type == "author":
-        graph_name = "coauthors"
+    if snapshot == []:
+        # TODO
+        return "ERROR: snapshot does not exist"
+    
+    snapshot = snapshot[0]
 
-        filter_query_string = _create_query_from_filters(filters)
+    analytics_results = retrieve_analytics(snapshot_id)
 
-        # return all authors within a 3 hop neighbourhood of a specific author
-        # in the projected author-author graph
-        node_query = \
-            """
-            MATCH (a1:Author)-[:AUTHOR_OF*1..3]-(ar:Article)<--(a2:Author)
-            WHERE EXISTS {{
-                MATCH (a1)-[w:AUTHOR_OF]->(ar1:Article)-[:CATEGORISED_BY]->(m1:MeshHeading)
-                WHERE {}
-            }}
-            WITH COLLECT(DISTINCT id(a1)) + COLLECT(DISTINCT id(a2)) AS ids
-            UNWIND ids as id
-            RETURN id
-            """.format(filter_query_string)
+    if analytics_results == {} or \
+        'degree' not in analytics_results or \
+        'betweeness' not in analytics_results:
 
-        # create direct author-author relations based on the 3 hop neighbourhood
-        relationship_query = \
-            """
-            CALL {{
+        print("starting analytics")
+
+        # parse date strings into date time
+        snapshot = set_default_date(snapshot)
+
+        # TODO confirm expected behaviour when num_nodes == 0 
+        # nodes_limit_string = str(filters['num_nodes']) if filters['num_nodes'] != 0 else "100"
+
+        if snapshot['graph_type'] == "authors":
+            graph_name = "coauthors"
+
+            filter_query_string = _create_query_from_filters(snapshot)
+
+            # return all authors within a 3 hop neighbourhood of a specific author
+            # in the projected author-author graph
+            node_query = \
+                """
                 MATCH (a1:Author)-[:AUTHOR_OF*1..3]-(ar:Article)<--(a2:Author)
                 WHERE EXISTS {{
                     MATCH (a1)-[w:AUTHOR_OF]->(ar1:Article)-[:CATEGORISED_BY]->(m1:MeshHeading)
                     WHERE {}
                 }}
-                RETURN ar
-            }}
+                WITH COLLECT(DISTINCT id(a1)) + COLLECT(DISTINCT id(a2)) AS ids
+                UNWIND ids as id
+                RETURN id
+                """.format(filter_query_string)
 
-            MATCH (a1:Author)-[:AUTHOR_OF]->(ar:Article)<-[:AUTHOR_OF]-(a2:Author)
-            WITH a1, a2, count(*) AS c WHERE c > {min_colaborations}
-            RETURN id(a1) as source, id(a2) as target, apoc.create.vRelationship(a1, "COAUTHOR", {{count: c}}, a2) as rel
-            """.format(filter_query_string, min_colaborations=0)
+            # create direct author-author relations based on the 3 hop neighbourhood
+            relationship_query = \
+                """
+                CALL {{
+                    MATCH (a1:Author)-[:AUTHOR_OF*1..3]-(ar:Article)<--(a2:Author)
+                    WHERE EXISTS {{
+                        MATCH (a1)-[w:AUTHOR_OF]->(ar1:Article)-[:CATEGORISED_BY]->(m1:MeshHeading)
+                        WHERE {}
+                    }}
+                    RETURN ar
+                }}
 
-        _project_graph_and_run_analytics(graph_name, node_query, relationship_query, snapshot_id)
+                MATCH (a1:Author)-[:AUTHOR_OF]->(ar:Article)<-[:AUTHOR_OF]-(a2:Author)
+                WITH a1, a2, count(*) AS c WHERE c > {min_colaborations}
+                RETURN id(a1) as source, id(a2) as target, apoc.create.vRelationship(a1, "COAUTHOR", {{count: c}}, a2) as rel
+                """.format(filter_query_string, min_colaborations=0)
 
-    elif graph_type == "mesh":
-        graph_name = "comeshs"
+            analytics_results = _project_graph_and_run_analytics(graph_name, node_query, relationship_query, snapshot_id)
 
-        filter_query_string = _create_query_from_filters(filters)
+        elif snapshot['graph_type'] == "mesh":
+            graph_name = "comeshs"
 
-        # return all mesh headings within a 3 hop neighbourhood of a specific author
-        node_query = \
-            """
-            MATCH (ar:Article)-[:CATEGORISED_BY]->(m:MeshHeading) 
-            WHERE EXISTS {{
+            filter_query_string = _create_query_from_filters(snapshot)
+
+            # return all mesh headings within a 3 hop neighbourhood of a specific author
+            node_query = \
+                """
+                MATCH (ar:Article)-[:CATEGORISED_BY]->(m:MeshHeading) 
+                WHERE EXISTS {{
+                    MATCH (a1:Author)-[:AUTHOR_OF*1..3]->(ar:Article)
+                    WHERE EXISTS {{
+                        MATCH (a1)-[w:AUTHOR_OF]->(ar1:Article)-[:CATEGORISED_BY]->(m1:MeshHeading) 
+                        WHERE {}
+                    }}
+                }}
+                RETURN id(m) as id
+                """.format(filter_query_string)
+
+            # create direct mesh heading-mesh heading relations based on the 3 hop neighbourhood
+            relationship_query = \
+                """
+                CALL {{
                 MATCH (a1:Author)-[:AUTHOR_OF*1..3]->(ar:Article)
                 WHERE EXISTS {{
-                    MATCH (a1)-[w:AUTHOR_OF]->(ar1:Article)-[:CATEGORISED_BY]->(m1:MeshHeading) 
-                    WHERE {}
+                    MATCH (a1)-[w:AUTHOR_OF]->(ar1:Article)-[:CATEGORISED_BY]->(m1:MeshHeading)  
+                        WHERE {}
+                    }}
+                    RETURN ar
                 }}
-            }}
-            RETURN id(m) as id
-            """.format(filter_query_string)
 
-        # create direct mesh heading-mesh heading relations based on the 3 hop neighbourhood
-        relationship_query = \
-            """
-            CALL {{
-            MATCH (a1:Author)-[:AUTHOR_OF*1..3]->(ar:Article)
-            WHERE EXISTS {{
-                MATCH (a1)-[w:AUTHOR_OF]->(ar1:Article)-[:CATEGORISED_BY]->(m1:MeshHeading)  
-                    WHERE {}
-                }}
-                RETURN ar
-            }}
+                MATCH (m1:MeshHeading)<-[:CATEGORISED_BY]-(ar:Article)-[:CATEGORISED_BY]->(m2:MeshHeading)
+                WITH m1, m2, count(*) AS c WHERE c > {min_colaborations}
+                RETURN id(m1) as source, id(m2) as target, apoc.create.vRelationship(m1, "COAUTHOR", {{count: c}}, m2) as rel
+                """.format(filter_query_string, min_colaborations=0)
 
-            MATCH (m1:MeshHeading)<-[:CATEGORISED_BY]-(ar:Article)-[:CATEGORISED_BY]->(m2:MeshHeading)
-            WITH m1, m2, count(*) AS c WHERE c > {min_colaborations}
-            RETURN id(m1) as source, id(m2) as target, apoc.create.vRelationship(m1, "COAUTHOR", {{count: c}}, m2) as rel
-            """.format(filter_query_string, min_colaborations=0)
+            analytics_results = _project_graph_and_run_analytics(graph_name, node_query, relationship_query, snapshot_id)
 
-        _project_graph_and_run_analytics(graph_name, node_query, relationship_query, snapshot_id)
+    return jsonify(analytics_results)
 
 
 def retrieve_analytics(snapshot_id: int):
@@ -294,27 +378,28 @@ def retrieve_analytics(snapshot_id: int):
     """
 
     driver = GraphDatabase.driver(uri=NEO4J_URI)
+
+    analytics_response = {}
+
     with driver.session() as session:
 
         # retrieve the degree centrality record
         degree_centrality_record = session.read_transaction(_retrieve_degree_centrality, snapshot_id)
 
-        if degree_centrality_record is not None:
+        if degree_centrality_record.data() is not None:
 
             # if the degree centrality record is the empty string it means the analytics results
             # have not yet been added to the db
-            if (degree_centrality_record.data()['degree_centrality'] != ""):
+            if (degree_centrality_record.data()['degree_centrality'] is not None and degree_centrality_record.data()['degree_centrality'] != ""):
                 degree_centrality = json.loads(degree_centrality_record.data()['degree_centrality'])
+                analytics_response['degree'] = degree_centrality
 
-                # construct response
-                analytics_response = {
-                    "principle_connectors": degree_centrality
-                }
+        # retrieve the betweenness_centrality record
+        betweenness_centrality_record = session.read_transaction(_retrieve_betweenness_centrality, snapshot_id)
 
-                return jsonify(analytics_response)
-
-            else:
-                return "analytics have not completed yet"
-
-        else:
-            return "ERROR: snapshot does not exist"
+        if betweenness_centrality_record.data() is not None:
+            if (betweenness_centrality_record.data()['betweenness_centrality'] is not None and betweenness_centrality_record.data()['betweenness_centrality'] != ""):
+                betweenness_centrality = json.loads(betweenness_centrality_record.data()['betweenness_centrality'])
+                analytics_response['betweenness'] = betweenness_centrality
+        
+    return analytics_response

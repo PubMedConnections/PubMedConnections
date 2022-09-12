@@ -5,7 +5,7 @@ from app.controller.snapshot_visualise import query_by_snapshot_id, parse_dates,
 from app.controller.snapshot_create import create_by_filters
 from app.controller.snapshot_get import get_snapshot, get_user_snapshots
 from app.controller.snapshot_delete import delete_by_snapshot_id
-from app.controller.snapshot_analyse import retrieve_analytics
+from app.controller.snapshot_analyse import run_analytics
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.pubmed.filtering import PubMedFilterLimitError, PubMedFilterValueError
 
@@ -110,7 +110,7 @@ class AnalyseSnapshot(Resource):
     @jwt_required()
     @ns.doc(params={'snapshot_id': {'default': '1'}}, security="api_key")
     def get(snapshot_id: int):
-        return retrieve_analytics(snapshot_id)
+        return run_analytics(snapshot_id)
 
 @ns.route('/list/')
 class VisualiseSnapshot(Resource):

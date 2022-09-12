@@ -225,8 +225,12 @@ def query_by_snapshot_id(snapshot_id):
 
 def get_author_graph(filters):
     filter_query_string = _create_query_from_filters(filters)
-
+    # TODO 
+    #   implement LIMIT in query
+    #   deal with author with no co-authors
+    #   add min_colaborations filter?
     def three_hop_author_neighbourhood_query(tx):
+        # MATCH (a1:Author)-[:AUTHOR_OF*1..3]-(ar:Article)<--(a2:Author)        
         return list(
             tx.run(
                 """
