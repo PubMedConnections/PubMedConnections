@@ -135,12 +135,108 @@ def _create_query_from_filters(snapshot):
     return " AND ".join(filter_queries)
 
 
+def build_generic_query(snapshot):
+    query = ""
+
+    query_journals = snapshot['journal'] != ""
+    query_mesh = snapshot['mesh_heading'] != ""
+
+    if query_journals:
+        query += "MATCH (journal:Journal)\n"
+        query += f"WHERE\n\ttoLower(journal.title) CONTAINS '{snapshot['journal'].lower()}'\n"
+    
+    if query_mesh:
+        query += "MATCH (mesh_heading:MeshHeading)\n"
+        query += f"WHERE\n\ttoLower(mesh_heading.name) CONTAINS '{snapshot['mesh_heading'].lower()}'\n"
+    
+    article_filters = []
+    if snapshot['article'] != "":
+        article_filters.append(f"toLower(article.title) CONTAINS '{snapshot['article'].lower()}'")
+    if snapshot['published_after'] != "":
+        article_filters.append(
+            "article.date >= date({year: %i, month:%i, day:%i})" % (
+                snapshot['published_after'].year,
+                snapshot['published_after'].month,
+                snapshot['published_after'].day))
+    if snapshot['published_before'] != "":
+        article_filters.append(
+            "article.date <= date({year: %i, month:%i, day:%i})" % (
+                snapshot['published_before'].year,
+                snapshot['published_before'].month,
+                snapshot['published_before'].day))
+    
+    if len(article_filters) > 0 or snapshot['author'] != "" or snapshot['first_author'] != "" or snapshot['last_author'] != "":
+        left = ""
+        right = ""
+        if query_journals:
+            left = "(journal) <-[article_published_in:PUBLISHED_IN]- "
+        if query_mesh:
+            right = " -[article_categorised_by:CATEGORISED_BY]-> (mesh_heading)"
+
+        query += f"MATCH {left}(article:Article){right}\n"
+
+        if len(article_filters) > 0:
+            query += "WHERE\n\t"
+            query += "\n\tAND ".join(article_filters) + "\n"
+
+    query += "MATCH (author:Author) -[author_rel:AUTHOR_OF]-> (article)\n"
+    author_filters = []
+    if snapshot['author'] != "":
+        author_filters.append(f"toLower(author.name) CONTAINS '{snapshot['author'].lower()}'")
+    if snapshot['first_author'] != "":
+        article_filters.append(f"author_rel.is_first_author = '{snapshot['first_author']}'")
+    if snapshot['last_author'] != "":
+        article_filters.append(f"author_rel.is_last_author = '{snapshot['last_author']}'")
+
+    if len(author_filters) > 0:
+        query += "WHERE\n\t"
+        query += "\n\tAND ".join(author_filters) + "\n"
+
+    query += "OPTIONAL MATCH (author:Author) --> (article) <-- (coauthor:Author)\n"
+    # query += "RETURN\n"
+    # query += "\tDISTINCT author, coauthor"
+
+    # TODO LIMIT
+
+    return query
+
+def build_node_query(snapshot):
+    query = build_generic_query(snapshot)
+    
+    query += "WITH COLLECT(DISTINCT id(author)) + COLLECT(DISTINCT id(coauthor)) AS ids\n"
+    query += "UNWIND ids as id\n"
+    query += "RETURN DISTINCT id\n"
+    
+    # query += "WITH COLLECT(DISTINCT author) + COLLECT(DISTINCT coauthor) AS authors\n"
+    # query += "UNWIND authors as a\n"
+    # query += "RETURN DISTINCT a\n"
+
+    # query += "\tDISTINCT author, coauthor"
+    
+    return query
+
+def build_relationship_query(snapshot):
+    query = build_generic_query(snapshot)
+    
+    query = "CALL {\n" + query
+    query += "RETURN DISTINCT article\n"
+    query += "}\n\n"
+
+    query += "MATCH (author1:Author)-[:AUTHOR_OF]->(article:Article)<-[:AUTHOR_OF]-(author2:Author)\n"
+    query += "WITH author1, author2, count(*) AS c\n"
+    query += "RETURN id(author1) as source, id(author2) as target, apoc.create.vRelationship(author1, 'COAUTHOR', {count: c}, author2) as rel"
+
+    # # for testing purposes
+    # query += "RETURN author1, author2, apoc.create.vRelationship(author1, 'COAUTHOR', {count: c}, author2) as rel"
+    
+    return query
+
 def _project_graph_and_run_analytics(graph_name: str, node_query: str, relationship_query: str, snapshot_id: int):
     driver = GraphDatabase.driver(uri=NEO4J_URI)
     gds = GraphDataScience(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
 
-    # print(node_query)
-    # print(relationship_query)
+    print(node_query)
+    print(relationship_query)
 
     analytics_response = {}
 
@@ -249,14 +345,13 @@ def _project_graph_and_run_analytics(graph_name: str, node_query: str, relations
                 }
             }
 
+            G.drop()
+
         # unable to project the graph into memory because there are no matches for the given filters
         except ClientError as err:
             # TODO
             print(err)
             pass
-    
-        finally:
-            G.drop()
 
     driver.close()
 
@@ -293,81 +388,15 @@ def run_analytics(snapshot_id: int):
         # TODO confirm expected behaviour when num_nodes == 0 
         # nodes_limit_string = str(filters['num_nodes']) if filters['num_nodes'] != 0 else "100"
 
-        if snapshot['graph_type'] == "authors":
-            graph_name = "coauthors"
+        graph_name = "coauthors"
 
-            filter_query_string = _create_query_from_filters(snapshot)
+        # return matching author nodes
+        node_query = build_node_query(snapshot)
 
-            # return all authors within a 3 hop neighbourhood of a specific author
-            # in the projected author-author graph
-            node_query = \
-                """
-                MATCH (a1:Author)-[:AUTHOR_OF*1..3]-(ar:Article)<--(a2:Author)
-                WHERE EXISTS {{
-                    MATCH (a1)-[w:AUTHOR_OF]->(ar1:Article)-[:CATEGORISED_BY]->(m1:MeshHeading)
-                    WHERE {}
-                }}
-                WITH COLLECT(DISTINCT id(a1)) + COLLECT(DISTINCT id(a2)) AS ids
-                UNWIND ids as id
-                RETURN id
-                """.format(filter_query_string)
+        # create co-author relationships between these authors
+        relationship_query = build_relationship_query(snapshot)
 
-            # create direct author-author relations based on the 3 hop neighbourhood
-            relationship_query = \
-                """
-                CALL {{
-                    MATCH (a1:Author)-[:AUTHOR_OF*1..3]-(ar:Article)<--(a2:Author)
-                    WHERE EXISTS {{
-                        MATCH (a1)-[w:AUTHOR_OF]->(ar1:Article)-[:CATEGORISED_BY]->(m1:MeshHeading)
-                        WHERE {}
-                    }}
-                    RETURN ar
-                }}
-
-                MATCH (a1:Author)-[:AUTHOR_OF]->(ar:Article)<-[:AUTHOR_OF]-(a2:Author)
-                WITH a1, a2, count(*) AS c WHERE c > {min_colaborations}
-                RETURN id(a1) as source, id(a2) as target, apoc.create.vRelationship(a1, "COAUTHOR", {{count: c}}, a2) as rel
-                """.format(filter_query_string, min_colaborations=0)
-
-            analytics_results = _project_graph_and_run_analytics(graph_name, node_query, relationship_query, snapshot_id)
-
-        elif snapshot['graph_type'] == "mesh":
-            graph_name = "comeshs"
-
-            filter_query_string = _create_query_from_filters(snapshot)
-
-            # return all mesh headings within a 3 hop neighbourhood of a specific author
-            node_query = \
-                """
-                MATCH (ar:Article)-[:CATEGORISED_BY]->(m:MeshHeading) 
-                WHERE EXISTS {{
-                    MATCH (a1:Author)-[:AUTHOR_OF*1..3]->(ar:Article)
-                    WHERE EXISTS {{
-                        MATCH (a1)-[w:AUTHOR_OF]->(ar1:Article)-[:CATEGORISED_BY]->(m1:MeshHeading) 
-                        WHERE {}
-                    }}
-                }}
-                RETURN id(m) as id
-                """.format(filter_query_string)
-
-            # create direct mesh heading-mesh heading relations based on the 3 hop neighbourhood
-            relationship_query = \
-                """
-                CALL {{
-                MATCH (a1:Author)-[:AUTHOR_OF*1..3]->(ar:Article)
-                WHERE EXISTS {{
-                    MATCH (a1)-[w:AUTHOR_OF]->(ar1:Article)-[:CATEGORISED_BY]->(m1:MeshHeading)  
-                        WHERE {}
-                    }}
-                    RETURN ar
-                }}
-
-                MATCH (m1:MeshHeading)<-[:CATEGORISED_BY]-(ar:Article)-[:CATEGORISED_BY]->(m2:MeshHeading)
-                WITH m1, m2, count(*) AS c WHERE c > {min_colaborations}
-                RETURN id(m1) as source, id(m2) as target, apoc.create.vRelationship(m1, "COAUTHOR", {{count: c}}, m2) as rel
-                """.format(filter_query_string, min_colaborations=0)
-
-            analytics_results = _project_graph_and_run_analytics(graph_name, node_query, relationship_query, snapshot_id)
+        analytics_results = _project_graph_and_run_analytics(graph_name, node_query, relationship_query, snapshot_id)
 
     return jsonify(analytics_results)
 
