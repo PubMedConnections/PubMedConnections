@@ -57,48 +57,48 @@ const Graph = () => {
   });
 
   function loadGraphData() {
-    const delayDebounceLoad = setTimeout(() => {
-        if (VISJSNetwork == null) {
-            return
-        }
-        setGraphInfo({
-            options: graphInfo.options,
-            data: {
-              nodes: [],
-              edges: [],
-            }
-        });
-        setLoadingProgress(-1);
+      const delayDebounceLoad = setTimeout(() => {
+          if (VISJSNetwork == null)
+              return;
 
-        POST('snapshot/visualise/', filters)
-            .then((resp) => {
-                if (resp.status !== 200) {
-                    // TODO : Display this to the user.
-                    console.error("Something went wrong: " + resp.status)
-                    console.error(resp);
-                    setLoadingProgress(100)
-                    return;
-                }
+          setGraphInfo({
+              options: graphInfo.options,
+              data: {
+                  nodes: [],
+                  edges: [],
+              }
+          });
+          setLoadingProgress(-1);
 
-                const data = resp.data;
-                if (data.error) {
-                    // TODO : Display this to the user.
-                    console.error(data.error);
-                    setLoadingProgress(100)
-                    return;
-                }
+          POST('snapshot/visualise/', filters)
+              .then((resp) => {
+                  if (resp.status !== 200) {
+                      // TODO : Display this to the user.
+                      console.error("Something went wrong: " + resp.status)
+                      console.error(resp);
+                      setLoadingProgress(100)
+                      return;
+                  }
 
-                let graphData = {
-                    nodes: resp.data.nodes,
-                    edges: resp.data.edges
-                }
-                setGraphInfo({
-                    options: graphInfo.options,
-                    data: graphData
-                });
-                setLoadingProgress(100)
-            })
-    }, 1500)
+                  const data = resp.data;
+                  if (data.error) {
+                      // TODO : Display this to the user.
+                      console.error(data.error);
+                      setLoadingProgress(100)
+                      return;
+                  }
+
+                  let graphData = {
+                      nodes: resp.data.nodes,
+                      edges: resp.data.edges
+                  }
+                  setGraphInfo({
+                      options: graphInfo.options,
+                      data: graphData
+                  });
+                  setLoadingProgress(100)
+              })
+      }, 1500)
 
       return () => clearTimeout(delayDebounceLoad);
   }
@@ -106,17 +106,24 @@ const Graph = () => {
   useEffect(loadGraphData, [VISJSNetwork, filters])
 
   return <div className="full-size">
-    <VisJSGraph className="full-size" graph={graphInfo.data} options={graphInfo.options}
-      getNetwork={(network) => {
-          setNetwork(network);
-      }}
-    />
-      {loadingProgress < 100 && <div id="visjs-loading-cover">
-      <div id="visjs-progress-container">
-        <LinearProgress />
-      </div>
-    </div>}
-  </div>;
+      <VisJSGraph className="full-size" graph={graphInfo.data} options={graphInfo.options}
+          getNetwork={setNetwork} />
+
+      {loadingProgress < 100 &&
+          <div id="visjs-loading-cover">
+              <div id="visjs-progress-container">
+                  <LinearProgress />
+              </div>
+          </div>
+      }
+
+      {loadingProgress >= 100 &&
+          <div id="visjs-graph-info">
+              {graphInfo.data.nodes.length.toLocaleString()} Nodes,&nbsp;
+              {graphInfo.data.edges.length.toLocaleString()} Edges
+          </div>
+      }
+    </div>;
 };
 
 export default Graph;
