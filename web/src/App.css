@@ -167,7 +167,7 @@ code {
 }
 
 .filter-entry-slider>span {
-    padding-right: 1em;
+    display: block;
 }
 
 #sidebar-user-details {
