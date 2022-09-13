@@ -4,8 +4,8 @@ const resetState = {
     filters: {
         mesh_heading: "",
         author: "",
-        first_author: false,
-        last_author: false,
+        first_author: true,
+        last_author: true,
         published_before: "",
         published_after: "",
         journal: "",
@@ -18,12 +18,17 @@ const resetState = {
 
 const initialState = {
     filters: {
-        ...resetState.filters,
         mesh_heading: "Brain Stem Neoplasms",
         author: "J ",
     },
-    activeFilters: ['mesh_heading', "author"]
+    activeFilters: ["mesh_heading", "author"]
 };
+
+function copyAndRemoveElement(obj, key) {
+    const newObj = { ...obj };
+    delete newObj[key];
+    return newObj;
+}
 
 export const filterSlice = createSlice({
     name: 'filters',
@@ -34,30 +39,36 @@ export const filterSlice = createSlice({
             return state;
         },
         resetFilter: (state, action) => {
-            state.filters = { ...state.filters, [action.payload.filter]: resetState.filters[action.payload.filter] };
+            state.filters = copyAndRemoveElement(state.filters, action.payload.filter);
             return state;
         },
         setActiveFilters: (state, action) => {
             state.activeFilters = action.payload.filters;
+            // Reset the value of any new filters, and remove any old filters.
+            const newFilters = {};
+            for (let index = 0; index < action.payload.filters.length; ++index) {
+                const filter = action.payload.filters[index];
+                newFilters[filter] = (state.filters[filter] !== undefined ? state : resetState).filters[filter];
+            }
+            state.filters = newFilters;
             return state;
         },
         removeActiveFilter: (state, action) => {
-            let index = state.activeFilters.indexOf(action.payload.filter);
+            const index = state.activeFilters.indexOf(action.payload.filter);
             if (index > -1) {
                 state.activeFilters.splice(index, 1)
-                state.filters = { ...state.filters, [action.payload.filter]: resetState.filters[action.payload.filter] };
+                state.filters = copyAndRemoveElement(state.filters, action.payload.filter);
             }
             return state;
         },
         setFilters: (state, action) => {
-            state.filters = {...resetState.filters,  ...action.payload};
-            state.activeFilters = []
-            Object.keys(resetState.filters).forEach((f) => {
-                if (resetState.filters[f] !== action.payload[f]) {
-                    state.activeFilters.push(f);
+            state.filters = { ...action.payload };
+            state.activeFilters = [];
+            for (let filter in action.payload) {
+                if (action.payload.hasOwnProperty(filter)) {
+                    state.activeFilters.push(filter);
                 }
-            })
-
+            }
             return state;
         }
     },

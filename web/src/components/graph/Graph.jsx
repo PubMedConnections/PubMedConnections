@@ -103,7 +103,7 @@ const Graph = () => {
       return () => clearTimeout(delayDebounceLoad);
   }
 
-  useEffect(loadGraphData, [VISJSNetwork, filters])
+  useEffect(loadGraphData, [VISJSNetwork, filters]);
 
   return <div className="full-size">
       <VisJSGraph className="full-size" graph={graphInfo.data} options={graphInfo.options}

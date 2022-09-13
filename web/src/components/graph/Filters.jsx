@@ -9,6 +9,8 @@ import {
     MenuItem,
     ListItemText,
     Slider,
+    FormControl,
+    InputLabel,
     FormControlLabel
 } from '@mui/material'
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -82,9 +84,13 @@ const Filters = () => {
     }
 
     function makeTextFieldEntry(classifier, identifier, label) {
+        const currentFilterValue = filters[identifier];
+        if (currentFilterValue === undefined)
+            return <></>;
+
         const textInput = <TextField
             label={label}
-            value={filters[identifier]}
+            value={currentFilterValue}
             onChange={updateStateFromEventValueCallbackGenerator(identifier)}
         />;
 
@@ -92,10 +98,14 @@ const Filters = () => {
     }
 
     function makeDateFieldEntry(classifier, identifier, label) {
+        const currentFilterValue = filters[identifier];
+        if (currentFilterValue === undefined)
+            return <></>;
+
         const picker = <DatePicker
             key={"filters-entry-" + identifier}
             label={label}
-            value={filters[identifier]}
+            value={currentFilterValue}
             onChange={updateStateDateCallbackGenerator(identifier)}
             renderInput={(params) => <TextField {...params} />}
             inputFormat="DD/MM/YYYY"
@@ -105,12 +115,16 @@ const Filters = () => {
     }
 
     function makeCheckboxFieldEntry(classifier, identifier, label) {
+        const currentFilterValue = filters[identifier];
+        if (currentFilterValue === undefined)
+            return <></>;
+
         const textAndCheckbox = <FormControlLabel
             control={
                 <Checkbox
                     key={"filters-entry-" + identifier}
                     label={label}
-                    checked={filters[identifier]}
+                    checked={currentFilterValue}
                     onChange={updateStateFromEventCheckedCallbackGenerator(identifier)}
                 />
             }
@@ -120,7 +134,11 @@ const Filters = () => {
         return makeFilterEntry(classifier, identifier, textAndCheckbox);
     }
 
-    function makeNodeCountSliderFieldEntry(classifier, identifier, label) {
+    function makeNodeCountSliderEntry(classifier, identifier, label) {
+        const currentFilterValue = filters[identifier];
+        if (currentFilterValue === undefined)
+            return <></>;
+
         const scale = [200, 400, 600, 800, 1000, 1250, 1500, 1750, 2000, 2500, 3000, 4000, 5000, 10000];
 
         function calculateValue(value) {
@@ -144,7 +162,7 @@ const Filters = () => {
             <Slider
                 key={"filters-entry-" + identifier}
                 aria-label={label}
-                value={reverseValue(filters.graph_size)}
+                value={reverseValue(currentFilterValue)}
                 onChange={updateStateCallbackGenerator("graph_size", (event) => calculateValue(event.target.value))}
                 marks
                 min={0}
@@ -161,6 +179,25 @@ const Filters = () => {
         return makeFilterEntry(classifier, identifier, slider);
     }
 
+    function makeGraphTypeEntry(classifier, identifier, label) {
+        const currentFilterValue = filters[identifier];
+        if (currentFilterValue === undefined)
+            return <></>;
+
+        const selector = <FormControl>
+            <InputLabel>{label}</InputLabel>
+            <Select
+                label={label}
+                value={currentFilterValue}
+                onChange={updateStateFromEventValueCallbackGenerator("graph_type")}>
+                    <MenuItem value={"author"}>Author</MenuItem>
+                    <MenuItem value={"mesh"}>Journal</MenuItem>
+            </Select>
+        </FormControl>;
+
+        return makeFilterEntry(classifier, identifier, selector);
+    }
+
     let filterComponents = {
         mesh_heading: makeTextFieldEntry(filterCategories.Article,"mesh_heading", "MeSH"),
         author: makeTextFieldEntry(filterCategories.Author,"author", "Name"),
@@ -172,14 +209,8 @@ const Filters = () => {
         published_before: makeDateFieldEntry(filterCategories.Article,"published_before", "Before"),
         journal: makeTextFieldEntry(filterCategories.Journal,"journal", "Journal"),
         article: makeTextFieldEntry(filterCategories.Article,"article", "Title"),
-        graph_size: makeNodeCountSliderFieldEntry(filterCategories.Author, "graph_size", "Max Graph Size"),
-        graph_type: makeFilterEntry(filterCategories.Graph,"graph_type", <Select
-            value={filters.graph_type}
-            onChange={updateStateCallbackGenerator("graph_type")}
-            >
-                <MenuItem value={"author"}>Author</MenuItem>
-                <MenuItem value={"mesh"}>Journal</MenuItem>
-        </Select>)
+        graph_size: makeNodeCountSliderEntry(filterCategories.Author, "graph_size", "Max Graph Size"),
+        graph_type: makeGraphTypeEntry(filterCategories.Graph, "graph_type", "Graph Type")
 
     }
     let selectedFilterComponents = activeFilters.map(f => filterComponents[f]);
@@ -202,30 +233,33 @@ const Filters = () => {
         dispatch(setActiveFilters({filters: value}))
     };
 
+    const activeFiltersSelector = <FormControl size="small">
+        <InputLabel>Active Filters</InputLabel>
+        <Select multiple
+                label="Active Filters"
+                value={activeFilters}
+                onChange={handleFilterSelectionChange}
+                displayEmpty={true}
+                renderValue={(selected) => {
+                    if (selected.length === 0) {
+                        return <Button variant="text" startIcon={<Add />} style={{padding: 0}}>
+                            Click to Add Filters
+                        </Button>
+                    } else {
+                        return selected.length + " Selected Filter" + (selected.length > 1 ? "s" : "");
+                    }
+                }}
+                sx={{border: "white"}}>
+            {Object.keys(filterNames).map(f =>
+                <MenuItem key={f} value={f}>
+                    <Checkbox checked={activeFilters.indexOf(f) > -1} />
+                    <ListItemText primary={filterNames[f]} />
+                </MenuItem>)}
+        </Select>
+    </FormControl>;
+
     return <div id="filters">
-        <div id="add-filters">
-            <Select multiple
-                    value={activeFilters}
-                    onChange={handleFilterSelectionChange}
-                    displayEmpty={true}
-                    renderValue={(selected) => {
-                        if (selected.length === 0) {
-                            return <Button variant="text" startIcon={<Add />} style={{padding: 0}}>
-                                Add new filter
-                            </Button>
-                        } else {
-                            return selected.length + " filter" + (selected.length !== 1 ? "s" : "");
-                        }
-                    }}
-                    sx={{border: "white"}}
-            >
-                {Object.keys(filterNames).map(f =>
-                    <MenuItem key={f} value={f}>
-                        <Checkbox checked={activeFilters.indexOf(f) > -1} />
-                        <ListItemText primary={filterNames[f]} />
-                    </MenuItem>)}
-            </Select>
-        </div>
+        <div id="add-filters">{activeFiltersSelector}</div>
         <LocalizationProvider dateAdapter={AdapterDayjs}>
             {selectedFilterComponents}
         </LocalizationProvider>

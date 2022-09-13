@@ -13,16 +13,17 @@ from app.pubmed.filtering import PubMedFilterBuilder
 from app.pubmed.model import MeSHHeading, Article
 
 
-def parse_dates(filters):
-    if filters['published_after'] == '':
-        del filters['published_after']
-    else:
-        filters['published_after'] = datetime.strptime(filters['published_after'], '%Y-%m-%d')
+def parse_date(date_str) -> datetime:
+    return datetime.strptime(date_str, '%Y-%m-%d')
 
-    if filters['published_before'] == '':
-        del filters['published_before']
-    else:
-        filters['published_before'] = datetime.strptime(filters['published_before'], '%Y-%m-%d')
+
+def parse_dates(filters):
+    if "published_after" in filters:
+        filters["published_after"] = parse_date(filters["published_after"])
+
+    if "published_before" in filters:
+        filters["published_before"] = parse_date(filters["published_before"])
+
     return filters
 
 

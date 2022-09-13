@@ -101,7 +101,8 @@ code {
 #add-filters {
   width: 100%;
   text-align: center;
-  margin-top: 5px;
+  margin-top: 1.2em;
+  margin-bottom: 1.6em;
 }
 
 #add-filters>div {
