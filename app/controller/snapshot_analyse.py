@@ -283,7 +283,7 @@ def run_analytics(snapshot_id: int):
 
     if analytics_results == {} or \
         'degree' not in analytics_results or \
-        'betweeness' not in analytics_results:
+        'betweenness' not in analytics_results:
 
         print("starting analytics")
 
