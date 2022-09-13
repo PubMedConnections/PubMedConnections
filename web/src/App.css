@@ -54,9 +54,12 @@ code {
 }
 
 /** Filters **/
+#root header {
+    height: 72px;
+}
 #filter-dropdown {
   position: absolute;
-  top: 75px;
+  top: 72px;
   border: 1px solid rgba(200, 200, 200, 1);
   box-shadow: 0 0 5px gray;
   z-index: 999;
