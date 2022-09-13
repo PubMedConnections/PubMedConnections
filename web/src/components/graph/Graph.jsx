@@ -43,7 +43,7 @@ const Graph = () => {
       physics: {
           maxVelocity: 20,
           repulsion: {
-              nodeDistance: 10,
+              nodeDistance: 100,
               centralGravity: 1,
               damping: 0.05,
               springConstant: 0.01,

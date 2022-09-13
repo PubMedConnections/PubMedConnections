@@ -1,3 +1,4 @@
+import sys
 import textwrap
 from typing import Any
 
@@ -55,19 +56,17 @@ def construct_graph_filter(filters: dict[str, Any]) -> PubMedFilterBuilder:
         if len(author_name.strip()) > 0:
             filter_builder.add_author_name_filter(author_name)
 
-    # TODO : Should be changed to a boolean flag
     if "first_author" in filters:
-        author_name = filters["first_author"]
+        restrict_to_first_author = filters["first_author"]
         del filters["first_author"]
-        if len(author_name.strip()) > 0:
-            filter_builder.add_first_author_name_filter(author_name)
+        if restrict_to_first_author:
+            filter_builder.add_first_author_filter()
 
-    # TODO : Should be changed to a boolean flag
     if "last_author" in filters:
-        author_name = filters["last_author"]
+        restrict_to_last_author = filters["last_author"]
         del filters["last_author"]
-        if len(author_name.strip()) > 0:
-            filter_builder.add_last_author_name_filter(author_name)
+        if restrict_to_last_author:
+            filter_builder.add_last_author_filter()
 
     if "article" in filters:
         article_name = filters["article"]
@@ -77,13 +76,26 @@ def construct_graph_filter(filters: dict[str, Any]) -> PubMedFilterBuilder:
 
     if "published_after" in filters:
         filter_date = filters["published_after"]
+        del filters["published_after"]
         boundary_date = date(year=filter_date.year, month=filter_date.month, day=filter_date.day)
         filter_builder.add_published_after_filter(boundary_date)
 
     if "published_before" in filters:
         filter_date = filters["published_before"]
+        del filters["published_before"]
         boundary_date = date(year=filter_date.year, month=filter_date.month, day=filter_date.day)
         filter_builder.add_published_before_filter(boundary_date)
+
+    if "graph_size" in filters:
+        node_limit = filters["graph_size"]
+        del filters["graph_size"]
+        filter_builder.set_node_limit(node_limit)
+    else:
+        # Sensible default limit
+        filter_builder.set_node_limit(2000)
+
+    if len(filters) != 0:
+        print("Unknown filters present: " + str(filters), file=sys.stderr)
 
     return filter_builder
 
@@ -119,7 +131,6 @@ def query_coauthor_graph(filters: dict[str, Any]):
     that returns the central authors to expand upon.
     """
     graph_filter = construct_graph_filter(filters)
-    graph_filter.set_node_limit(1000)
     with neo4j_conn.new_session() as session:
         filter_results = graph_filter.build(force_authors=True).run(session)
         co_author_graph_results = session.run(

@@ -4,13 +4,13 @@ const resetState = {
     filters: {
         mesh_heading: "",
         author: "",
-        first_author: "",
-        last_author: "",
+        first_author: false,
+        last_author: false,
         published_before: "",
         published_after: "",
         journal: "",
         article: "",
-        graph_size: 100,
+        graph_size: 1000,
         graph_type: "author",
     },
     activeFilters: []

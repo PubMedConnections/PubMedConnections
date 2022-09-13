@@ -164,14 +164,12 @@ class PubMedFilterBuilder:
         """ Adds a filter by the name of authors. """
         self._author_filters.append(self._create_text_filter("author.name", "author", author_name))
 
-    def add_first_author_name_filter(self, author_name: str):
-        """ Adds a filter by the name of authors. """
-        self.add_author_name_filter(author_name)
+    def add_first_author_filter(self):
+        """ Adds a filter to only select first authors of articles. """
         self._author_filters.append("author_rel.is_first_author")
 
-    def add_last_author_name_filter(self, author_name: str):
-        """ Adds a filter by the name of authors. """
-        self.add_author_name_filter(author_name)
+    def add_last_author_filter(self):
+        """ Adds a filter to only select last authors of articles. """
         self._author_filters.append("author_rel.is_last_author")
 
     def add_published_after_filter(self, boundary_date: datetime.date):
