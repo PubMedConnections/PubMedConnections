@@ -14,7 +14,7 @@ import {useDispatch, useSelector} from 'react-redux'
 import {clearAuth} from "../../store/slices/userSlice";
 import {setFilters} from '../../store/slices/filterSlice'
 import {Save} from "@mui/icons-material";
-
+import Modal, { ModalBody, ModalFooter, ModalHeader } from '../graph/Modal';
 const drawerWidth = 450;
 
 function SnapshotSidebar() {
@@ -24,6 +24,8 @@ function SnapshotSidebar() {
   const dispatch = useDispatch();
 
   const [snapshots, setSnapshots] = useState([]);
+
+  const [showModal, setShowModal] = useState(false);
 
   function logout()  {
     POST('auth/logout')
@@ -137,6 +139,7 @@ function SnapshotSidebar() {
               <p>Signed in as</p>
               <h4>{user}</h4>
               <Button variant="contained" onClick={logout} id="logout-button">Log out</Button>
+              <Button id="analytics-popup-button" onClick={() => setShowModal(true)}>Click Me</Button>
             </div>
           </div>
         </Drawer>
@@ -148,6 +151,7 @@ function SnapshotSidebar() {
         >
           Save as snapshot
         </Button>
+
       </div>
   );
 }

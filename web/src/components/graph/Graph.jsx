@@ -123,6 +123,8 @@ const Graph = () => {
               {graphInfo.data.edges.length.toLocaleString()} Edges
           </div>
       }
+
+      
     </div>;
 };
 
