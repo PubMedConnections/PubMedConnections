@@ -27,6 +27,7 @@ const Graph = () => {
     },
 
     options: {
+      autoResize: true,
       nodes: {
         shape: 'dot',
       },
