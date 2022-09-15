@@ -11,9 +11,12 @@ import React, { useEffect, useRef, useState } from 'react';
 import LinearProgress from '@mui/material/LinearProgress'
 import {useSelector, useDispatch} from 'react-redux'
 import {POST, PUT} from "../../utils/APIRequests";
-import VisJSGraph from 'react-graph-vis'
+import VisJSGraph from 'react-graph-vis';
+import { useSnackbar } from 'notistack';
+import { DisplayError } from '../common/SnackBar';
 
 const Graph = () => {
+  const snackbar = useSnackbar();
   const filters = useSelector((state) => state.filters.filters);
 
   const [VISJSNetwork, setNetwork] = useState(null);
@@ -74,17 +77,14 @@ const Graph = () => {
           POST('snapshot/visualise/', filters)
               .then((resp) => {
                   if (resp.status !== 200) {
-                      // TODO : Display this to the user.
-                      console.error("Something went wrong: " + resp.status)
-                      console.error(resp);
+                      DisplayError(snackbar, resp.statusText)
                       setLoadingProgress(100)
                       return;
                   }
 
                   const data = resp.data;
                   if (data.error) {
-                      // TODO : Display this to the user.
-                      console.error(data.error);
+                      DisplayError(snackbar, data.error)
                       setLoadingProgress(100)
                       return;
                   }
