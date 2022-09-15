@@ -265,7 +265,9 @@ class PubMedManager:
             new_pubmed_files = pubmed_files[start_file_index:]
             flush_print(f"\nPubMedExtract: Extracting data from {len(new_pubmed_files)} PubMed files\n")
 
-            file_queue = read_all_pubmed_files(log_dir, target_directory, new_pubmed_files)
+            file_queue = read_all_pubmed_files(
+                log_dir, target_directory, new_pubmed_files
+            )
 
             last_report_time = time.time()
             while True:

@@ -151,7 +151,6 @@ class PubMedCacheConn:
             batch = articles[start_index:end_index]
             total_articles_inserted += len(batch)
             with self.new_session() as session:
-                t = time.time()
                 session.write_transaction(self._insert_article_batch, batch)
 
         # Just to be sure...
