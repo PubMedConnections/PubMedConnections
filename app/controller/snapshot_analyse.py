@@ -1,7 +1,7 @@
 from neo4j import GraphDatabase
 from neo4j.exceptions import ClientError
 from graphdatascience import GraphDataScience
-from config import NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD
+from config import NEO4J_URI
 from flask import jsonify
 import json
 import threading
@@ -233,7 +233,7 @@ def build_relationship_query(snapshot):
 
 def _project_graph_and_run_analytics(graph_name: str, node_query: str, relationship_query: str, snapshot_id: int):
     driver = GraphDatabase.driver(uri=NEO4J_URI)
-    gds = GraphDataScience(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
+    gds = GraphDataScience(NEO4J_URI)
 
     print(node_query)
     print(relationship_query)

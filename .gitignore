@@ -3,6 +3,7 @@ data/
 logs/
 data-backup/
 error.node.txt
+deployment/image.tar
 
 # General
 .git
