@@ -19,6 +19,7 @@ from app.pubmed.pubmed_db_conn import PubMedCacheConn
 from app.pubmed.source_files import list_downloaded_pubmed_files, read_all_pubmed_files
 from app.pubmed.source_ftp import PubMedFTP
 from app.utils import format_minutes, calc_md5_hash_of_file, flush_print
+from config import LOGS_DIR, DATA_DIR
 
 
 class PubMedManager:
@@ -71,10 +72,15 @@ class PubMedManager:
         )
         self._report_regenerate_instructions()
 
-    def run_sync(self, *, target_directory="./data") -> int:
+    def run_sync(self, *, target_directory=None) -> int:
         """
         Synchronises the PubMed dataset from FTP.
         """
+        # Use the config defaults if not supplied explicitly.
+        if target_directory is None:
+            target_directory = DATA_DIR
+
+        # Read the available files.
         with PubMedFTP() as ftp:
             targets = ftp.sync(target_directory)
             flush_print()
@@ -122,13 +128,19 @@ class PubMedManager:
 
     def run_extract(
             self, *,
-            log_dir="./logs", target_directory="./data", report_every=60,
+            log_dir=None, target_directory=None, report_every=60,
             do_md5_file_change_check=False) -> int:
         """
         Extracts data from the synchronized PubMed data files.
         Returns 0 on success, and an error code on failure.
         """
         overall_start = time.time()
+
+        # Use the config defaults if not supplied explicitly.
+        if target_directory is None:
+            target_directory = DATA_DIR
+        if log_dir is None:
+            log_dir = LOGS_DIR
 
         # List the data files that have been downloaded.
         baseline_info, latest_info, pubmed_file_specs = list_downloaded_pubmed_files(target_directory)

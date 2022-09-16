@@ -24,6 +24,7 @@ docker run \
 
 
 # Wait for Neo4J to start.
+printf "Waiting for Neo4J...\n"
 ELAPSED=0
 while true; do
   ELAPSED=$((ELAPSED + 5))

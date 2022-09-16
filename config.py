@@ -15,8 +15,9 @@ SQLALCHEMY_ECHO = False
 
 
 # Define the application directory
-BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+BASE_DIR = os.getcwd()
 DATA_DIR = os.path.join(BASE_DIR, "data")
+LOGS_DIR = os.path.join(BASE_DIR, "logs")
 APP_DB_FILE = os.path.join(DATA_DIR, "app.db")
 PUBMED_DIR = os.path.join(DATA_DIR, "pubmed")
 PUBMED_DB_FILE = os.path.join(PUBMED_DIR, "pubmed.db")
