@@ -43,6 +43,7 @@ def get_user_snapshots(username):
             }
         ))
 
-    result = neo4j_session.read_transaction(cypher)
-    snapshots = json.loads(json.dumps([record.data()['s'] for record in result], default=date_handler))
+    with neo4j_conn.new_session() as neo4j_session:
+        result = neo4j_session.read_transaction(cypher)
+        snapshots = json.loads(json.dumps([record.data()['s'] for record in result], default=date_handler))
     return snapshots

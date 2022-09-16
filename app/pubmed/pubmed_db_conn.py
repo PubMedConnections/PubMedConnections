@@ -9,7 +9,7 @@ from typing import Optional
 import atomics
 import neo4j
 from app.pubmed.model import Article, DBMetadata, MeSHHeading, Author, ArticleAuthorRelation
-from config import NEO4J_URI
+from config import NEO4J_URI, NEO4J_REQUIRES_AUTH
 
 
 class IdCounter:
@@ -58,7 +58,11 @@ class PubMedCacheConn:
         if self.driver is not None:
             raise ValueError("Already created connection!")
 
-        self.driver = neo4j.GraphDatabase.driver(NEO4J_URI, max_connection_lifetime=1000 * 60 * 60 * 24)
+        if NEO4J_REQUIRES_AUTH:
+            from config import NEO4J_USER, NEO4J_PASSWORD
+            self.driver = neo4j.GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD), max_connection_lifetime=1000 * 60 * 60 * 24)
+        else:
+            self.driver = neo4j.GraphDatabase.driver(NEO4J_URI, max_connection_lifetime=1000 * 60 * 60 * 24)
 
         # Create a connection to the database to create its constraints and grab metadata.
         with self.new_session() as session:
