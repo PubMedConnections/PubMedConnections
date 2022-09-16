@@ -6,6 +6,7 @@ import Divider from '@mui/material/Divider';
 import ListItem from '@mui/material/ListItem';
 import ListItemButton from '@mui/material/ListItemButton';
 import ListItemText from '@mui/material/ListItemText';
+import Container from '@mui/material/Container';
 import Button from '@mui/material/Button';
 import { CONNECTIONS_NAVBAR_HEIGHT } from '../../constants';
 import Filters from "./Filters";
@@ -14,7 +15,8 @@ import {useDispatch, useSelector} from 'react-redux'
 import {clearAuth} from "../../store/slices/userSlice";
 import {setFilters} from '../../store/slices/filterSlice'
 import {Save} from "@mui/icons-material";
-import SnapshotModal, { ModalBody, ModalFooter, ModalHeader } from '../graph/SnapshotModal';
+import SnapshotModal, { ModalBody } from '../graph/SnapshotModal';
+import Box from '@mui/material/Box';
 const drawerWidth = 450;
 
 function SnapshotSidebar() {
@@ -68,8 +70,24 @@ function SnapshotSidebar() {
         })
   }
 
+
+  const Analytics = () => (
+    <Box style={{position: 'absolute', zIndex: 10000,  width: "100%", height: "100%", opacity: '1', textAlign: 'center'}}>
+      <div style={{position: 'absolute', zIndex: 10000, backgroundColor: "black",  width: "100%", height: "100%", opacity: '0.4', textAlign: 'center'}}>
+
+      </div>
+      <div style={{position: "absolute", left: "15%", top: "15%", width: '70%', height: "70%", backgroundColor: "white", zIndex: 100000}}>
+        <h1>Analytics</h1>
+        <Button onClick={() => setShowModal(false)} style={{position: "relative", top: "75%", backgroundColor: "#6372ff", padding: "15px", color: "white"}}>
+          Close Analytics 
+        </Button>
+      </div>
+    </Box>
+  )
+
   return (
       <div>
+        {showModal ? <Analytics /> : null}
         <Drawer
             sx={{
               width: drawerWidth,
@@ -136,10 +154,14 @@ function SnapshotSidebar() {
                 sx={{ background: '#c4c4c4', width: '100%', height: '1px' }}
             />
             <div id="user-details">
-              <Button id="analytics-popup-button" onClick={() => setShowModal(true)}>Click Me</Button>
+            <Button onClick={() => setShowModal(true)}>
+                Open Analytics
+            </Button>
             </div>
           </div>
         </Drawer>
+
+        
         <Button variant={"contained"}
                 endIcon={<Save />}
                 id="save-snapshot-button"
@@ -149,7 +171,10 @@ function SnapshotSidebar() {
           Save as snapshot
         </Button>
 
+        
+        
       </div>
+      
   );
 }
 

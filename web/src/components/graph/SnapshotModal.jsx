@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 
-const Modal = props => {
+const SnapshotModal = props => {
     const modalRef = useRef();
 
     useEffect(() => {
@@ -15,34 +15,18 @@ const Modal = props => {
         };
     }, [props]);
 
-    return <div ref={modalRef} className={`modal ${props.show ? 'active' : ''}`}>
+    return <div ref={modalRef} style={{position: 'absolute', zIndex: 10000, backgroundColor: "white", padding: "300px", width: "100%", height: "100%", opacity: '0.9'}}>
         <div className="modal__content">
-            {
-                !props.hideCloseButton && <span onClick={() => props.setShow(false)} className="modal__close">
-                    &times;
-                </span>
-            }
-            {props.children}
+            <p>Hellos</p>
         </div>
     </div>;
 };
 
-export default Modal;
+export default SnapshotModal;
 
-export const ModalHeader = props => {
-    return <div className="modal__header">
-        {props.children}
-    </div>
-}
 
 export const ModalBody = props => {
     return <div className="modal__body">
-        {props.children}
-    </div>
-}
-
-export const ModalFooter = props => {
-    return <div className="modal__footer">
         {props.children}
     </div>
 }
