@@ -286,6 +286,7 @@ const Filters = () => {
                 onChange={updateStateFromEventValueCallbackGenerator(filterDesc.key)}>
                     <MenuItem value={"constant"}>Constant</MenuItem>
                     <MenuItem value={"matched_nodes"}>Increase for Matched Nodes</MenuItem>
+                    <MenuItem value={"edge_count"}>Increase with Number of Edges</MenuItem>
                     <MenuItem value={"citations"}>Increase with Citations</MenuItem>
             </Select>
         </FormControl>;

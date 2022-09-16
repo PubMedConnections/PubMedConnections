@@ -65,7 +65,7 @@ class ConstantNodesValueSource(NodesValueSource):
     """
     A source that always returns a fixed value.
     """
-    def __init__(self, value: float = 0.5):
+    def __init__(self, value: float = 0.75):
         super().__init__()
         self.value = value
 
@@ -90,6 +90,23 @@ class MatchedNodesValueSource(NodesValueSource):
         for node_id, node in graph.nodes.items():
             result[node_id] = self.matched_value if node.is_root_node else self.connected_value
         return result
+
+
+class EdgeCountNodesValueSource(NodesValueSource):
+    """
+    A source that assigns one value to matched nodes, and another to connected nodes.
+    """
+    def __init__(self, matched_value: float = 0.75, connected_value: float = 0.25):
+        super().__init__()
+        self.matched_value = matched_value
+        self.connected_value = connected_value
+
+    def query(self, graph: 'Graph') -> dict[int, float]:
+        result: dict[int, float] = {}
+        for node_id in graph.nodes.keys():
+            result[node_id] = len(graph.node_edges[node_id])
+
+        return scale_value_source_results_linear(result)
 
 
 class AuthorCitationsNodesValueSource(NodesValueSource):
@@ -132,7 +149,7 @@ class ConstantEdgesValueSource(EdgesValueSource):
     """
     A source that always returns a fixed value.
     """
-    def __init__(self, value: float = 0.5):
+    def __init__(self, value: float = 0.75):
         super().__init__()
         self.value = value
 
@@ -350,6 +367,13 @@ class Graph:
     def __init__(self, nodes: dict[int, GraphNode], edges: dict[tuple[int, int], GraphEdge]):
         self.nodes = nodes
         self.edges = edges
+
+        self.node_edges: dict[int, list[tuple[int, int]]] = {node_id: [] for node_id in nodes.keys()}
+        for edge_key in edges.keys():
+            edge_id_1, edge_id_2 = edge_key
+            self.node_edges[edge_id_1].append(edge_key)
+            self.node_edges[edge_id_2].append(edge_key)
+
         self._nodes_value_source_results: list[tuple[NodesValueSource, dict[int, float]]] = []
         self._edges_value_source_results: list[tuple[EdgesValueSource, dict[tuple[int, int], float]]] = []
 
@@ -403,7 +427,7 @@ class Graph:
                 "id": node_id,
                 "borderWidth": round(1 + node_size),
                 "borderWidthSelected": round(2 + node_size),
-                "size": round(10 + 20 * node_size),
+                "size": round(20 + 20 * node_size),
                 "color": node_colour
             }
             if node_label is not None:
