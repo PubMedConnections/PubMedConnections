@@ -12,6 +12,7 @@ const resetState = {
         article: "",
         graph_size: 1000,
         graph_type: "author",
+        graph_node_size: "citations"
     },
     activeFilters: []
 }

@@ -9,20 +9,23 @@ from datetime import datetime, date
 from app.controller.graph_builder import GraphBuilder
 from app.controller.snapshot_analyse import _create_query_from_filters
 
-from app.pubmed.filtering import PubMedFilterBuilder, PubMedFilterLimitError
+from app.pubmed.filtering import PubMedFilterBuilder, PubMedFilterLimitError, PubMedFilterValueError
 from app.pubmed.model import MeSHHeading, Article
 
 
-def parse_date(date_str) -> datetime:
-    return datetime.strptime(date_str, '%Y-%m-%d')
+def parse_date(filter_key: str, date_str: str) -> datetime:
+    try:
+        return datetime.strptime(date_str, '%Y-%m-%d')
+    except ValueError as e:
+        raise PubMedFilterValueError(filter_key, f"The {filter_key} filter contains an invalid date")
 
 
 def parse_dates(filters):
     if "published_after" in filters:
-        filters["published_after"] = parse_date(filters["published_after"])
+        filters["published_after"] = parse_date("published_after", filters["published_after"])
 
     if "published_before" in filters:
-        filters["published_before"] = parse_date(filters["published_before"])
+        filters["published_before"] = parse_date("published_after", filters["published_before"])
 
     return filters
 
