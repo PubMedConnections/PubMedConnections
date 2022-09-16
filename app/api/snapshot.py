@@ -60,7 +60,7 @@ class DeleteSnapshot(Resource):
     @jwt_required()
     @ns.doc(params={'snapshot_id': {'default': '1'}}, security='api_key')
     def delete(snapshot_id: int):
-        return delete_by_snapshot_id(snapshot_id)
+        return {'id': delete_by_snapshot_id(snapshot_id), 'success': True}
 
 
 @ns.route('/visualise/')

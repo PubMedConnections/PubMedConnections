@@ -9,11 +9,12 @@ import ListItemText from '@mui/material/ListItemText';
 import Button from '@mui/material/Button';
 import { CONNECTIONS_NAVBAR_HEIGHT } from '../../constants';
 import Filters from "./Filters";
-import {GET, POST, PUT} from "../../utils/APIRequests";
+import {GET, POST, PUT, DELETE} from "../../utils/APIRequests";
 import {useDispatch, useSelector} from 'react-redux'
 import {clearAuth} from "../../store/slices/userSlice";
 import {setFilters} from '../../store/slices/filterSlice'
-import {Save} from "@mui/icons-material";
+import {Delete, Save} from "@mui/icons-material";
+import {IconButton} from "@mui/material";
 
 const drawerWidth = 450;
 
@@ -66,6 +67,21 @@ function SnapshotSidebar() {
         })
   }
 
+  function deleteSnapshot(id) {
+      DELETE('snapshot/delete/' + id)
+          .then((resp) => {
+              if (resp.data.success) {
+                  updateSnapshots();
+                  window.alert("Snapshot deleted.");
+              } else {
+                  window.alert("Could not delete snapshot.");
+              }
+          })
+          .catch((err) => {
+              window.alert("Could not delete snapshot.", err);
+          })
+  }
+
   return (
       <div>
         <Drawer
@@ -115,8 +131,12 @@ function SnapshotSidebar() {
                             color: '#333333',
                             letterSpacing: 0,
                           }}
-                          primary={"Snapshot " + snapshot.id}
-                      />
+                      >
+                          Snapshot {snapshot.id} ({snapshot.creation_time})
+                          <IconButton aria-label="delete" onClick={() => deleteSnapshot(snapshot.id)}>
+                              <Delete />
+                          </IconButton>
+                      </ListItemText>
                     </ListItemButton>
                   </ListItem>
               ))}

@@ -5,7 +5,7 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  overflow: hidden;
+  /*overflow: hidden;*/
 }
 
 code {
@@ -60,10 +60,10 @@ code {
 }
 
 #visjs-graph-info {
-    position: relative;
+    position: absolute;
     display: inline-block;
-    left: 0;
-    bottom: 2em;
+    right: 0;
+    bottom: 0;
     height: 2em;
     line-height: 2em;
     vertical-align: middle;
