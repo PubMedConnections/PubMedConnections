@@ -83,12 +83,14 @@ class VisualiseSnapshot(Resource):
             return query_coauthor_graph(filter_params)
         except PubMedFilterLimitError as e:
             return {
-                "error": str(e)
+                "error": str(e),
+                "empty_message": f"{e}."
             }
         except PubMedFilterValueError as e:
             return {
                 "error": str(e),
-                "error_filter": e.filter_name
+                "error_filter": e.filter_name,
+                "empty_message": f"{e}."
             }
 
 

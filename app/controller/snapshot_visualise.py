@@ -145,7 +145,6 @@ def query_coauthor_graph(filters: dict[str, Any]):
             OPTIONAL MATCH (article) <-[coauthor_rel:AUTHOR_OF]- (coauthor)
             WHERE author <> coauthor
             RETURN author, author_rel, article, coauthor_rel, coauthor
-            LIMIT $node_limit
             """,
             author_ids=filter_results.author_ids,
             article_ids=filter_results.article_ids,
@@ -174,7 +173,7 @@ def query_coauthor_graph(filters: dict[str, Any]):
             )
 
         if graph.get_node_count() >= node_limit:
-            raise PubMedFilterLimitError(f"The limit of {node_limit} matching nodes was reached")
+            raise PubMedFilterLimitError(f"The limit of {node_limit} nodes was reached")
 
     def node_configure(node_data: list[Any]) -> dict:
         """ Sets the properties of nodes. """
@@ -214,7 +213,11 @@ def query_coauthor_graph(filters: dict[str, Any]):
             "value": len(article_ids)
         }
 
-    return jsonify(graph.build(node_configure, edge_configure))
+    graph_json = graph.build(node_configure, edge_configure)
+    if graph.get_node_count() == 0:
+        graph_json["empty_message"] = "There are no matching nodes."
+
+    return graph_json
 
 
 def query_by_snapshot_id(snapshot_id):

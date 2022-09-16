@@ -109,7 +109,7 @@ class PubMedFilterQuery:
                 author_ids.add(record[author_index])
 
         if self.node_limit is not None and num_records >= self.node_limit:
-            raise PubMedFilterLimitError(f"The limit of {self.node_limit} matching nodes was reached")
+            raise PubMedFilterLimitError(f"The limit of {self.node_limit} nodes was reached")
 
         return PubMedFilterResults(journal_ids, mesh_ids, article_ids, author_ids)
 

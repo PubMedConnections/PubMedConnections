@@ -74,31 +74,38 @@ const Graph = () => {
           });
           setLoadingProgress(-1);
 
+          function processResponse(resp, errorMessage) {
+              let data = resp.data;
+              if (resp.status !== 200) {
+                  const err = errorMessage || resp.statusText
+                  DisplayError(snackbar, err);
+                  data = {"error": err};
+              }
+
+              if (data.error) {
+                  DisplayError(snackbar, data.error);
+                  if (!data.empty_message) {
+                      data.empty_message = data.error + ".";
+                  }
+              }
+
+              let graphData = {
+                  nodes: data.nodes || [],
+                  edges: data.edges || [],
+                  empty_message: data.empty_message
+              }
+              setGraphInfo({
+                  options: graphInfo.options,
+                  data: graphData
+              });
+              setLoadingProgress(100)
+          }
+
           POST('snapshot/visualise/', filters)
-              .then((resp) => {
-                  if (resp.status !== 200) {
-                      DisplayError(snackbar, resp.statusText)
-                      setLoadingProgress(100)
-                      return;
-                  }
-
-                  const data = resp.data;
-                  if (data.error) {
-                      DisplayError(snackbar, data.error)
-                      setLoadingProgress(100)
-                      return;
-                  }
-
-                  let graphData = {
-                      nodes: resp.data.nodes,
-                      edges: resp.data.edges
-                  }
-                  setGraphInfo({
-                      options: graphInfo.options,
-                      data: graphData
-                  });
-                  setLoadingProgress(100)
-              })
+              .then(processResponse)
+              .catch((err) => {
+                  processResponse(err.response, err.message)
+              });
       }, 1500)
 
       return () => clearTimeout(delayDebounceLoad);
@@ -118,7 +125,14 @@ const Graph = () => {
           </div>
       }
 
-      {loadingProgress >= 100 &&
+      {loadingProgress >= 100 && graphInfo.data && graphInfo.data.nodes && graphInfo.data.nodes.length === 0 &&
+          <div id="visjs-graph-message">
+              <p>{graphInfo.data.empty_message || "Unable to build the graph."}</p>
+              <p>Try adjusting your filters.</p>
+          </div>
+      }
+
+      {loadingProgress >= 100 && graphInfo.data && graphInfo.data.nodes && graphInfo.data.edges &&
           <div id="visjs-graph-info">
               {graphInfo.data.nodes.length.toLocaleString()} Nodes,&nbsp;
               {graphInfo.data.edges.length.toLocaleString()} Edges

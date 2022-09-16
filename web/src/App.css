@@ -59,14 +59,21 @@ code {
   margin: auto;
 }
 
-#visjs-graph-info {
+
+
+#visjs-graph-info,
+#visjs-graph-message {
     position: absolute;
     display: inline-block;
+    vertical-align: middle;
+    text-align: center;
+}
+
+#visjs-graph-info {
     right: 0;
     bottom: 0;
     height: 2em;
     line-height: 2em;
-    vertical-align: middle;
     padding: 0 1em;
     z-index: 1;
     background-color: rgba(255, 255, 255, 0.9);
@@ -74,6 +81,13 @@ code {
     font-size: 0.84em;
     box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
     border-top-right-radius: 0.5em;
+}
+
+#visjs-graph-message {
+    top: 55%;
+    left: 50%;
+    color: #888888;
+    transform: translate(-50%, -50%);
 }
 
 /** Filters **/
