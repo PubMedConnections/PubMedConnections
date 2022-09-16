@@ -40,7 +40,6 @@ function SnapshotSidebar() {
         .then((resp) => {
           let retrievedSnapshots = resp.data;
           retrievedSnapshots.sort((a,b) => (a.id - b.id))
-          console.log(retrievedSnapshots.map(s => s.id));
           setSnapshots(retrievedSnapshots)
         })
   }

@@ -241,12 +241,13 @@ const Filters = () => {
                 onChange={handleFilterSelectionChange}
                 displayEmpty={true}
                 renderValue={(selected) => {
-                    if (selected.length === 0) {
+                    let filterCount = selected.filter(f => f in filterNames).length;
+                    if (filterCount === 0) {
                         return <Button variant="text" startIcon={<Add />} style={{padding: 0}}>
                             Click to Add Filters
                         </Button>
                     } else {
-                        return selected.length + " Selected Filter" + (selected.length > 1 ? "s" : "");
+                        return filterCount + " Selected Filter" + (filterCount > 1 ? "s" : "");
                     }
                 }}
                 sx={{border: "white"}}>
