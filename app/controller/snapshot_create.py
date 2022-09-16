@@ -24,7 +24,7 @@ def create_by_filters(filters, current_user):
             MATCH (u: User)
             WHERE u.username = $username
 
-            CREATE (u)-[:USER_SNAPSHOT]->(s:Snapshot)
+            CREATE (u)-[:USER_SNAPSHOT]->(s:Snapshot {database_version: max_version})
             SET s += $filters
             SET s.id = ID(s)
             RETURN ID(s) AS snapshot_id
