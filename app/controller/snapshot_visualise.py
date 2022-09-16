@@ -9,7 +9,7 @@ from datetime import datetime, date
 from app.controller.graph_builder import GraphBuilder
 from app.controller.snapshot_analyse import _create_query_from_filters
 
-from app.pubmed.filtering import PubMedFilterBuilder
+from app.pubmed.filtering import PubMedFilterBuilder, PubMedFilterLimitError
 from app.pubmed.model import MeSHHeading, Article
 
 
@@ -93,7 +93,7 @@ def construct_graph_filter(filters: dict[str, Any]) -> PubMedFilterBuilder:
         filter_builder.set_node_limit(node_limit)
     else:
         # Sensible default limit
-        filter_builder.set_node_limit(2000)
+        filter_builder.set_node_limit(1000)
 
     if len(filters) != 0:
         print("Unknown filters present: " + str(filters), file=sys.stderr)
@@ -134,6 +134,7 @@ def query_coauthor_graph(filters: dict[str, Any]):
     graph_filter = construct_graph_filter(filters)
     with neo4j_conn.new_session() as session:
         filter_results = graph_filter.build(force_authors=True).run(session)
+        node_limit = graph_filter.get_node_limit()
         co_author_graph_results = session.run(
             """
             CYPHER planner=dp
@@ -144,9 +145,11 @@ def query_coauthor_graph(filters: dict[str, Any]):
             OPTIONAL MATCH (article) <-[coauthor_rel:AUTHOR_OF]- (coauthor)
             WHERE author <> coauthor
             RETURN author, author_rel, article, coauthor_rel, coauthor
+            LIMIT $node_limit
             """,
             author_ids=filter_results.author_ids,
-            article_ids=filter_results.article_ids
+            article_ids=filter_results.article_ids,
+            node_limit=node_limit
         )
 
         graph = GraphBuilder()
@@ -169,6 +172,9 @@ def query_coauthor_graph(filters: dict[str, Any]):
                 author.author_id, coauthor.author_id,
                 (author, author_rel, article, coauthor_rel, coauthor)
             )
+
+        if graph.get_node_count() >= node_limit:
+            raise PubMedFilterLimitError(f"The limit of {node_limit} matching nodes was reached")
 
     def node_configure(node_data: list[Any]) -> dict:
         """ Sets the properties of nodes. """

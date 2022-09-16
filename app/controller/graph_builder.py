@@ -13,6 +13,14 @@ class GraphBuilder:
         self._nodes: dict[int, list[Any]] = {}
         self._edges: dict[tuple[int, int], list[Any]] = {}
 
+    def get_node_count(self) -> int:
+        """ Returns the number of nodes in the current graph. """
+        return len(self._nodes)
+
+    def get_edge_count(self) -> int:
+        """ Returns the number of edges in the current graph. """
+        return len(self._edges)
+
     def add_record(self):
         """ Marks that another record is being processed. """
         self._num_records += 1

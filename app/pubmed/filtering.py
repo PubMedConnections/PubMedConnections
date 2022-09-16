@@ -195,6 +195,12 @@ class PubMedFilterBuilder:
 
         self._node_limit = node_limit
 
+    def get_node_limit(self) -> int:
+        """ Retrieves the currently set node limit. """
+        if self._node_limit is None:
+            raise Exception("There is no node limit")
+        return self._node_limit
+
     def build(
             self, *, force_journals=False, force_mesh=False, force_articles=False, force_authors=False
     ) -> PubMedFilterQuery:
@@ -271,7 +277,7 @@ class PubMedFilterBuilder:
 
         # Limits.
         if self._node_limit is not None:
-            query += f"LIMIT {self._node_limit}\n"
+            query += f"LIMIT {self._next_filter_var(self._node_limit)}\n"
 
         return PubMedFilterQuery(
             query, self._variable_values, self._node_limit,
