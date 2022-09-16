@@ -6,7 +6,8 @@ from flask import jsonify
 from datetime import datetime, date
 
 from app.controller.graph_builder import GraphOptions, GraphBuilder, ArticleAuthorNode, ArticleCoAuthorEdge, \
-    ConstantNodesValueSource, MatchedNodesValueSource, ConstantEdgesValueSource, CoAuthoredArticlesEdgesValueSource
+    ConstantNodesValueSource, MatchedNodesValueSource, ConstantEdgesValueSource, CoAuthoredArticlesEdgesValueSource, \
+    NodesValueSource
 from app.controller.snapshot_analyse import _create_query_from_filters
 
 from app.pubmed.filtering import PubMedFilterBuilder, PubMedFilterLimitError, PubMedFilterValueError
@@ -30,6 +31,23 @@ def parse_dates(filters):
     return filters
 
 
+def _parse_node_value_source_filter(
+        filters: dict[str, Any], filter_key: str, default_source: NodesValueSource
+) -> NodesValueSource:
+    """ Parses a filter that refers to a node value source. """
+    if filter_key not in filters:
+        return default_source
+
+    node_size_type = filters[filter_key]
+    del filters[filter_key]
+    if node_size_type == "constant":
+        return ConstantNodesValueSource()
+    elif node_size_type == "matched_nodes":
+        return MatchedNodesValueSource()
+    else:
+        raise PubMedFilterValueError("graph_node_size", f"Unknown {filter_key} type {node_size_type}")
+
+
 def construct_graph_options(filters: dict[str, Any]) -> GraphOptions:
     """
     Constructs the options used to control the visualisation of graphs
@@ -40,17 +58,13 @@ def construct_graph_options(filters: dict[str, Any]) -> GraphOptions:
         options.node_limit = filters["graph_size"]
         del filters["graph_size"]
 
-    if "graph_node_size" in filters:
-        node_size_type = filters["graph_node_size"]
-        del filters["graph_node_size"]
-        if node_size_type == "constant":
-            options.node_size_source = ConstantNodesValueSource()
-        elif node_size_type == "matched_nodes":
-            options.node_size_source = MatchedNodesValueSource()
-        else:
-            raise PubMedFilterValueError("graph_node_size", f"Unknown graph node size type {node_size_type}")
-    else:
-        options.node_size_source = MatchedNodesValueSource()
+    options.node_size_source = _parse_node_value_source_filter(
+        filters, "graph_node_size", MatchedNodesValueSource()
+    )
+    # TODO : The colour source will need custom options for MeSH headings.
+    options.node_colour_source = _parse_node_value_source_filter(
+        filters, "graph_node_colour", MatchedNodesValueSource()
+    )
 
     if "graph_edge_size" in filters:
         node_size_type = filters["graph_edge_size"]

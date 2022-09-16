@@ -106,6 +106,12 @@ const availableFilters = {
         form_name: "Node Size Source",
         category: filterCategories.Graph
     },
+    graph_node_colour: {
+        key: "graph_node_colour",
+        name: "Graph Node Colour",
+        form_name: "Node Colour Source",
+        category: filterCategories.Graph
+    },
     graph_edge_size: {
         key: "graph_edge_size",
         name: "Graph Edge Width",
@@ -319,6 +325,7 @@ const Filters = () => {
         graph_size: makeNodeCountSliderEntry(availableFilters.graph_size),
         graph_type: makeGraphNodeTypeEntry(availableFilters.graph_type),
         graph_node_size: makeGraphNodeValueEntry(availableFilters.graph_node_size),
+        graph_node_colour:  makeGraphNodeValueEntry(availableFilters.graph_node_colour),
         graph_edge_size: makeGraphEdgeValueEntry(availableFilters.graph_edge_size),
     }
     let selectedFilterComponents = activeFilters.map(f => filterComponents[f]);

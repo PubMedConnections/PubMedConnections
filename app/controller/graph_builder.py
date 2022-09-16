@@ -2,6 +2,7 @@
 Tool to construct graphs to pass to the frontend.
 """
 import textwrap
+import matplotlib.pyplot as plt
 from typing import Callable, cast, Optional, TypeVar
 
 from app.pubmed.filtering import PubMedFilterValueError
@@ -166,6 +167,7 @@ class GraphOptions:
     def __init__(self):
         self._node_limit: int = 1000
         self.node_size_source: NodesValueSource = MatchedNodesValueSource()
+        self.node_colour_source: NodesValueSource = MatchedNodesValueSource()
         self.edge_size_source: EdgesValueSource = ConstantEdgesValueSource()
 
     @property
@@ -385,18 +387,24 @@ class Graph:
 
     def _build_node_json(self, options: GraphOptions) -> list[dict]:
         node_size_values: dict[int, float] = self._query_node_value_source(options.node_size_source)
+        node_colour_values: dict[int, float] = self._query_node_value_source(options.node_colour_source)
+
+        cmap = plt.get_cmap("viridis")
 
         nodes: list[dict] = []
         for node_id, node in self.nodes.items():
             node_label = node.get_label()
             node_title = node.get_title()
             node_size = node_size_values[node_id]
+            r, g, b, _ = cmap(node_colour_values[node_id])
+            node_colour = f"rgb({round(255*r)}, {round(255*g)}, {round(255*b)})"
 
             node_json = {
                 "id": node_id,
                 "borderWidth": round(1 + node_size),
                 "borderWidthSelected": round(2 + node_size),
-                "size": round(10 + 20 * node_size)
+                "size": round(10 + 20 * node_size),
+                "color": node_colour
             }
             if node_label is not None:
                 node_json["label"] = node_label
