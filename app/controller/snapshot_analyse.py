@@ -1,12 +1,12 @@
-from neo4j import GraphDatabase
 from neo4j.exceptions import ClientError
 from graphdatascience import GraphDataScience
-from config import NEO4J_URI
+from config import NEO4J_URI, NEO4J_REQUIRES_AUTH
 from flask import jsonify
 import json
 import threading
 from app.controller.snapshot_get import get_snapshot
 from app.helpers import set_default_date
+from app import neo4j_conn
 
 
 class AnalyticsThreading(object):
@@ -138,8 +138,8 @@ def _create_query_from_filters(snapshot):
 def build_generic_query(snapshot):
     query = ""
 
-    query_journals = snapshot['journal'] != ""
-    query_mesh = snapshot['mesh_heading'] != ""
+    query_journals = 'journal' in snapshot
+    query_mesh = 'mesh_heading' in snapshot['mesh_heading']
 
     if query_journals:
         query += "MATCH (journal:Journal)\n"
@@ -150,15 +150,15 @@ def build_generic_query(snapshot):
         query += f"WHERE\n\ttoLower(mesh_heading.name) CONTAINS '{snapshot['mesh_heading'].lower()}'\n"
     
     article_filters = []
-    if snapshot['article'] != "":
+    if 'article' in snapshot:
         article_filters.append(f"toLower(article.title) CONTAINS '{snapshot['article'].lower()}'")
-    if snapshot['published_after'] != "":
+    if 'published_after' in snapshot:
         article_filters.append(
             "article.date >= date({year: %i, month:%i, day:%i})" % (
                 snapshot['published_after'].year,
                 snapshot['published_after'].month,
                 snapshot['published_after'].day))
-    if snapshot['published_before'] != "":
+    if 'published_before' in snapshot:
         article_filters.append(
             "article.date <= date({year: %i, month:%i, day:%i})" % (
                 snapshot['published_before'].year,
@@ -181,11 +181,11 @@ def build_generic_query(snapshot):
 
     query += "MATCH (author:Author) -[author_rel:AUTHOR_OF]-> (article)\n"
     author_filters = []
-    if snapshot['author'] != "":
+    if 'author' in snapshot:
         author_filters.append(f"toLower(author.name) CONTAINS '{snapshot['author'].lower()}'")
-    if snapshot['first_author'] != "":
+    if 'first_author' in snapshot:
         article_filters.append(f"author_rel.is_first_author = '{snapshot['first_author']}'")
-    if snapshot['last_author'] != "":
+    if 'last_author' in snapshot:
         article_filters.append(f"author_rel.is_last_author = '{snapshot['last_author']}'")
 
     if len(author_filters) > 0:
@@ -232,15 +232,18 @@ def build_relationship_query(snapshot):
     return query
 
 def _project_graph_and_run_analytics(graph_name: str, node_query: str, relationship_query: str, snapshot_id: int):
-    driver = GraphDatabase.driver(uri=NEO4J_URI)
-    gds = GraphDataScience(NEO4J_URI)
+    if NEO4J_REQUIRES_AUTH:
+        from config import NEO4J_PASSWORD, NEO4J_USER
+        gds = GraphDataScience(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
+    else:
+        gds = GraphDataScience(NEO4J_URI)
 
     print(node_query)
     print(relationship_query)
 
     analytics_response = {}
 
-    with driver.session() as session:
+    with neo4j_conn.new_session() as session:
         # try project graph into memory
         try:
             G, _ = gds.graph.project.cypher(
@@ -353,7 +356,6 @@ def _project_graph_and_run_analytics(graph_name: str, node_query: str, relations
             print(err)
             pass
 
-    driver.close()
 
     return analytics_response
 
@@ -388,7 +390,7 @@ def run_analytics(snapshot_id: int):
         # TODO confirm expected behaviour when num_nodes == 0 
         # nodes_limit_string = str(filters['num_nodes']) if filters['num_nodes'] != 0 else "100"
 
-        graph_name = "coauthors"
+        graph_name = "coauthors" + str(snapshot_id)
 
         # return matching author nodes
         node_query = build_node_query(snapshot)
@@ -406,11 +408,9 @@ def retrieve_analytics(snapshot_id: int):
     Returns a JSON object containing the analytics results for a given snapshot.
     """
 
-    driver = GraphDatabase.driver(uri=NEO4J_URI)
-
     analytics_response = {}
 
-    with driver.session() as session:
+    with neo4j_conn.new_session() as session:
 
         # retrieve the degree centrality record
         degree_centrality_record = session.read_transaction(_retrieve_degree_centrality, snapshot_id)
