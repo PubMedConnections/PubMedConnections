@@ -15,6 +15,7 @@ import {clearAuth} from "../../store/slices/userSlice";
 import {setFilters} from '../../store/slices/filterSlice'
 import {Save} from "@mui/icons-material";
 import Box from '@mui/material/Box';
+import Analytics from '../graph/Analytics'
 const drawerWidth = 450;
 
 
@@ -70,24 +71,27 @@ function SnapshotSidebar() {
         })
   }
 
-
-  const Analytics = () => (
+  const AnalyticsModal = () => (
     <Box style={{position: 'absolute', zIndex: 10000,  width: "100%", height: "100%", opacity: '1', textAlign: 'center'}}>
-      <div style={{position: 'absolute', zIndex: 10000, backgroundColor: "black",  width: "100%", height: "100%", opacity: '0.4', textAlign: 'center'}}>
+      <div style={{position: 'absolute', zIndex: 10000, backgroundColor: "black",  width: "100%", height: "100%", opacity: '0.4', textAlign: 'center'}} onClick={() => setShowModal(false)}></div>
 
-      </div>
+
       <div style={{position: "absolute", left: "15%", top: "15%", width: '70%', height: "70%", backgroundColor: "white", zIndex: 100000}}>
-        <h1>Analytics</h1>
-        <Button onClick={() => setShowModal(false)} style={{position: "relative", top: "75%", backgroundColor: "#6372ff", padding: "10px 15px 10px", color: "white"}}>
-          Close Analytics 
-        </Button>
+        <div style={{position: "absolute", left: "98%", top: "0%", width: '2%', height: "2%", backgroundColor: "red"}}>
+          <Button onClick={() => setShowModal(false)} >
+            <b> &#10005; </b>
+          </Button>
+        </div>
+        <div style={{position: "absolute", left: "2%", top: "2%", width: '96%', height: "96%", backgroundColor: 'blue'}}> <Analytics /></div>
+        
+        
       </div>
     </Box>
   )
 
   return (
       <div>
-        {showModal ? <Analytics /> : null}
+        {showModal ? <AnalyticsModal /> : null}
         <Drawer
             sx={{
               width: drawerWidth,

@@ -1,0 +1,216 @@
+{
+    "betweenness": {
+        "distributions": [
+            {
+                "count": 1253,
+                "score": 0
+            },
+            {
+                "count": 10,
+                "score": 7
+            },
+            {
+                "count": 2,
+                "score": 8
+            },
+            {
+                "count": 4,
+                "score": 15
+            },
+            {
+                "count": 1,
+                "score": 20
+            },
+            {
+                "count": 1,
+                "score": 72
+            },
+            {
+                "count": 1,
+                "score": 84
+            },
+            {
+                "count": 1,
+                "score": 110
+            },
+            {
+                "count": 1,
+                "score": 336
+            }
+        ],
+        "top_5": [
+            {
+                "centrality": 336,
+                "id": 129681,
+                "name": "Robert L McNamara"
+            },
+            {
+                "centrality": 110,
+                "id": 54427,
+                "name": "Denisse Castro-Eguiluz"
+            },
+            {
+                "centrality": 84,
+                "id": 335346,
+                "name": "Mario Castro"
+            },
+            {
+                "centrality": 72,
+                "id": 45130,
+                "name": "Graciela Castro-Narro"
+            },
+            {
+                "centrality": 20,
+                "id": 327638,
+                "name": "Jose A Castro-Rodriguez"
+            }
+        ]
+    },
+    "degree": {
+        "distributions": [
+            {
+                "count": 8,
+                "score": 1.0
+            },
+            {
+                "count": 20,
+                "score": 2.0
+            },
+            {
+                "count": 22,
+                "score": 3.0
+            },
+            {
+                "count": 64,
+                "score": 4.0
+            },
+            {
+                "count": 81,
+                "score": 5.0
+            },
+            {
+                "count": 83,
+                "score": 6.0
+            },
+            {
+                "count": 154,
+                "score": 7.0
+            },
+            {
+                "count": 59,
+                "score": 8.0
+            },
+            {
+                "count": 75,
+                "score": 9.0
+            },
+            {
+                "count": 88,
+                "score": 10.0
+            },
+            {
+                "count": 60,
+                "score": 11.0
+            },
+            {
+                "count": 77,
+                "score": 12.0
+            },
+            {
+                "count": 33,
+                "score": 13.0
+            },
+            {
+                "count": 34,
+                "score": 14.0
+            },
+            {
+                "count": 32,
+                "score": 15.0
+            },
+            {
+                "count": 34,
+                "score": 16.0
+            },
+            {
+                "count": 36,
+                "score": 17.0
+            },
+            {
+                "count": 9,
+                "score": 18.0
+            },
+            {
+                "count": 21,
+                "score": 20.0
+            },
+            {
+                "count": 10,
+                "score": 22.0
+            },
+            {
+                "count": 24,
+                "score": 23.0
+            },
+            {
+                "count": 50,
+                "score": 24.0
+            },
+            {
+                "count": 26,
+                "score": 25.0
+            },
+            {
+                "count": 1,
+                "score": 26.0
+            },
+            {
+                "count": 35,
+                "score": 34.0
+            },
+            {
+                "count": 42,
+                "score": 41.0
+            },
+            {
+                "count": 42,
+                "score": 42.0
+            },
+            {
+                "count": 1,
+                "score": 43.0
+            },
+            {
+                "count": 53,
+                "score": 52.0
+            }
+        ],
+        "top_5": [
+            {
+                "centrality": 52,
+                "id": 186014,
+                "name": "Ricardo Moutinho"
+            },
+            {
+                "centrality": 52,
+                "id": 186007,
+                "name": "Vasco Mascarenhas"
+            },
+            {
+                "centrality": 52,
+                "id": 186005,
+                "name": "Ramy Mansour"
+            },
+            {
+                "centrality": 52,
+                "id": 186017,
+                "name": "Davide Orlandi"
+            },
+            {
+                "centrality": 52,
+                "id": 186009,
+                "name": "Catherine McCarthy"
+            }
+        ]
+    }
+}
