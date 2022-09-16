@@ -6,7 +6,6 @@ import Divider from '@mui/material/Divider';
 import ListItem from '@mui/material/ListItem';
 import ListItemButton from '@mui/material/ListItemButton';
 import ListItemText from '@mui/material/ListItemText';
-import Container from '@mui/material/Container';
 import Button from '@mui/material/Button';
 import { CONNECTIONS_NAVBAR_HEIGHT } from '../../constants';
 import Filters from "./Filters";
@@ -15,9 +14,10 @@ import {useDispatch, useSelector} from 'react-redux'
 import {clearAuth} from "../../store/slices/userSlice";
 import {setFilters} from '../../store/slices/filterSlice'
 import {Save} from "@mui/icons-material";
-import SnapshotModal, { ModalBody } from '../graph/SnapshotModal';
 import Box from '@mui/material/Box';
 const drawerWidth = 450;
+
+
 
 function SnapshotSidebar() {
   const [selectedSnapshot, setSelectedSnapshot] = useState(-1);
@@ -78,7 +78,7 @@ function SnapshotSidebar() {
       </div>
       <div style={{position: "absolute", left: "15%", top: "15%", width: '70%', height: "70%", backgroundColor: "white", zIndex: 100000}}>
         <h1>Analytics</h1>
-        <Button onClick={() => setShowModal(false)} style={{position: "relative", top: "75%", backgroundColor: "#6372ff", padding: "15px", color: "white"}}>
+        <Button onClick={() => setShowModal(false)} style={{position: "relative", top: "75%", backgroundColor: "#6372ff", padding: "10px 15px 10px", color: "white"}}>
           Close Analytics 
         </Button>
       </div>
@@ -153,8 +153,8 @@ function SnapshotSidebar() {
                 variant='fullWidth'
                 sx={{ background: '#c4c4c4', width: '100%', height: '1px' }}
             />
-            <div id="user-details">
-            <Button onClick={() => setShowModal(true)}>
+            <div id="user-details" >
+            <Button onClick={() => setShowModal(true)} style={{position: 'relative', top: '10px', left: "35%", backgroundColor: "#6372ff", padding: "10px 15px 10px", color: "white"}}>
                 Open Analytics
             </Button>
             </div>
