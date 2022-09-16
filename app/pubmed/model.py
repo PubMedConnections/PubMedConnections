@@ -194,7 +194,7 @@ class DBMetadata:
                f"progress={processed_files}/{len(self.data_files)})"
 
 
-class Author:
+class DBAuthor:
     """
     An author of a PubMed article.
     """
@@ -216,7 +216,7 @@ class Author:
             last_name: str, fore_name: str, initials: str,
             suffix: str, collective_name: str,
             *, max_name_length: int = 512
-    ) -> 'Author':
+    ) -> 'DBAuthor':
 
         if collective_name is not None:
             # Some consortium names are ridiculous...
@@ -241,7 +241,7 @@ class Author:
 
                 collective_name = truncated + truncated_suffix
 
-            return Author(collective_name, True)
+            return DBAuthor(collective_name, True)
 
         last = " {}".format(last_name) if last_name is not None else ""
         suffix = " {}".format(suffix) if suffix is not None else ""
@@ -260,7 +260,7 @@ class Author:
         if len(full_name) > max_name_length:
             full_name = full_name[:(max_name_length - 3)] + "..."
 
-        return Author(full_name, False)
+        return DBAuthor(full_name, False)
 
     def __str__(self):
         return self.full_name
@@ -272,7 +272,7 @@ class Author:
         return "<Author {}>".format(self.full_name)
 
 
-class Journal:
+class DBJournal:
     """
     A journal within which an article was published.
     """
@@ -289,19 +289,19 @@ class Journal:
 
         self.identifier = identifier
         self.title = title
-        self.volume = volume if volume != Journal.SPECIAL_MISSING_VOLUME_TEXT else None
-        self.issue = issue if issue != Journal.SPECIAL_MISSING_ISSUE_TEXT else None
+        self.volume = volume if volume != DBJournal.SPECIAL_MISSING_VOLUME_TEXT else None
+        self.issue = issue if issue != DBJournal.SPECIAL_MISSING_ISSUE_TEXT else None
         self.date = date
 
     @property
     def non_null_volume(self) -> str:
         """ If the volume is None, returns Journal.SPECIAL_MISSING_VOLUME_TEXT. """
-        return self.volume if self.volume is not None else Journal.SPECIAL_MISSING_VOLUME_TEXT
+        return self.volume if self.volume is not None else DBJournal.SPECIAL_MISSING_VOLUME_TEXT
 
     @property
     def non_null_issue(self) -> str:
         """ If the issue is None, returns Journal.SPECIAL_MISSING_ISSUE_TEXT. """
-        return self.issue if self.issue is not None else Journal.SPECIAL_MISSING_ISSUE_TEXT
+        return self.issue if self.issue is not None else DBJournal.SPECIAL_MISSING_ISSUE_TEXT
 
     @staticmethod
     def generate(
@@ -313,7 +313,7 @@ class Journal:
             date: datetime.date):
 
         identifier = issn if issn is not None else "[{}]".format(iso_abbrev)
-        return Journal(identifier, title, volume, issue, date)
+        return DBJournal(identifier, title, volume, issue, date)
 
     def __str__(self):
         if self.volume is None and self.issue is None:
@@ -328,13 +328,13 @@ class Journal:
         return "<Journal {}: {}>".format(self.identifier, str(self))
 
 
-class ArticleAuthorRelation:
+class DBArticleAuthorRelation:
     """
     Represents the relationship that represents authorship of an article.
     The authorship is represented by the
     """
     def __init__(self,
-                 article: 'Article', author: Author,
+                 article: 'DBArticle', author: DBAuthor,
                  author_position: int, is_first_author: bool, is_last_author: bool):
 
         self.article = article
@@ -354,7 +354,7 @@ class ArticleAuthorRelation:
         return f"<ArticleAuthorRelation {str(self)}>"
 
 
-class Article:
+class DBArticle:
     """
     An article in PubMed.
     """
@@ -367,8 +367,8 @@ class Article:
         self.pmid: int = pmid
         self.date: datetime.date = date
         self.title: str = title
-        self._journal: Optional[Journal] = None
-        self._author_relations: Optional[list[ArticleAuthorRelation]] = None
+        self._journal: Optional[DBJournal] = None
+        self._author_relations: Optional[list[DBArticleAuthorRelation]] = None
         self._reference_pmids: Optional[list[int]] = None
         self._mesh_descriptor_ids: Optional[list[int]] = None
 
@@ -377,10 +377,10 @@ class Article:
         """
         Generates an article entry given its information from PubMed.
         """
-        return Article(
+        return DBArticle(
             pmid=pmid,
             date=date,
-            title=Article.generate_title(english_title, original_title)
+            title=DBArticle.generate_title(english_title, original_title)
         )
 
     @staticmethod
@@ -406,31 +406,31 @@ class Article:
         return result
 
     @property
-    def authors(self) -> list[Author]:
+    def authors(self) -> list[DBAuthor]:
         """ Returns all the Authors of this article. """
         return [relation.author for relation in self.author_relations]
 
     @property
-    def author_relations(self) -> list[ArticleAuthorRelation]:
+    def author_relations(self) -> list[DBArticleAuthorRelation]:
         """ Returns all the ArticleAuthorRelations of this article. """
         if self._author_relations is None:
             raise ValueError("The authors of this article have not been read from the database")
         return self._author_relations
 
     @author_relations.setter
-    def author_relations(self, author_relations: list[Author]):
+    def author_relations(self, author_relations: list[DBAuthor]):
         """ Sets the Authors of this article. """
         self._author_relations = author_relations
 
     @property
-    def journal(self) -> Journal:
+    def journal(self) -> DBJournal:
         """ Returns all the Authors of this article. """
         if self._journal is None:
             raise ValueError("The journal of this article have not been read from the database")
         return self._journal
 
     @journal.setter
-    def journal(self, journal: Journal):
+    def journal(self, journal: DBJournal):
         """ Sets the Journal of this article. """
         self._journal = journal
 
@@ -465,7 +465,7 @@ class Article:
         return "<Article {}>".format(str(self))
 
 
-class MeSHHeading:
+class DBMeSHHeading:
     """
     A MeSH Heading from the NLM database
     https://www.nlm.nih.gov/databases/download/mesh.html
@@ -477,7 +477,7 @@ class MeSHHeading:
         self.tree_numbers = tree_numbers
 
     @staticmethod
-    def search(mesh_headings: list['MeSHHeading'], name: str) -> list['MeSHHeading']:
+    def search(mesh_headings: list['DBMeSHHeading'], name: str) -> list['DBMeSHHeading']:
         """
         Searches for the MeSH headings within mesh_headings that
         have the given name, or a similar name.

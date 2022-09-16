@@ -100,6 +100,18 @@ const availableFilters = {
         form_name: "Graph Node Type",
         category: filterCategories.Graph
     },
+    graph_node_size: {
+        key: "graph_node_size",
+        name: "Graph Node Size",
+        form_name: "Node Size Source",
+        category: filterCategories.Graph
+    },
+    graph_edge_size: {
+        key: "graph_edge_size",
+        name: "Graph Edge Width",
+        form_name: "Edge Width Source",
+        category: filterCategories.Graph
+    },
 };
 
 const Filters = () => {
@@ -236,7 +248,7 @@ const Filters = () => {
         return makeFilterEntry(filterDesc, slider);
     }
 
-    function makeGraphTypeEntry(filterDesc) {
+    function makeGraphNodeTypeEntry(filterDesc) {
         const currentFilterValue = filters[filterDesc.key];
         if (currentFilterValue === undefined)
             return <></>;
@@ -246,9 +258,49 @@ const Filters = () => {
             <Select
                 label={filterDesc.form_name}
                 value={currentFilterValue}
-                onChange={updateStateFromEventValueCallbackGenerator("graph_type")}>
+                onChange={updateStateFromEventValueCallbackGenerator(filterDesc.key)}>
                     <MenuItem value={"author"}>Author</MenuItem>
-                    <MenuItem value={"mesh"}>Journal</MenuItem>
+                    {/*<MenuItem value={"mesh"}>Journal</MenuItem>*/}
+            </Select>
+        </FormControl>;
+
+        return makeFilterEntry(filterDesc, selector);
+    }
+
+    function makeGraphNodeValueEntry(filterDesc) {
+        const currentFilterValue = filters[filterDesc.key];
+        if (currentFilterValue === undefined)
+            return <></>;
+
+        const selector = <FormControl>
+            <InputLabel>{filterDesc.form_name}</InputLabel>
+            <Select
+                label={filterDesc.form_name}
+                value={currentFilterValue}
+                onChange={updateStateFromEventValueCallbackGenerator(filterDesc.key)}>
+                    <MenuItem value={"constant"}>Constant</MenuItem>
+                    <MenuItem value={"matched_nodes"}>Increase for Matched Nodes</MenuItem>
+                    <MenuItem value={"citations"}>Increase with Citations</MenuItem>
+            </Select>
+        </FormControl>;
+
+        return makeFilterEntry(filterDesc, selector);
+    }
+
+    function makeGraphEdgeValueEntry(filterDesc) {
+        const currentFilterValue = filters[filterDesc.key];
+        if (currentFilterValue === undefined)
+            return <></>;
+
+        const selector = <FormControl>
+            <InputLabel>{filterDesc.form_name}</InputLabel>
+            <Select
+                label={filterDesc.form_name}
+                value={currentFilterValue}
+                onChange={updateStateFromEventValueCallbackGenerator(filterDesc.key)}>
+                    <MenuItem value={"constant"}>Constant</MenuItem>
+                    <MenuItem value={"coauthored_articles"}>Increase with Co-Authored Articles</MenuItem>
+                    <MenuItem value={"citations"}>Increase with Shared Citations</MenuItem>
             </Select>
         </FormControl>;
 
@@ -265,8 +317,9 @@ const Filters = () => {
         journal: makeTextFieldEntry(availableFilters.journal),
         article: makeTextFieldEntry(availableFilters.article),
         graph_size: makeNodeCountSliderEntry(availableFilters.graph_size),
-        graph_type: makeGraphTypeEntry(availableFilters.graph_type)
-
+        graph_type: makeGraphNodeTypeEntry(availableFilters.graph_type),
+        graph_node_size: makeGraphNodeValueEntry(availableFilters.graph_node_size),
+        graph_edge_size: makeGraphEdgeValueEntry(availableFilters.graph_edge_size),
     }
     let selectedFilterComponents = activeFilters.map(f => filterComponents[f]);
 

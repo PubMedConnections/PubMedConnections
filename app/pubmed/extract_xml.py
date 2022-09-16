@@ -9,7 +9,7 @@ from typing import Optional
 from lxml import etree
 
 from app.pubmed.medline_dates import parse_month, parse_medline_date
-from app.pubmed.model import Author, Article, Journal, MeSHHeading, ArticleAuthorRelation
+from app.pubmed.model import DBAuthor, DBArticle, DBJournal, DBMeSHHeading, DBArticleAuthorRelation
 from app.pubmed.warning_log import WarningLog
 
 
@@ -52,7 +52,7 @@ def extract_date(date_node: etree.Element) -> datetime.date:
     return datetime.date(year, month, day)
 
 
-def extract_author(author_node: etree.Element) -> Author:
+def extract_author(author_node: etree.Element) -> DBAuthor:
     """
     Extracts an author's information from an <Author> node.
     This does its best to canonicalize the names of authors into a standard format.
@@ -75,15 +75,15 @@ def extract_author(author_node: etree.Element) -> Author:
         elif tag == "CollectiveName":
             collective_name = node.text
 
-    return Author.generate_from_name_pieces(last_name, fore_name, initials, suffix, collective_name)
+    return DBAuthor.generate_from_name_pieces(last_name, fore_name, initials, suffix, collective_name)
 
 
-def extract_authors(article: Article, author_list_node: etree.Element) -> list[ArticleAuthorRelation]:
+def extract_authors(article: DBArticle, author_list_node: etree.Element) -> list[DBArticleAuthorRelation]:
     """
     Reads all the authors from an <AuthorList>.
     """
     seen_authors = set()  # Some articles can contain duplicate authors, hence the set.
-    authors: list[tuple[int, Author]] = []
+    authors: list[tuple[int, DBAuthor]] = []
     position = 0
     if author_list_node is not None:
         for author_node in author_list_node:
@@ -100,7 +100,7 @@ def extract_authors(article: Article, author_list_node: etree.Element) -> list[A
     for author_position, author in authors:
         is_first_author = (author_position == 1)
         is_last_author = (author_position == position)
-        author_relations.append(ArticleAuthorRelation(
+        author_relations.append(DBArticleAuthorRelation(
             article, author, author_position, is_first_author, is_last_author
         ))
 
@@ -139,7 +139,7 @@ def extract_journal_issue(journal_issue_node: etree.Element):
     return volume, issue, date
 
 
-def extract_journal(journal_node: etree.Element) -> Journal:
+def extract_journal(journal_node: etree.Element) -> DBJournal:
     """
     Extracts a journal from <Journal>.
     """
@@ -169,7 +169,7 @@ def extract_journal(journal_node: etree.Element) -> Journal:
     issn = issn_linking if issn is None else issn
 
     volume, issue, date = extract_journal_issue(journal_issue_node)
-    return Journal.generate(iso_abbrev, issn, title, volume, issue, date)
+    return DBJournal.generate(iso_abbrev, issn, title, volume, issue, date)
 
 
 def extract_article(pmid: int, date: datetime.date, article_node: etree.Element):
@@ -194,7 +194,7 @@ def extract_article(pmid: int, date: datetime.date, article_node: etree.Element)
     if journal_node is None:
         raise Exception("Article is missing <Journal>")
 
-    article = Article.generate(
+    article = DBArticle.generate(
         pmid=pmid,
         date=date,
         english_title=english_title,
@@ -230,7 +230,7 @@ def extract_mesh_heading_list(heading_list_node: etree.Element):
     return descriptor_ids
 
 
-def extract_citation(citation_node: etree.Element) -> Article:
+def extract_citation(citation_node: etree.Element) -> DBArticle:
     """
     Extracts the details of an article from a <MedlineCitation> node.
     """
@@ -310,7 +310,7 @@ def extract_article_pmid_from_list(log: WarningLog, id_list_node: etree.Element)
     return None
 
 
-def extract_pubmed_data(log: WarningLog, pubmed_data_node: etree.Element, article: Article):
+def extract_pubmed_data(log: WarningLog, pubmed_data_node: etree.Element, article: DBArticle):
     """ Extracts information from a <PubmedData> node to add into the given article. """
     reference_pmids: list[int] = []
 
@@ -328,7 +328,7 @@ def extract_pubmed_data(log: WarningLog, pubmed_data_node: etree.Element, articl
     article.reference_pmids = reference_pmids
 
 
-def extract_pubmed_article(log: WarningLog, pubmed_article_node: etree.Element) -> Optional[Article]:
+def extract_pubmed_article(log: WarningLog, pubmed_article_node: etree.Element) -> Optional[DBArticle]:
     """ Tries to extract an article from the given <PubmedArticle> node. """
     citation_node = None
     pubmed_data_node = None
@@ -408,7 +408,7 @@ def extract_pubmed_article(log: WarningLog, pubmed_article_node: etree.Element) 
     return article
 
 
-def extract_articles(log: WarningLog, tree: etree.ElementTree) -> list[Article]:
+def extract_articles(log: WarningLog, tree: etree.ElementTree) -> list[DBArticle]:
     """
     Takes in a parsed PubMed data file object, and extracts
     the data that we are interested in from it.
@@ -453,7 +453,7 @@ def extract_mesh_descriptor_id(descriptor_id_str: str) -> int:
     return int(descriptor_id_str[1:])
 
 
-def extract_mesh_headings(tree) -> list[MeSHHeading]:
+def extract_mesh_headings(tree) -> list[DBMeSHHeading]:
     """
     Extracts a list of mesh headings from the XML tree.
     """
@@ -475,6 +475,6 @@ def extract_mesh_headings(tree) -> list[MeSHHeading]:
                 if child.tag == "TreeNumber":
                     tree_numbers.append(child.text)
 
-        headings.append(MeSHHeading(descriptor_id, descriptor_name, tree_numbers))
+        headings.append(DBMeSHHeading(descriptor_id, descriptor_name, tree_numbers))
 
     return headings

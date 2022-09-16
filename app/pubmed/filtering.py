@@ -190,7 +190,7 @@ class PubMedFilterBuilder:
         If this limit is hit, then a PubMedFilterLimitError
         will be raised.
         """
-        if node_limit <= 0:
+        if node_limit is not None and node_limit <= 0:
             raise PubMedFilterValueError("graph_size", f"The requested graph size must be positive, not {node_limit}")
 
         self._node_limit = node_limit
