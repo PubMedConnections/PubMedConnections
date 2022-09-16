@@ -1,2 +1,3 @@
 #!/bin/bash
-docker build -t pubmed-connections ../
+docker build -t pmc-neo4j ./neo4j/
+docker build -t pmc ../

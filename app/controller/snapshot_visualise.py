@@ -1,3 +1,4 @@
+import sys
 import textwrap
 from typing import Any
 
@@ -8,20 +9,21 @@ from datetime import datetime, date
 from app.controller.graph_builder import GraphBuilder
 from app.controller.snapshot_analyse import _create_query_from_filters
 
-from app.pubmed.filtering import PubMedFilterBuilder
+from app.pubmed.filtering import PubMedFilterBuilder, PubMedFilterLimitError
 from app.pubmed.model import MeSHHeading, Article
 
 
-def parse_dates(filters):
-    if filters['published_after'] == '':
-        del filters['published_after']
-    else:
-        filters['published_after'] = datetime.strptime(filters['published_after'], '%Y-%m-%d')
+def parse_date(date_str) -> datetime:
+    return datetime.strptime(date_str, '%Y-%m-%d')
 
-    if filters['published_before'] == '':
-        del filters['published_before']
-    else:
-        filters['published_before'] = datetime.strptime(filters['published_before'], '%Y-%m-%d')
+
+def parse_dates(filters):
+    if "published_after" in filters:
+        filters["published_after"] = parse_date(filters["published_after"])
+
+    if "published_before" in filters:
+        filters["published_before"] = parse_date(filters["published_before"])
+
     return filters
 
 
@@ -55,19 +57,17 @@ def construct_graph_filter(filters: dict[str, Any]) -> PubMedFilterBuilder:
         if len(author_name.strip()) > 0:
             filter_builder.add_author_name_filter(author_name)
 
-    # TODO : Should be changed to a boolean flag
     if "first_author" in filters:
-        author_name = filters["first_author"]
+        restrict_to_first_author = filters["first_author"]
         del filters["first_author"]
-        if len(author_name.strip()) > 0:
-            filter_builder.add_first_author_name_filter(author_name)
+        if restrict_to_first_author:
+            filter_builder.add_first_author_filter()
 
-    # TODO : Should be changed to a boolean flag
     if "last_author" in filters:
-        author_name = filters["last_author"]
+        restrict_to_last_author = filters["last_author"]
         del filters["last_author"]
-        if len(author_name.strip()) > 0:
-            filter_builder.add_last_author_name_filter(author_name)
+        if restrict_to_last_author:
+            filter_builder.add_last_author_filter()
 
     if "article" in filters:
         article_name = filters["article"]
@@ -77,13 +77,26 @@ def construct_graph_filter(filters: dict[str, Any]) -> PubMedFilterBuilder:
 
     if "published_after" in filters:
         filter_date = filters["published_after"]
+        del filters["published_after"]
         boundary_date = date(year=filter_date.year, month=filter_date.month, day=filter_date.day)
         filter_builder.add_published_after_filter(boundary_date)
 
     if "published_before" in filters:
         filter_date = filters["published_before"]
+        del filters["published_before"]
         boundary_date = date(year=filter_date.year, month=filter_date.month, day=filter_date.day)
         filter_builder.add_published_before_filter(boundary_date)
+
+    if "graph_size" in filters:
+        node_limit = filters["graph_size"]
+        del filters["graph_size"]
+        filter_builder.set_node_limit(node_limit)
+    else:
+        # Sensible default limit
+        filter_builder.set_node_limit(1000)
+
+    if len(filters) != 0:
+        print("Unknown filters present: " + str(filters), file=sys.stderr)
 
     return filter_builder
 
@@ -119,9 +132,9 @@ def query_coauthor_graph(filters: dict[str, Any]):
     that returns the central authors to expand upon.
     """
     graph_filter = construct_graph_filter(filters)
-    graph_filter.set_node_limit(1000)
     with neo4j_conn.new_session() as session:
         filter_results = graph_filter.build(force_authors=True).run(session)
+        node_limit = graph_filter.get_node_limit()
         co_author_graph_results = session.run(
             """
             CYPHER planner=dp
@@ -134,7 +147,8 @@ def query_coauthor_graph(filters: dict[str, Any]):
             RETURN author, author_rel, article, coauthor_rel, coauthor
             """,
             author_ids=filter_results.author_ids,
-            article_ids=filter_results.article_ids
+            article_ids=filter_results.article_ids,
+            node_limit=node_limit
         )
 
         graph = GraphBuilder()
@@ -157,6 +171,9 @@ def query_coauthor_graph(filters: dict[str, Any]):
                 author.author_id, coauthor.author_id,
                 (author, author_rel, article, coauthor_rel, coauthor)
             )
+
+        if graph.get_node_count() >= node_limit:
+            raise PubMedFilterLimitError(f"The limit of {node_limit} nodes was reached")
 
     def node_configure(node_data: list[Any]) -> dict:
         """ Sets the properties of nodes. """
@@ -196,7 +213,11 @@ def query_coauthor_graph(filters: dict[str, Any]):
             "value": len(article_ids)
         }
 
-    return jsonify(graph.build(node_configure, edge_configure))
+    graph_json = graph.build(node_configure, edge_configure)
+    if graph.get_node_count() == 0:
+        graph_json["empty_message"] = "There are no matching nodes."
+
+    return graph_json
 
 
 def query_by_snapshot_id(snapshot_id):

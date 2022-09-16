@@ -6,10 +6,10 @@ function Explore() {
   useEffect(() => {
     document.title = 'PubMed Connections | Explore';
   }, []);
-  return <div className="full-size">
+  return <>
     <FiltersDropdown />
-    <Graph />;
-  </div>
+    <Graph />
+  </>
 }
 
 export default Explore;

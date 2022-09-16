@@ -20,6 +20,7 @@ registration = ns.model('registration', {'username': fields.String(required=Fals
                                          'password': fields.String(required=False, default="admin"),
                                          'invite_code': fields.String(required=False, default=app.config['REGISTRATION_INVITE_CODE'])})
 
+
 @jwt.token_in_blocklist_loader
 def check_if_token_is_revoked(jwt_header, jwt_payload: dict):
     jti = jwt_payload["jti"]

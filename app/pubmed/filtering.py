@@ -109,7 +109,7 @@ class PubMedFilterQuery:
                 author_ids.add(record[author_index])
 
         if self.node_limit is not None and num_records >= self.node_limit:
-            raise PubMedFilterLimitError(f"The limit of {self.node_limit} matching nodes was reached")
+            raise PubMedFilterLimitError(f"The limit of {self.node_limit} nodes was reached")
 
         return PubMedFilterResults(journal_ids, mesh_ids, article_ids, author_ids)
 
@@ -164,14 +164,12 @@ class PubMedFilterBuilder:
         """ Adds a filter by the name of authors. """
         self._author_filters.append(self._create_text_filter("author.name", "author", author_name))
 
-    def add_first_author_name_filter(self, author_name: str):
-        """ Adds a filter by the name of authors. """
-        self.add_author_name_filter(author_name)
+    def add_first_author_filter(self):
+        """ Adds a filter to only select first authors of articles. """
         self._author_filters.append("author_rel.is_first_author")
 
-    def add_last_author_name_filter(self, author_name: str):
-        """ Adds a filter by the name of authors. """
-        self.add_author_name_filter(author_name)
+    def add_last_author_filter(self):
+        """ Adds a filter to only select last authors of articles. """
         self._author_filters.append("author_rel.is_last_author")
 
     def add_published_after_filter(self, boundary_date: datetime.date):
@@ -196,6 +194,12 @@ class PubMedFilterBuilder:
             raise PubMedFilterValueError("graph_size", f"The requested graph size must be positive, not {node_limit}")
 
         self._node_limit = node_limit
+
+    def get_node_limit(self) -> int:
+        """ Retrieves the currently set node limit. """
+        if self._node_limit is None:
+            raise Exception("There is no node limit")
+        return self._node_limit
 
     def build(
             self, *, force_journals=False, force_mesh=False, force_articles=False, force_authors=False
@@ -273,7 +277,7 @@ class PubMedFilterBuilder:
 
         # Limits.
         if self._node_limit is not None:
-            query += f"LIMIT {self._node_limit}\n"
+            query += f"LIMIT {self._next_filter_var(self._node_limit)}\n"
 
         return PubMedFilterQuery(
             query, self._variable_values, self._node_limit,

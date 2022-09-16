@@ -1,4 +1,4 @@
 import TeamDescription from './TeamDescription';
-import Header from './Header';
+import Introduction from './Introduction';
 
-export { TeamDescription, Header };
+export { TeamDescription, Introduction };

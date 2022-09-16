@@ -113,7 +113,6 @@ function Register() {
                         fullWidth
                         name='invite_code'
                         label='Invite code'
-                        type='password'
                         id='invite_code'
                         value={inviteCode}
                         onChange={(e) => setInviteCode(e.target.value)}

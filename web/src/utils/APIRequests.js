@@ -13,6 +13,10 @@ function PUT(route, data) {
     return makeRequest('put', route, data)
 }
 
+function DELETE(route, data) {
+    return makeRequest('delete', route, data)
+}
+
 function makeRequest(method, route, data) {
     const config = {
         method: method,
@@ -31,4 +35,4 @@ function makeRequest(method, route, data) {
     }
 }
 
-export {POST, GET, PUT}
+export {POST, GET, PUT, DELETE}

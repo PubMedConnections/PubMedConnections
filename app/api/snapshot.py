@@ -60,7 +60,7 @@ class DeleteSnapshot(Resource):
     @jwt_required()
     @ns.doc(params={'snapshot_id': {'default': '1'}}, security='api_key')
     def delete(snapshot_id: int):
-        return delete_by_snapshot_id(snapshot_id)
+        return {'id': delete_by_snapshot_id(snapshot_id), 'success': True}
 
 
 @ns.route('/visualise/')
@@ -83,12 +83,14 @@ class VisualiseSnapshot(Resource):
             return query_coauthor_graph(filter_params)
         except PubMedFilterLimitError as e:
             return {
-                "error": str(e)
+                "error": str(e),
+                "empty_message": f"{e}."
             }
         except PubMedFilterValueError as e:
             return {
                 "error": str(e),
-                "error_filter": e.filter_name
+                "error_filter": e.filter_name,
+                "empty_message": f"{e}."
             }
 
 

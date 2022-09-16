@@ -79,7 +79,7 @@ def read_all_pubmed_files(
         target_directory: str,
         file_paths: list[str],
         *,
-        read_thread_count=4
+        read_thread_count=1
 ) -> queue.PriorityQueue[ReadPubMedItem]:
     """
     Reads the contents of all the downloaded PubMed files and places

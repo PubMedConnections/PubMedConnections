@@ -225,7 +225,7 @@ class PubMedFTP:
                 is_broken_conn = (isinstance(e, EOFError) or isinstance(e, BrokenPipeError))
                 if is_broken_conn:
                     message = ("" if message == "" else message + " (") + \
-                              "Your connection to the FTP server may be too slow..." + \
+                              "Broken connection" + \
                               ("" if message == "" else ")")
 
                 if isinstance(e, HashMatchingException):

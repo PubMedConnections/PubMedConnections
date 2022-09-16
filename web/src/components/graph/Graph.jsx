@@ -11,9 +11,12 @@ import React, { useEffect, useRef, useState } from 'react';
 import LinearProgress from '@mui/material/LinearProgress'
 import {useSelector, useDispatch} from 'react-redux'
 import {POST, PUT} from "../../utils/APIRequests";
-import VisJSGraph from 'react-graph-vis'
+import VisJSGraph from 'react-graph-vis';
+import { useSnackbar } from 'notistack';
+import { DisplayError } from '../common/SnackBar';
 
 const Graph = () => {
+  const snackbar = useSnackbar();
   const filters = useSelector((state) => state.filters.filters);
 
   const [VISJSNetwork, setNetwork] = useState(null);
@@ -27,6 +30,7 @@ const Graph = () => {
     },
 
     options: {
+      autoResize: true,
       nodes: {
         shape: 'dot',
       },
@@ -43,7 +47,7 @@ const Graph = () => {
       physics: {
           maxVelocity: 20,
           repulsion: {
-              nodeDistance: 10,
+              nodeDistance: 100,
               centralGravity: 1,
               damping: 0.05,
               springConstant: 0.01,
@@ -57,66 +61,84 @@ const Graph = () => {
   });
 
   function loadGraphData() {
-    const delayDebounceLoad = setTimeout(() => {
-        if (VISJSNetwork == null) {
-            return
-        }
-        setGraphInfo({
-            options: graphInfo.options,
-            data: {
-              nodes: [],
-              edges: [],
-            }
-        });
-        setLoadingProgress(-1);
+      const delayDebounceLoad = setTimeout(() => {
+          if (VISJSNetwork == null)
+              return;
 
-        POST('snapshot/visualise/', filters)
-            .then((resp) => {
-                if (resp.status !== 200) {
-                    // TODO : Display this to the user.
-                    console.error("Something went wrong: " + resp.status)
-                    console.error(resp);
-                    setLoadingProgress(100)
-                    return;
-                }
+          setGraphInfo({
+              options: graphInfo.options,
+              data: {
+                  nodes: [],
+                  edges: [],
+              }
+          });
+          setLoadingProgress(-1);
 
-                const data = resp.data;
-                if (data.error) {
-                    // TODO : Display this to the user.
-                    console.error(data.error);
-                    setLoadingProgress(100)
-                    return;
-                }
+          function processResponse(resp, errorMessage) {
+              let data = resp.data;
+              if (resp.status !== 200) {
+                  const err = errorMessage || resp.statusText
+                  DisplayError(snackbar, err);
+                  data = {"error": err};
+              }
 
-                let graphData = {
-                    nodes: resp.data.nodes,
-                    edges: resp.data.edges
-                }
-                setGraphInfo({
-                    options: graphInfo.options,
-                    data: graphData
-                });
-                setLoadingProgress(100)
-            })
-    }, 1500)
+              if (data.error) {
+                  DisplayError(snackbar, data.error);
+                  if (!data.empty_message) {
+                      data.empty_message = data.error + ".";
+                  }
+              }
+
+              let graphData = {
+                  nodes: data.nodes || [],
+                  edges: data.edges || [],
+                  empty_message: data.empty_message
+              }
+              setGraphInfo({
+                  options: graphInfo.options,
+                  data: graphData
+              });
+              setLoadingProgress(100)
+          }
+
+          POST('snapshot/visualise/', filters)
+              .then(processResponse)
+              .catch((err) => {
+                  processResponse(err.response, err.message)
+              });
+      }, 1500)
 
       return () => clearTimeout(delayDebounceLoad);
   }
 
-  useEffect(loadGraphData, [VISJSNetwork, filters])
+  useEffect(loadGraphData, [VISJSNetwork, filters]);
 
   return <div className="full-size">
-    <VisJSGraph className="full-size" graph={graphInfo.data} options={graphInfo.options}
-      getNetwork={(network) => {
-          setNetwork(network);
-      }}
-    />
-      {loadingProgress < 100 && <div id="visjs-loading-cover">
-      <div id="visjs-progress-container">
-        <LinearProgress />
-      </div>
-    </div>}
-  </div>;
+      <VisJSGraph className="full-size" graph={graphInfo.data} options={graphInfo.options}
+          getNetwork={setNetwork} />
+
+      {loadingProgress < 100 &&
+          <div id="visjs-loading-cover">
+              <div id="visjs-progress-container">
+                  <LinearProgress />
+              </div>
+          </div>
+      }
+
+      {loadingProgress >= 100 && graphInfo.data && graphInfo.data.nodes && graphInfo.data.nodes.length === 0 &&
+          <div id="visjs-graph-message">
+              <p>{graphInfo.data.empty_message || "Unable to build the graph."}</p>
+              <p>Try adjusting your filters.</p>
+          </div>
+      }
+
+      {loadingProgress >= 100 && graphInfo.data && graphInfo.data.nodes && graphInfo.data.edges &&
+          <div id="visjs-graph-info">
+              {graphInfo.data.nodes.length.toLocaleString()} Nodes,&nbsp;
+              {graphInfo.data.edges.length.toLocaleString()} Edges
+          </div>
+      }
+    </div>;
 };
 
 export default Graph;

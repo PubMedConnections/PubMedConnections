@@ -5,13 +5,19 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  overflow: hidden;
+  /*overflow: hidden;*/
 }
 
 code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
 }
 
+#introduction {
+    width: 100%;
+    height: 100vh;
+    padding-top: 72px;
+    text-align: center;
+}
 .hero-img {
   max-height: 1000px;
 }
@@ -53,15 +59,50 @@ code {
   margin: auto;
 }
 
+
+
+#visjs-graph-info,
+#visjs-graph-message {
+    position: absolute;
+    display: inline-block;
+    vertical-align: middle;
+    text-align: center;
+}
+
+#visjs-graph-info {
+    right: 0;
+    bottom: 0;
+    height: 2em;
+    line-height: 2em;
+    padding: 0 1em;
+    z-index: 1;
+    background-color: rgba(255, 255, 255, 0.9);
+    color: #333333;
+    font-size: 0.84em;
+    box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
+    border-top-right-radius: 0.5em;
+}
+
+#visjs-graph-message {
+    top: 55%;
+    left: 50%;
+    color: #888888;
+    transform: translate(-50%, -50%);
+}
+
 /** Filters **/
+#root header {
+    height: 72px;
+}
 #filter-dropdown {
   position: absolute;
-  top: 75px;
+  top: 72px;
   border: 1px solid rgba(200, 200, 200, 1);
   box-shadow: 0 0 5px gray;
   z-index: 999;
   background-color: rgba(255, 255, 255, 0.95);
-  width: 35vw
+  min-width: 50vw;
+  max-width: 100vw
 }
 
 #filter-dropdown #filters {
@@ -80,7 +121,8 @@ code {
 #add-filters {
   width: 100%;
   text-align: center;
-  margin-top: 5px;
+  margin-top: 1.2em;
+  margin-bottom: 1.6em;
 }
 
 #add-filters>div {
@@ -103,26 +145,32 @@ code {
 
 .filter-row>div {
   float: left;
-  padding-left: 10px;
 }
 
 .filter-class {
-  width: 20%;
+  padding-right: 0.6em;
 }
 
 .filter-class>p {
   border-radius: 5px;
-  padding: 3px;
+  padding: 0.2em 0.5em;
   text-align: center;
   font-weight: bold;
+  color: #333333;
+  font-size: 0.8em;
 }
 
 .filter-name {
-  width: 35%;
+  width: 9em;
+  color: #000000;
+}
+.filter-name,
+.filter-name > p {
+  font-size: 1em;
 }
 
 .filter-entry {
-  width: 35%;
+  flex: 1;
   height: 100%;
 }
 
@@ -131,7 +179,16 @@ code {
 }
 
 .filter-delete {
-  width: 10%;
+  width: 3em;
+}
+
+.filter-entry-slider {
+    padding-left: 1em;
+    padding-right: 1em;
+}
+
+.filter-entry-slider>span {
+    display: block;
 }
 
 #sidebar-user-details {

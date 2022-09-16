@@ -1,8 +1,6 @@
 import json
-from neo4j import basic_auth
 
 from app import neo4j_conn
-from config import NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD
 from hashlib import sha256
 from datetime import datetime
 
