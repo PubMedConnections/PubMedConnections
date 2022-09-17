@@ -277,10 +277,13 @@ class ArticleAuthorNode(GraphNode):
         is_root_node: bool = False
         author: DBAuthor = cast(ArticleAuthorNode, nodes[0]).author
         articles: list[DBArticle] = []
+        article_ids: set[int] = set()
         for node in nodes:
             node = cast(ArticleAuthorNode, node)
             is_root_node = is_root_node or node.is_root_node
-            articles.append(node.article)
+            if node.article.pmid not in article_ids:
+                article_ids.add(node.article.pmid)
+                articles.append(node.article)
 
         return AuthorNode(is_root_node, author, articles)
 

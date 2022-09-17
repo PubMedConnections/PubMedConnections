@@ -25,6 +25,7 @@ docker run \
 
 # Wait for Neo4J to start.
 printf "Waiting for Neo4J...\n"
+sleep 5
 ELAPSED=0
 while true; do
   ELAPSED=$((ELAPSED + 5))
@@ -45,6 +46,7 @@ done
 docker rm pmc
 docker run \
   --name=pmc \
+  --publish=8080:8080 \
   "--volume=$STORAGE_DIR/data:/data" \
   "--volume=$STORAGE_DIR/logs:/logs" \
   --add-host=host.docker.internal:host-gateway \

@@ -21,10 +21,11 @@ const resetState = {
 
 const initialState = {
     filters: {
-        mesh_heading: "Brain Stem",
+        mesh_heading: "Brain Stem Neoplasms",
         author: "J ",
+        graph_node_size: "edge_count"
     },
-    activeFilters: ["mesh_heading", "author"]
+    activeFilters: ["mesh_heading", "author", "graph_node_size"]
 };
 
 function copyAndRemoveElement(obj, key) {
