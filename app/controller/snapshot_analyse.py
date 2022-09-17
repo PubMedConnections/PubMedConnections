@@ -16,6 +16,7 @@ class AnalyticsThreading(object):
 
 # TODO
 # prevent creating a snapshot if no nodes returned
+# deal with empty string filters 
 
 update_degree_centrality_query = \
     """
@@ -192,11 +193,12 @@ def build_generic_query(snapshot):
     # query += "RETURN\n"
     # query += "\tDISTINCT author, coauthor"
 
-    # TODO LIMIT
-
     return query
 
 def build_node_query(snapshot):
+
+    node_limit = snapshot['graph_size'] if 'graph_size' in snapshot else 1000
+
     query = build_generic_query(snapshot)
     
     query += "WITH COLLECT(id(author)) + COLLECT(id(coauthor)) AS ids\n"
@@ -207,18 +209,42 @@ def build_node_query(snapshot):
     # query += "UNWIND authors as a\n"
     # query += "RETURN DISTINCT a\n"
 
+    query += f"LIMIT {node_limit}"
+
     return query
 
 def build_relationship_query(snapshot):
     query = build_generic_query(snapshot)
     
+
+    central_author = True if 'author' in snapshot or 'first_author' in snapshot or 'last_author' in snapshot else False
+
+    # build sub-query section
     query = "CALL {\n" + query
-    query += "RETURN DISTINCT article\n"
+    if central_author:
+        query += "WITH COLLECT(DISTINCT author) as authors, COLLECT(DISTINCT article) as articles\n"
+        query += "UNWIND authors as author1\n"
+        query += "UNWIND articles as article\n"
+        query += "RETURN author1, article\n"
+    else:
+        query += "RETURN DISTINCT article\n"
     query += "}\n\n"
 
+    # build main query
     query += "MATCH (author1:Author)-[:AUTHOR_OF]->(article:Article)<-[:AUTHOR_OF]-(author2:Author)\n"
-    query += "WITH author1, author2, count(*) AS c\n"
-    query += "RETURN id(author1) as source, id(author2) as target, apoc.create.vRelationship(author1, 'COAUTHOR', {count: c}, author2) as rel"
+    query += "WITH author1, author2,\n"
+    if central_author:
+        # we need to make the graph directed, as the graph cypher projection does not support undirected relationships
+        query += "\tapoc.create.vRelationship(author1, 'COAUTHOR', {count: count(*)}, author2) as rel1,\n"
+        query += "\tapoc.create.vRelationship(author2, 'COAUTHOR', {count: count(*)}, author1) as rel2\n"
+        query += "WITH author1, author2, COLLECT(rel1) + COLLECT(rel2) as rels\n"
+        query += "UNWIND rels as rel\n"
+    else:
+        query += "\tapoc.create.vRelationship(author1, 'COAUTHOR', {count: count(*)}, author2) as rel\n"
+
+    # query += "RETURN id(author1) as source, id(author2) as target, apoc.create.vRelationship(author1, 'COAUTHOR', {count: c}, author2) as rel"
+
+    query += "RETURN id(author1) as source, id(author2) as target, rel"
 
     # # for testing purposes
     # query += "RETURN author1, author2, apoc.create.vRelationship(author1, 'COAUTHOR', {count: c}, author2) as rel"
