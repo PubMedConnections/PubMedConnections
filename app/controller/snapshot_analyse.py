@@ -1,93 +1,89 @@
 from neo4j.exceptions import ClientError
 from graphdatascience import GraphDataScience
 from config import NEO4J_URI, NEO4J_REQUIRES_AUTH
-from flask import jsonify
 import json
 import threading
 from app.controller.snapshot_get import get_snapshot
 from app.helpers import set_default_date
 from app import neo4j_conn
-
+from app.PubMedErrors import PubMedSnapshotDoesNotExistError, PubMedUpdateSnapshotError, PubMedAnalyticsError
 
 class AnalyticsThreading(object):
     def __init__(self, graph_type: str, snapshot_id: int, filters):
-        thread = threading.Thread(target=run_analytics, args=(graph_type, snapshot_id, filters))
+        thread = threading.Thread(target=get_analytics, args=(graph_type, snapshot_id, filters))
         thread.daemon = True
         thread.start()
 
+# TODO
+# prevent creating a snapshot if no nodes returned
 
-def _update_snapshot_degree_centrality(tx, snapshot_id, degree_centrality_record):
+update_degree_centrality_query = \
     """
-    Helper function that updates a snapshot with the corresponding degree centrality results.
+    MATCH (m:DBMetadata)
+    WITH max(m.version) AS max_version
+    MATCH (d:DBMetadata)
+    WHERE d.version = max_version
+
+    MATCH (s:Snapshot { id: $snapshot_id })
+    SET s.degree_centrality = $centrality_record
+    RETURN s
+    """
+
+update_betweenness_centrality_query = \
+    """
+    MATCH (m:DBMetadata)
+    WITH max(m.version) AS max_version
+    MATCH (d:DBMetadata)
+    WHERE d.version = max_version
+
+    MATCH (s:Snapshot { id: $snapshot_id })
+    SET s.betweenness_centrality = $centrality_record
+    RETURN s
+    """
+
+retrieve_degree_centrality_query = \
+    """
+    MATCH (m:DBMetadata)
+    WITH max(m.version) AS max_version
+    MATCH (d:DBMetadata)
+    WHERE d.version = max_version
+
+    MATCH (s: Snapshot { id: $snapshot_id })
+    RETURN s.degree_centrality AS degree_centrality
+    """
+
+retrieve_betweenness_centrality_query = \
+    """
+    MATCH (m:DBMetadata)
+    WITH max(m.version) AS max_version
+    MATCH (d:DBMetadata)
+    WHERE d.version = max_version
+
+    MATCH (s: Snapshot { id: $snapshot_id })
+    RETURN s.betweenness_centrality AS betweenness_centrality
+    """
+    
+def _update_snapshot_centrality(tx, update_snapshot_centrality_query: str, snapshot_id: int, centrality_record):
+    """
+    Helper function that updates a snapshot with the corresponding centrality results.
     """
     result = tx.run(
-        """
-        MATCH (m:DBMetadata)
-        WITH max(m.version) AS max_version
-        MATCH (d:DBMetadata)
-        WHERE d.version = max_version
-
-        MATCH (s:Snapshot { id: $snapshot_id })
-        SET s.degree_centrality = $degree_centrality
-        RETURN s
-        """, snapshot_id=snapshot_id, degree_centrality=degree_centrality_record
+        update_snapshot_centrality_query, 
+        snapshot_id=snapshot_id, 
+        centrality_record=centrality_record
     )
 
-    # TODO error handling
+    if result is None:
+        raise PubMedUpdateSnapshotError("Unable to update snapshot with centrality results.")
 
-def _update_snapshot_betweenness_centrality(tx, snapshot_id, betweenness_centrality_record):
+def _retrieve_centrality(tx, retrieve_centrality_query: str, snapshot_id: int):
     """
-    Helper function that updates a snapshot with the corresponding betweenness centrality results.
-    """
-    result = tx.run(
-        """
-        MATCH (m:DBMetadata)
-        WITH max(m.version) AS max_version
-        MATCH (d:DBMetadata)
-        WHERE d.version = max_version
-
-        MATCH (s:Snapshot { id: $snapshot_id })
-        SET s.betweenness_centrality = $betweenness_centrality
-        RETURN s
-        """, snapshot_id=snapshot_id, betweenness_centrality=betweenness_centrality_record
-    )
-
-    # TODO error handling
-
-def _retrieve_degree_centrality(tx, snapshot_id):
-    """
-    Helper function to retrieve the degree centrality results.
+    Helper function to retrieve centrality results.
     """
 
     result = tx.run(
-        """
-        MATCH (m:DBMetadata)
-        WITH max(m.version) AS max_version
-        MATCH (d:DBMetadata)
-        WHERE d.version = max_version
-
-        MATCH (s: Snapshot { id: $snapshot_id })
-        RETURN s.degree_centrality AS degree_centrality
-        """, snapshot_id=snapshot_id
-    )
-
-    return result.single()
-
-def _retrieve_betweenness_centrality(tx, snapshot_id):
-    """
-    Helper function to retrieve the betweenness centrality results.
-    """
-
-    result = tx.run(
-        """
-        MATCH (m:DBMetadata)
-        WITH max(m.version) AS max_version
-        MATCH (d:DBMetadata)
-        WHERE d.version = max_version
-
-        MATCH (s: Snapshot { id: $snapshot_id })
-        RETURN s.betweenness_centrality AS betweenness_centrality
-        """, snapshot_id=snapshot_id
+        retrieve_centrality_query,
+        snapshot_id=snapshot_id
     )
 
     return result.single()
@@ -139,7 +135,7 @@ def build_generic_query(snapshot):
     query = ""
 
     query_journals = 'journal' in snapshot
-    query_mesh = 'mesh_heading' in snapshot['mesh_heading']
+    query_mesh = 'mesh_heading' in snapshot
 
     if query_journals:
         query += "MATCH (journal:Journal)\n"
@@ -203,16 +199,14 @@ def build_generic_query(snapshot):
 def build_node_query(snapshot):
     query = build_generic_query(snapshot)
     
-    query += "WITH COLLECT(DISTINCT id(author)) + COLLECT(DISTINCT id(coauthor)) AS ids\n"
+    query += "WITH COLLECT(id(author)) + COLLECT(id(coauthor)) AS ids\n"
     query += "UNWIND ids as id\n"
     query += "RETURN DISTINCT id\n"
     
-    # query += "WITH COLLECT(DISTINCT author) + COLLECT(DISTINCT coauthor) AS authors\n"
+    # query += "WITH COLLECT(author) + COLLECT(coauthor) AS authors\n"
     # query += "UNWIND authors as a\n"
     # query += "RETURN DISTINCT a\n"
 
-    # query += "\tDISTINCT author, coauthor"
-    
     return query
 
 def build_relationship_query(snapshot):
@@ -288,7 +282,7 @@ def _project_graph_and_run_analytics(graph_name: str, node_query: str, relations
                 }
             )
 
-            session.write_transaction(_update_snapshot_degree_centrality, snapshot_id, degree_centrality_record)
+            session.write_transaction(_update_snapshot_centrality, update_degree_centrality_query, snapshot_id, degree_centrality_record)
 
             # compute degree centrality
             res = gds.betweenness.stream(G)
@@ -327,15 +321,9 @@ def _project_graph_and_run_analytics(graph_name: str, node_query: str, relations
                 }
             )
 
-            session.write_transaction(_update_snapshot_betweenness_centrality, snapshot_id, betweenness_centrality_record)
+            session.write_transaction(_update_snapshot_centrality, update_betweenness_centrality_query, snapshot_id, betweenness_centrality_record)
 
             print("analytics completed")
-
-            # TODO
-            # could also use a weighted degree centrality (by collaborations) 
-            # first/last author should be a boolean or string?
-            # when the number of nodes are limited: ensure that the projected graph is the same as the one being visualised
-            #   solution: pass in ids of nodes from visualised graph to the node projection
 
             analytics_response = {
                 "degree": {
@@ -348,31 +336,29 @@ def _project_graph_and_run_analytics(graph_name: str, node_query: str, relations
                 }
             }
 
-            G.drop()
-
-        # unable to project the graph into memory because there are no matches for the given filters
         except ClientError as err:
-            # TODO
-            print(err)
-            pass
-
+            raise PubMedAnalyticsError(err.code, err.message)
+        
+        finally:
+            # drop projected graph
+            if gds.graph.exists(graph_name)["exists"]:
+                G = gds.graph.get(graph_name)
+                G.drop()
 
     return analytics_response
 
 
-def run_analytics(snapshot_id: int):
+def get_analytics(snapshot_id: int):
     """
-    Runs analytics on the graph returned by the query. The graph is either author-author
-    or MeSH-MeSH.
+    Gets analytics for the snapshot. If the analytics have been previously computed,
+    retrieve the stored results from the DB, otherwise project the snapshot graph and 
+    compute them.
     """
-
-    # TODO fix retrieve analytics function
 
     snapshot = get_snapshot(snapshot_id)
 
     if snapshot == []:
-        # TODO
-        return "ERROR: snapshot does not exist"
+        raise PubMedSnapshotDoesNotExistError(f"There is no snapshot with the id: {snapshot_id}")
     
     snapshot = snapshot[0]
 
@@ -387,9 +373,6 @@ def run_analytics(snapshot_id: int):
         # parse date strings into date time
         snapshot = set_default_date(snapshot)
 
-        # TODO confirm expected behaviour when num_nodes == 0 
-        # nodes_limit_string = str(filters['num_nodes']) if filters['num_nodes'] != 0 else "100"
-
         graph_name = "coauthors" + str(snapshot_id)
 
         # return matching author nodes
@@ -400,7 +383,7 @@ def run_analytics(snapshot_id: int):
 
         analytics_results = _project_graph_and_run_analytics(graph_name, node_query, relationship_query, snapshot_id)
 
-    return jsonify(analytics_results)
+    return analytics_results
 
 
 def retrieve_analytics(snapshot_id: int):
@@ -413,7 +396,7 @@ def retrieve_analytics(snapshot_id: int):
     with neo4j_conn.new_session() as session:
 
         # retrieve the degree centrality record
-        degree_centrality_record = session.read_transaction(_retrieve_degree_centrality, snapshot_id)
+        degree_centrality_record = session.read_transaction(_retrieve_centrality, retrieve_degree_centrality_query, snapshot_id)
 
         if degree_centrality_record.data() is not None:
 
@@ -424,7 +407,7 @@ def retrieve_analytics(snapshot_id: int):
                 analytics_response['degree'] = degree_centrality
 
         # retrieve the betweenness_centrality record
-        betweenness_centrality_record = session.read_transaction(_retrieve_betweenness_centrality, snapshot_id)
+        betweenness_centrality_record = session.read_transaction(_retrieve_centrality, retrieve_betweenness_centrality_query, snapshot_id)
 
         if betweenness_centrality_record.data() is not None:
             if (betweenness_centrality_record.data()['betweenness_centrality'] is not None and betweenness_centrality_record.data()['betweenness_centrality'] != ""):

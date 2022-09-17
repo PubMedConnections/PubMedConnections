@@ -1,13 +1,14 @@
-from flask import request
+from flask import request, jsonify
 from flask_restx import Namespace, Resource, fields
 from app.controller.snapshot_visualise import query_by_snapshot_id, parse_dates, get_author_graph, \
     query_coauthor_graph
 from app.controller.snapshot_create import create_by_filters
 from app.controller.snapshot_get import get_snapshot, get_user_snapshots
 from app.controller.snapshot_delete import delete_by_snapshot_id
-from app.controller.snapshot_analyse import run_analytics
+from app.controller.snapshot_analyse import get_analytics
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.pubmed.filtering import PubMedFilterLimitError, PubMedFilterValueError
+from app.PubMedErrors import PubMedSnapshotDoesNotExistError, PubMedUpdateSnapshotError, PubMedAnalyticsError
 
 ns = Namespace('snapshot', description='snapshot related operations',
                authorizations={'api_key':
@@ -112,7 +113,18 @@ class AnalyseSnapshot(Resource):
     @jwt_required()
     @ns.doc(params={'snapshot_id': {'default': '1'}}, security="api_key")
     def get(snapshot_id: int):
-        return run_analytics(snapshot_id)
+        try:
+            return jsonify(get_analytics(snapshot_id))
+        except (PubMedSnapshotDoesNotExistError, PubMedUpdateSnapshotError) as e:
+            return {
+                "error": str(e),
+                "empty_message": f"{e}."
+            }
+        except PubMedAnalyticsError as e:
+            return {
+                "error": e.code,
+                "message": str(e),
+            }
 
 @ns.route('/list/')
 class VisualiseSnapshot(Resource):
