@@ -352,13 +352,17 @@ class ArticleCoAuthorEdge(GraphEdge):
         author_id = cast(ArticleCoAuthorEdge, edges[0]).author_id
         author_article_rels: list[DBArticleAuthorRelation] = []
         articles: list[DBArticle] = []
+        article_ids: set[int] = set()
         coauthor_article_rels: list[DBArticleAuthorRelation] = []
         coauthor_id = cast(ArticleCoAuthorEdge, edges[0]).coauthor_id
         for edge in edges:
             edge = cast(ArticleCoAuthorEdge, edge)
-            author_article_rels.append(edge.author_article_rel)
-            articles.append(edge.article)
-            coauthor_article_rels.append(edge.coauthor_article_rel)
+            # The edge can be added from both directions.
+            if edge.article.pmid not in article_ids:
+                author_article_rels.append(edge.author_article_rel)
+                articles.append(edge.article)
+                article_ids.add(edge.article.pmid)
+                coauthor_article_rels.append(edge.coauthor_article_rel)
 
         return CoAuthorEdge(author_id, author_article_rels, articles, coauthor_article_rels, coauthor_id)
 
