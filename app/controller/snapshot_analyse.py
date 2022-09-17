@@ -223,31 +223,19 @@ def build_relationship_query(snapshot):
     query = "CALL {\n" + query
     if central_author:
         query += "WITH COLLECT(DISTINCT author) as authors, COLLECT(DISTINCT article) as articles\n"
-        query += "UNWIND authors as author1\n"
+        query += "UNWIND authors as author\n"
         query += "UNWIND articles as article\n"
-        query += "RETURN author1, article\n"
+        query += "RETURN author, article\n"
     else:
         query += "RETURN DISTINCT article\n"
     query += "}\n\n"
 
     # build main query
     query += "MATCH (author1:Author)-[:AUTHOR_OF]->(article:Article)<-[:AUTHOR_OF]-(author2:Author)\n"
-    query += "WITH author1, author2,\n"
     if central_author:
         # we need to make the graph directed, as the graph cypher projection does not support undirected relationships
-        query += "\tapoc.create.vRelationship(author1, 'COAUTHOR', {count: count(*)}, author2) as rel1,\n"
-        query += "\tapoc.create.vRelationship(author2, 'COAUTHOR', {count: count(*)}, author1) as rel2\n"
-        query += "WITH author1, author2, COLLECT(rel1) + COLLECT(rel2) as rels\n"
-        query += "UNWIND rels as rel\n"
-    else:
-        query += "\tapoc.create.vRelationship(author1, 'COAUTHOR', {count: count(*)}, author2) as rel\n"
-
-    # query += "RETURN id(author1) as source, id(author2) as target, apoc.create.vRelationship(author1, 'COAUTHOR', {count: c}, author2) as rel"
-
-    query += "RETURN id(author1) as source, id(author2) as target, rel"
-
-    # # for testing purposes
-    # query += "RETURN author1, author2, apoc.create.vRelationship(author1, 'COAUTHOR', {count: c}, author2) as rel"
+        query += "WHERE author1 = author OR author2 = author\n"
+    query += "RETURN id(author1) as source, id(author2) as target, apoc.create.vRelationship(author1, 'COAUTHOR', {count: count(*)}, author2) as rel"
     
     return query
 
