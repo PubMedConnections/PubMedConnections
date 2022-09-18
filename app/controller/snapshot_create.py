@@ -3,9 +3,11 @@ from datetime import datetime
 from app import neo4j_conn
 from app.controller.snapshot_visualise import parse_dates
 from app.controller.snapshot_analyse import AnalyticsThreading
+from app.helpers import remove_empty_filters
 
 
 def create_by_filters(filters, current_user):
+    filters = remove_empty_filters(filters)
     filters = parse_dates(filters)
 
     filters['creation_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")

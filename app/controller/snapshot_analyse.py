@@ -15,6 +15,10 @@ class AnalyticsThreading(object):
         thread.start()
 
 # TODO
+# force timeing out of analytics
+# testing
+# GDS working with docker
+
 # prevent creating a snapshot if no nodes returned
 # deal with empty string filters 
 
@@ -179,7 +183,16 @@ def build_generic_query(snapshot):
     query += "MATCH (author:Author) -[author_rel:AUTHOR_OF]-> (article)\n"
     author_filters = []
     if 'author' in snapshot:
-        author_filters.append(f"toLower(author.name) CONTAINS '{snapshot['author'].lower()}'")
+        author_name_filters = [] 
+        for author_name in snapshot['author'].split(","):
+            author_name = author_name.strip()
+            if (author_name.startswith('"') and author_name.endswith('"')) or (author_name.startswith("'") and author_name.endswith("'")):
+                # exact match
+                author_name_filters.append("toLower(author.name) = '{}'".format(author_name.replace('"', '').replace("'", '').lower()))
+                # author_name_filters.append(f"toLower(author.name) = '{author_name.replace('\"', '').replace('\'', '').lower()}'")
+            else:
+                author_name_filters.append(f"toLower(author.name) CONTAINS '{author_name.lower()}'")
+        author_filters.append("\n\tOR ".join(author_name_filters))
     if 'first_author' in snapshot:
         article_filters.append(f"author_rel.is_first_author = '{snapshot['first_author']}'")
     if 'last_author' in snapshot:
