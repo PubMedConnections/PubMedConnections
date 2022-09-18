@@ -2,7 +2,6 @@ from datetime import datetime
 from dateutil.relativedelta import relativedelta
 
 def set_default_date(filters):
-    # TODO remove date end quick fix
     if 'published_after' not in filters:
         # default: 40 years ago
         filters['published_after'] = datetime.now() - relativedelta(years=40)
@@ -16,3 +15,12 @@ def set_default_date(filters):
         date_end = filters['published_before'].find("T")
         filters['published_before'] = datetime.strptime(filters['published_before'][:date_end], '%Y-%m-%d')
     return filters
+
+def remove_empty_filters(filters):
+    """
+    Removes empty filters.
+    """
+
+    non_empty_filters = { filter: value for filter, value in filters.items() if not isinstance(value, str) or value.strip() != "" } 
+
+    return non_empty_filters
