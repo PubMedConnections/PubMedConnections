@@ -16,9 +16,9 @@ class PubMedFilterValueError(Exception):
     """
     An error that is raised when a PubMed filter is invalid.
     """
-    def __init__(self, filter_name: str, message: str):
+    def __init__(self, filter_key: str, message: str):
         super().__init__(message)
-        self.filter_name = filter_name
+        self.filter_key = filter_key
 
 
 class PubMedFilterResults:
@@ -133,13 +133,13 @@ class PubMedFilterBuilder:
         self._variable_values[name] = value
         return f"${name}"
 
-    def _create_text_filter(self, field: str, filter_name: str, filter_value: str) -> str:
+    def _create_text_filter(self, field: str, filter_key: str, filter_value: str) -> str:
         """
         Creates a filter to match text in a field.
         """
         filter_value = filter_value.lower()
         if len(filter_value) == 0:
-            raise PubMedFilterValueError(filter_name, f"{filter_name} cannot be empty")
+            raise PubMedFilterValueError(filter_key, f"{filter_key} cannot be empty")
 
         return f"toLower({field}) CONTAINS {self._next_filter_var(filter_value)}"
 
@@ -190,7 +190,7 @@ class PubMedFilterBuilder:
         If this limit is hit, then a PubMedFilterLimitError
         will be raised.
         """
-        if node_limit <= 0:
+        if node_limit is not None and node_limit <= 0:
             raise PubMedFilterValueError("graph_size", f"The requested graph size must be positive, not {node_limit}")
 
         self._node_limit = node_limit

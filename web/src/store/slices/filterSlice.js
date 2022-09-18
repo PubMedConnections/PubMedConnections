@@ -12,6 +12,9 @@ const resetState = {
         article: "",
         graph_size: 1000,
         graph_type: "author",
+        graph_node_size: "matched_nodes",
+        graph_node_colour: "matched_nodes",
+        graph_edge_size: "coauthored_articles"
     },
     activeFilters: []
 }
@@ -20,8 +23,9 @@ const initialState = {
     filters: {
         mesh_heading: "Brain Stem Neoplasms",
         author: "J ",
+        graph_node_size: "edge_count"
     },
-    activeFilters: ["mesh_heading", "author"]
+    activeFilters: ["mesh_heading", "author", "graph_node_size"]
 };
 
 function copyAndRemoveElement(obj, key) {

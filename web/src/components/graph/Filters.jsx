@@ -1,4 +1,3 @@
-import React, { useEffect, useRef, useState } from 'react';
 import {Add, Delete} from '@mui/icons-material'
 import {
     Button,
@@ -20,18 +19,106 @@ import {useSelector, useDispatch} from 'react-redux'
 import { setFilter, resetFilter, setActiveFilters, removeActiveFilter } from '../../store/slices/filterSlice'
 
 
-let filterNames = {
-    mesh_heading: "MeSH Heading",
-    author: "Author Name",
-    first_author: "Is First Author",
-    last_author: "Is Last Author",
-    published_before: "Published Before",
-    published_after: "Published After",
-    journal: "Journal Name",
-    article: "Article Name",
-    graph_size: "Max Graph Size",
-    graph_type: "Graph Type",
+
+const filterCategories = {
+    Journal: {
+        name: "Journal",
+        colour: "rgba(169, 103, 224, 0.6)"
+    },
+    Author: {
+        name: "Author",
+        colour: "rgba(234, 47, 30, 0.6)"
+    },
+    Article: {
+        name: "Article",
+        colour: "rgba(149, 178, 249, 0.6)"
+    },
+    Graph: {
+        name: "Graph",
+        colour: "rgba(0, 0, 0, 0.4)"
+    }
 }
+
+const availableFilters = {
+    mesh_heading: {
+        key: "mesh_heading",
+        name: "MeSH Heading",
+        form_name: "MeSH",
+        category: filterCategories.Article
+    },
+    author: {
+        key: "author",
+        name: "Author Name",
+        form_name: "Author Name",
+        category: filterCategories.Author
+    },
+    first_author: {
+        key: "first_author",
+        name: "Is First Author",
+        form_name: "Restrict to First Authors",
+        category: filterCategories.Author
+    },
+    last_author: {
+        key: "last_author",
+        name: "Is Last Author",
+        form_name: "Restrict to Last Authors",
+        category: filterCategories.Author
+    },
+    published_before: {
+        key: "published_before",
+        name: "Published Before",
+        form_name: "Before",
+        category: filterCategories.Article
+    },
+    published_after: {
+        key: "published_after",
+        name: "Published After",
+        form_name: "After",
+        category: filterCategories.Article
+    },
+    journal: {
+        key: "journal",
+        name: "Journal Name",
+        form_name: "Journal",
+        category: filterCategories.Journal
+    },
+    article: {
+        key: "article",
+        name: "Article Title",
+        form_name: "Article",
+        category: filterCategories.Article
+    },
+    graph_size: {
+        key: "graph_size",
+        name: "Max Graph Size",
+        form_name: "Max Graph Size",
+        category: filterCategories.Graph
+    },
+    graph_type: {
+        key: "graph_type",
+        name: "Graph Node Type",
+        form_name: "Graph Node Type",
+        category: filterCategories.Graph
+    },
+    graph_node_size: {
+        key: "graph_node_size",
+        name: "Graph Node Size",
+        form_name: "Node Size Source",
+        category: filterCategories.Graph
+    },
+    graph_node_colour: {
+        key: "graph_node_colour",
+        name: "Graph Node Colour",
+        form_name: "Node Colour Source",
+        category: filterCategories.Graph
+    },
+    graph_edge_size: {
+        key: "graph_edge_size",
+        name: "Graph Edge Width",
+        form_name: "Edge Width Source",
+        category: filterCategories.Graph
+    },
+};
 
 const Filters = () => {
     const filters = useSelector((state) => state.filters.filters);
@@ -39,103 +126,92 @@ const Filters = () => {
 
     const activeFilters = useSelector((state) => state.filters.activeFilters)
 
-    const filterCategories = {
-        Journal: ["Journal", "rgba(169, 103, 224, 0.6)"],
-        Author: ["Author", "rgba(234, 47, 30, 0.6)"],
-        Article: ["Article", "rgba(149, 178, 249, 0.6)"],
-        Graph: ["Graph", "rgba(0, 0, 0, 0.4)"]
-    }
-
-    function makeFilterEntry(classifier, identifier, inputField) {
-        let name = filterNames[identifier];
-
-        return <div className="filter-row" key={identifier}>
+    function makeFilterEntry(filterDesc, element) {
+        return <div className="filter-row" key={filterDesc.key}>
             <div className="filter-class">
-                <p style={{background: classifier[1]}}>
-                    {classifier[0]}
+                <p style={{background: filterDesc.category.colour}}>
+                    {filterDesc.category.name}
                 </p>
             </div>
-            <div className="filter-name"><p>{name}</p></div>
-            <div className="filter-entry">{inputField}</div>
+            <div className="filter-name"><p>{filterDesc.name}</p></div>
+            <div className="filter-entry">{element}</div>
             <div className="filter-delete">
-                <IconButton aria-label="delete" onClick={() => deleteFilter(identifier)}>
+                <IconButton aria-label="delete" onClick={() => deleteFilter(filterDesc.key)}>
                     <Delete />
                 </IconButton>
             </div>
-        </div>
+        </div>;
     }
 
-    function updateStateCallbackGenerator(identifier, valueFromEventFn) {
+    function updateStateCallbackGenerator(filterKey, valueFromEventFn) {
         return (event) => {
-            dispatch(setFilter({[identifier]: valueFromEventFn(event)}));
+            dispatch(setFilter({[filterKey]: valueFromEventFn(event)}));
         };
     }
 
-    function updateStateDateCallbackGenerator(identifier) {
-        return updateStateCallbackGenerator(identifier, (newValue) => newValue.format("YYYY-MM-DD"));
+    function updateStateDateCallbackGenerator(filterKey) {
+        return updateStateCallbackGenerator(filterKey, (newValue) => newValue.format("YYYY-MM-DD"));
     }
 
-    function updateStateFromEventValueCallbackGenerator(identifier) {
-        return updateStateCallbackGenerator(identifier, (event) => event.target.value);
+    function updateStateFromEventValueCallbackGenerator(filterKey) {
+        return updateStateCallbackGenerator(filterKey, (event) => event.target.value);
     }
 
-    function updateStateFromEventCheckedCallbackGenerator(identifier) {
-        return updateStateCallbackGenerator(identifier, (event) => event.target.checked);
+    function updateStateFromEventCheckedCallbackGenerator(filterKey) {
+        return updateStateCallbackGenerator(filterKey, (event) => event.target.checked);
     }
 
-    function makeTextFieldEntry(classifier, identifier, label) {
-        const currentFilterValue = filters[identifier];
+    function makeTextFieldEntry(filterDesc) {
+        const currentFilterValue = filters[filterDesc.key];
         if (currentFilterValue === undefined)
             return <></>;
 
         const textInput = <TextField
-            label={label}
+            label={filterDesc.form_name}
             value={currentFilterValue}
-            onChange={updateStateFromEventValueCallbackGenerator(identifier)}
+            onChange={updateStateFromEventValueCallbackGenerator(filterDesc.key)}
         />;
 
-        return makeFilterEntry(classifier, identifier, textInput);
+        return makeFilterEntry(filterDesc, textInput);
     }
 
-    function makeDateFieldEntry(classifier, identifier, label) {
-        const currentFilterValue = filters[identifier];
+    function makeDateFieldEntry(filterDesc) {
+        const currentFilterValue = filters[filterDesc.key];
         if (currentFilterValue === undefined)
             return <></>;
 
         const picker = <DatePicker
-            key={"filters-entry-" + identifier}
-            label={label}
+            label={filterDesc.form_name}
             value={currentFilterValue}
-            onChange={updateStateDateCallbackGenerator(identifier)}
+            onChange={updateStateDateCallbackGenerator(filterDesc.key)}
             renderInput={(params) => <TextField {...params} />}
             inputFormat="DD/MM/YYYY"
         />;
 
-        return makeFilterEntry(classifier, identifier, picker);
+        return makeFilterEntry(filterDesc, picker);
     }
 
-    function makeCheckboxFieldEntry(classifier, identifier, label) {
-        const currentFilterValue = filters[identifier];
+    function makeCheckboxFieldEntry(filterDesc) {
+        const currentFilterValue = filters[filterDesc.key];
         if (currentFilterValue === undefined)
             return <></>;
 
         const textAndCheckbox = <FormControlLabel
+            label={filterDesc.form_name}
             control={
                 <Checkbox
-                    key={"filters-entry-" + identifier}
-                    label={label}
+                    label={filterDesc.form_name}
                     checked={currentFilterValue}
-                    onChange={updateStateFromEventCheckedCallbackGenerator(identifier)}
+                    onChange={updateStateFromEventCheckedCallbackGenerator(filterDesc.key)}
                 />
             }
-            label={label}
         />;
 
-        return makeFilterEntry(classifier, identifier, textAndCheckbox);
+        return makeFilterEntry(filterDesc, textAndCheckbox);
     }
 
-    function makeNodeCountSliderEntry(classifier, identifier, label) {
-        const currentFilterValue = filters[identifier];
+    function makeNodeCountSliderEntry(filterDesc) {
+        const currentFilterValue = filters[filterDesc.key];
         if (currentFilterValue === undefined)
             return <></>;
 
@@ -160,10 +236,9 @@ const Filters = () => {
         const slider = <div className={"filter-entry-slider"}>
             <span>{valueLabelFormat(filters.graph_size)}</span>
             <Slider
-                key={"filters-entry-" + identifier}
-                aria-label={label}
+                aria-label={filterDesc.form_name}
                 value={reverseValue(currentFilterValue)}
-                onChange={updateStateCallbackGenerator("graph_size", (event) => calculateValue(event.target.value))}
+                onChange={updateStateCallbackGenerator(filterDesc.key, (event) => calculateValue(event.target.value))}
                 marks
                 min={0}
                 max={scale.length - 1}
@@ -176,61 +251,97 @@ const Filters = () => {
             />
         </div>;
 
-        return makeFilterEntry(classifier, identifier, slider);
+        return makeFilterEntry(filterDesc, slider);
     }
 
-    function makeGraphTypeEntry(classifier, identifier, label) {
-        const currentFilterValue = filters[identifier];
+    function makeGraphNodeTypeEntry(filterDesc) {
+        const currentFilterValue = filters[filterDesc.key];
         if (currentFilterValue === undefined)
             return <></>;
 
         const selector = <FormControl>
-            <InputLabel>{label}</InputLabel>
+            <InputLabel>{filterDesc.form_name}</InputLabel>
             <Select
-                label={label}
+                label={filterDesc.form_name}
                 value={currentFilterValue}
-                onChange={updateStateFromEventValueCallbackGenerator("graph_type")}>
+                onChange={updateStateFromEventValueCallbackGenerator(filterDesc.key)}>
                     <MenuItem value={"author"}>Author</MenuItem>
-                    <MenuItem value={"mesh"}>Journal</MenuItem>
+                    {/*<MenuItem value={"mesh"}>Journal</MenuItem>*/}
             </Select>
         </FormControl>;
 
-        return makeFilterEntry(classifier, identifier, selector);
+        return makeFilterEntry(filterDesc, selector);
+    }
+
+    function makeGraphNodeValueEntry(filterDesc) {
+        const currentFilterValue = filters[filterDesc.key];
+        if (currentFilterValue === undefined)
+            return <></>;
+
+        const selector = <FormControl>
+            <InputLabel>{filterDesc.form_name}</InputLabel>
+            <Select
+                label={filterDesc.form_name}
+                value={currentFilterValue}
+                onChange={updateStateFromEventValueCallbackGenerator(filterDesc.key)}>
+                    <MenuItem value={"constant"}>Constant</MenuItem>
+                    <MenuItem value={"matched_nodes"}>Increase for Matched Nodes</MenuItem>
+                    <MenuItem value={"edge_count"}>Increase with Number of Edges</MenuItem>
+                    <MenuItem value={"citations"}>Increase with Citations</MenuItem>
+            </Select>
+        </FormControl>;
+
+        return makeFilterEntry(filterDesc, selector);
+    }
+
+    function makeGraphEdgeValueEntry(filterDesc) {
+        const currentFilterValue = filters[filterDesc.key];
+        if (currentFilterValue === undefined)
+            return <></>;
+
+        const selector = <FormControl>
+            <InputLabel>{filterDesc.form_name}</InputLabel>
+            <Select
+                label={filterDesc.form_name}
+                value={currentFilterValue}
+                onChange={updateStateFromEventValueCallbackGenerator(filterDesc.key)}>
+                    <MenuItem value={"constant"}>Constant</MenuItem>
+                    <MenuItem value={"coauthored_articles"}>Increase with Co-Authored Articles</MenuItem>
+                    <MenuItem value={"citations"}>Increase with Shared Citations</MenuItem>
+            </Select>
+        </FormControl>;
+
+        return makeFilterEntry(filterDesc, selector);
     }
 
     let filterComponents = {
-        mesh_heading: makeTextFieldEntry(filterCategories.Article,"mesh_heading", "MeSH"),
-        author: makeTextFieldEntry(filterCategories.Author,"author", "Name"),
-        first_author: makeCheckboxFieldEntry(
-            filterCategories.Author,"first_author", "Restrict to First Authors"),
-        last_author: makeCheckboxFieldEntry(
-            filterCategories.Author,"last_author", "Restrict to Last Authors"),
-        published_after: makeDateFieldEntry(filterCategories.Article,"published_after", "After"),
-        published_before: makeDateFieldEntry(filterCategories.Article,"published_before", "Before"),
-        journal: makeTextFieldEntry(filterCategories.Journal,"journal", "Journal"),
-        article: makeTextFieldEntry(filterCategories.Article,"article", "Title"),
-        graph_size: makeNodeCountSliderEntry(filterCategories.Author, "graph_size", "Max Graph Size"),
-        graph_type: makeGraphTypeEntry(filterCategories.Graph, "graph_type", "Graph Type")
-
+        mesh_heading: makeTextFieldEntry(availableFilters.mesh_heading),
+        author: makeTextFieldEntry(availableFilters.author),
+        first_author: makeCheckboxFieldEntry(availableFilters.first_author),
+        last_author: makeCheckboxFieldEntry(availableFilters.last_author),
+        published_after: makeDateFieldEntry(availableFilters.published_after),
+        published_before: makeDateFieldEntry(availableFilters.published_before),
+        journal: makeTextFieldEntry(availableFilters.journal),
+        article: makeTextFieldEntry(availableFilters.article),
+        graph_size: makeNodeCountSliderEntry(availableFilters.graph_size),
+        graph_type: makeGraphNodeTypeEntry(availableFilters.graph_type),
+        graph_node_size: makeGraphNodeValueEntry(availableFilters.graph_node_size),
+        graph_node_colour:  makeGraphNodeValueEntry(availableFilters.graph_node_colour),
+        graph_edge_size: makeGraphEdgeValueEntry(availableFilters.graph_edge_size),
     }
     let selectedFilterComponents = activeFilters.map(f => filterComponents[f]);
 
-    function deleteFilter(identifier) {
-        dispatch(removeActiveFilter({filter: identifier}));
+    function deleteFilter(filterKey) {
+        dispatch(removeActiveFilter({filter: filterKey}));
     }
 
     const handleFilterSelectionChange = (event) => {
         const {
             target: { value },
         } = event;
-        let oldFilters = [...activeFilters]
+        let oldFilters = [...activeFilters];
 
-        let removedFilters = oldFilters.filter(f => !value.includes(f))
-        removedFilters.forEach(f => {
-            dispatch(resetFilter({filter: f}))
-        })
-
-        dispatch(setActiveFilters({filters: value}))
+        dispatch(setActiveFilters({filters: value}));
     };
 
     const activeFiltersSelector = <FormControl size="small">
@@ -241,7 +352,7 @@ const Filters = () => {
                 onChange={handleFilterSelectionChange}
                 displayEmpty={true}
                 renderValue={(selected) => {
-                    let filterCount = selected.filter(f => f in filterNames).length;
+                    let filterCount = selected.filter(f => f in availableFilters).length;
                     if (filterCount === 0) {
                         return <Button variant="text" startIcon={<Add />} style={{padding: 0}}>
                             Click to Add Filters
@@ -251,11 +362,12 @@ const Filters = () => {
                     }
                 }}
                 sx={{border: "white"}}>
-            {Object.keys(filterNames).map(f =>
-                <MenuItem key={f} value={f}>
+            {Object.keys(availableFilters).map(f => {
+                return <MenuItem key={f} value={f}>
                     <Checkbox checked={activeFilters.indexOf(f) > -1} />
-                    <ListItemText primary={filterNames[f]} />
-                </MenuItem>)}
+                    <ListItemText primary={availableFilters[f].name} />
+                </MenuItem>;
+            })}
         </Select>
     </FormControl>;
 

@@ -7,7 +7,7 @@ import {useSelector} from 'react-redux'
 
 const FiltersDropdown = () => {
     const activeFilters = useSelector((state) => state.filters.activeFilters);
-    const [collapsed, setCollapsed] = useState(activeFilters.length == 0);
+    const [collapsed, setCollapsed] = useState(activeFilters.length === 0);
 
     return <div id="filter-dropdown">
         <Collapse in={!collapsed}>

@@ -45,16 +45,20 @@ const Graph = () => {
         tooltipDelay: 100,
       },
       physics: {
-          maxVelocity: 20,
-          repulsion: {
-              nodeDistance: 100,
-              centralGravity: 1,
-              damping: 0.05,
-              springConstant: 0.01,
+          minVelocity: 2,
+          maxVelocity: 50,
+          solver: "forceAtlas2Based",
+          forceAtlas2Based: {
+              avoidOverlap: 1,
+              damping: 0.5,
+              theta: 0.4,
+              springConstant: 0.02,
+              springLength: 100,
           },
           stabilization: {
               enabled: true,
-              iterations: 10
+              iterations: 1000,
+              updateInterval: 50
           }
       }
     },

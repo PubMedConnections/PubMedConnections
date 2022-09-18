@@ -79,8 +79,8 @@ class VisualiseSnapshot(Resource):
     @ns.doc(security="api_key")
     def post():
         filter_params = request.json
-        filter_params = parse_dates(filter_params)
         try:
+            filter_params = parse_dates(filter_params)
             return query_coauthor_graph(filter_params)
         except PubMedFilterLimitError as e:
             return {
@@ -90,7 +90,7 @@ class VisualiseSnapshot(Resource):
         except PubMedFilterValueError as e:
             return {
                 "error": str(e),
-                "error_filter": e.filter_name,
+                "error_filter": e.filter_key,
                 "empty_message": f"{e}."
             }
 

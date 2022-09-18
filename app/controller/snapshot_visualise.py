@@ -1,39 +1,97 @@
 import sys
-import textwrap
-from typing import Any
+from typing import Any, Optional
 
 from app import neo4j_conn, PubMedCacheConn
 from flask import jsonify
 from datetime import datetime, date
 
-from app.controller.graph_builder import GraphBuilder
+from app.controller.graph_builder import GraphOptions, GraphBuilder, ArticleAuthorNode, ArticleCoAuthorEdge, \
+    ConstantNodesValueSource, MatchedNodesValueSource, ConstantEdgesValueSource, CoAuthoredArticlesEdgesValueSource, \
+    NodesValueSource, EdgeCountNodesValueSource
 from app.controller.snapshot_analyse import _create_query_from_filters
 
-from app.pubmed.filtering import PubMedFilterBuilder, PubMedFilterLimitError
-from app.pubmed.model import MeSHHeading, Article
+from app.pubmed.filtering import PubMedFilterBuilder, PubMedFilterLimitError, PubMedFilterValueError
+from app.pubmed.model import DBMeSHHeading
 
 
-def parse_date(date_str) -> datetime:
-    return datetime.strptime(date_str, '%Y-%m-%d')
+def parse_date(filter_key: str, date_str: str) -> datetime:
+    try:
+        return datetime.strptime(date_str, '%Y-%m-%d')
+    except ValueError as e:
+        raise PubMedFilterValueError(filter_key, f"The {filter_key} filter contains an invalid date")
 
 
 def parse_dates(filters):
     if "published_after" in filters:
-        filters["published_after"] = parse_date(filters["published_after"])
+        filters["published_after"] = parse_date("published_after", filters["published_after"])
 
     if "published_before" in filters:
-        filters["published_before"] = parse_date(filters["published_before"])
+        filters["published_before"] = parse_date("published_after", filters["published_before"])
 
     return filters
 
 
-def construct_graph_filter(filters: dict[str, Any]) -> PubMedFilterBuilder:
+def _parse_node_value_source_filter(
+        filters: dict[str, Any], filter_key: str, default_source: NodesValueSource
+) -> NodesValueSource:
+    """ Parses a filter that refers to a node value source. """
+    if filter_key not in filters:
+        return default_source
+
+    node_size_type = filters[filter_key]
+    del filters[filter_key]
+    if node_size_type == "constant":
+        return ConstantNodesValueSource()
+    elif node_size_type == "matched_nodes":
+        return MatchedNodesValueSource()
+    elif node_size_type == "edge_count":
+        return EdgeCountNodesValueSource()
+    else:
+        raise PubMedFilterValueError("graph_node_size", f"Unknown {filter_key} type {node_size_type}")
+
+
+def construct_graph_options(filters: dict[str, Any]) -> GraphOptions:
+    """
+    Constructs the options used to control the visualisation of graphs
+    using the options set in the filters.
+    """
+    options = GraphOptions()
+    if "graph_size" in filters:
+        options.node_limit = filters["graph_size"]
+        del filters["graph_size"]
+
+    options.node_size_source = _parse_node_value_source_filter(
+        filters, "graph_node_size", MatchedNodesValueSource()
+    )
+    # TODO : The colour source will need custom options for MeSH headings.
+    options.node_colour_source = _parse_node_value_source_filter(
+        filters, "graph_node_colour", MatchedNodesValueSource()
+    )
+
+    if "graph_edge_size" in filters:
+        node_size_type = filters["graph_edge_size"]
+        del filters["graph_edge_size"]
+        if node_size_type == "constant":
+            options.edge_size_source = ConstantEdgesValueSource()
+        elif node_size_type == "coauthored_articles":
+            options.edge_size_source = CoAuthoredArticlesEdgesValueSource()
+        else:
+            raise PubMedFilterValueError("graph_edge_size", f"Unknown graph edge size type {node_size_type}")
+    else:
+        options.edge_size_source = CoAuthoredArticlesEdgesValueSource()
+
+    return options
+
+
+def construct_graph_filter(filters: dict[str, Any], graph_options: Optional[GraphOptions] = None) -> PubMedFilterBuilder:
     """
     Constructs a PubMedFilterBuilder that applies a set of filters to the PubMed graph
     to fetch a set of IDs corresponding to the nodes that match the filters.
     These IDs can then later be used to build graphs for visualisation.
     """
     filter_builder = PubMedFilterBuilder()
+    if graph_options is not None:
+        filter_builder.set_node_limit(graph_options.node_limit)
 
     if "journal" in filters:
         journal_name = filters["journal"]
@@ -47,7 +105,7 @@ def construct_graph_filter(filters: dict[str, Any]) -> PubMedFilterBuilder:
 
         # Find all the matching MeSH headings.
         if len(mesh_name.strip()) > 0:
-            mesh_headings = MeSHHeading.search(neo4j_conn.get_mesh_headings(), mesh_name)
+            mesh_headings = DBMeSHHeading.search(neo4j_conn.get_mesh_headings(), mesh_name)
             mesh_desc_ids = [m.descriptor_id for m in mesh_headings]
             filter_builder.add_mesh_descriptor_id_filter(mesh_desc_ids)
 
@@ -87,43 +145,10 @@ def construct_graph_filter(filters: dict[str, Any]) -> PubMedFilterBuilder:
         boundary_date = date(year=filter_date.year, month=filter_date.month, day=filter_date.day)
         filter_builder.add_published_before_filter(boundary_date)
 
-    if "graph_size" in filters:
-        node_limit = filters["graph_size"]
-        del filters["graph_size"]
-        filter_builder.set_node_limit(node_limit)
-    else:
-        # Sensible default limit
-        filter_builder.set_node_limit(1000)
-
     if len(filters) != 0:
         print("Unknown filters present: " + str(filters), file=sys.stderr)
 
     return filter_builder
-
-
-def list_articles_for_description(articles: list[Article], *, max_article_lines=8) -> str:
-    """
-    Lists the articles in a list to be added to the description of an edge or node.
-    Assumes that duplicate articles are not present.
-    """
-    article_titles = []
-
-    # Collect the titles of all the articles.
-    for article in articles:
-        date_str = article.date.strftime('%Y')
-        truncated_title = textwrap.shorten(article.title, width=64, placeholder="...")
-        article_titles.append(f"{date_str}: {truncated_title}")
-
-    # Sort them by date (as the date shows up first in the string).
-    article_titles = list(sorted(article_titles))[::-1]
-
-    # Decide if we need to truncate the number of articles that are shown.
-    too_many_articles = len(article_titles) > max_article_lines
-    article_names_to_show = article_titles[:max_article_lines - 1] if too_many_articles else article_titles
-    if too_many_articles:
-        article_names_to_show.append(f"+ {len(article_titles) - max_article_lines + 1} more")
-
-    return " - " + "\n - ".join(article_names_to_show)
 
 
 def query_coauthor_graph(filters: dict[str, Any]):
@@ -131,10 +156,10 @@ def query_coauthor_graph(filters: dict[str, Any]):
     Builds a co-author graph based upon a set of filters
     that returns the central authors to expand upon.
     """
-    graph_filter = construct_graph_filter(filters)
+    graph_options = construct_graph_options(filters)
+    graph_filter = construct_graph_filter(filters, graph_options)
     with neo4j_conn.new_session() as session:
         filter_results = graph_filter.build(force_authors=True).run(session)
-        node_limit = graph_filter.get_node_limit()
         co_author_graph_results = session.run(
             """
             CYPHER planner=dp
@@ -148,17 +173,17 @@ def query_coauthor_graph(filters: dict[str, Any]):
             """,
             author_ids=filter_results.author_ids,
             article_ids=filter_results.article_ids,
-            node_limit=node_limit
+            node_limit=graph_options.node_limit
         )
 
-        graph = GraphBuilder()
+        graph_builder = GraphBuilder()
         for record in co_author_graph_results:
-            graph.add_record()
+            graph_builder.add_record()
             author, author_rel, article, coauthor_rel, coauthor = record
 
             author = PubMedCacheConn.read_author_node(author)
             article = PubMedCacheConn.read_article_node(article)
-            graph.add_node(author.author_id, (True, author, article))
+            graph_builder.add_node(ArticleAuthorNode(True, author, article))
             if coauthor is None:
                 continue
 
@@ -166,55 +191,17 @@ def query_coauthor_graph(filters: dict[str, Any]):
             author_rel = PubMedCacheConn.read_article_author_relation(article, author, author_rel)
             coauthor_rel = PubMedCacheConn.read_article_author_relation(article, coauthor, coauthor_rel)
 
-            graph.add_node(coauthor.author_id, (False, coauthor, article))
-            graph.add_edge(
-                author.author_id, coauthor.author_id,
-                (author, author_rel, article, coauthor_rel, coauthor)
-            )
+            graph_builder.add_node(ArticleAuthorNode(False, coauthor, article))
+            graph_builder.add_edge(ArticleCoAuthorEdge(
+                author.author_id, author_rel, article, coauthor_rel, coauthor.author_id
+            ))
 
-        if graph.get_node_count() >= node_limit:
-            raise PubMedFilterLimitError(f"The limit of {node_limit} nodes was reached")
+        if graph_builder.get_node_count() >= graph_options.node_limit:
+            raise PubMedFilterLimitError(f"The limit of {graph_options.node_limit} nodes was reached")
 
-    def node_configure(node_data: list[Any]) -> dict:
-        """ Sets the properties of nodes. """
-        is_primary = False
-        name = None
-        article_ids = set()
-        articles = []
-        for entry_is_primary, author, article in node_data:
-            is_primary = is_primary or entry_is_primary
-            name = author.full_name
-            if article.pmid not in article_ids:
-                article_ids.add(article.pmid)
-                articles.append(article)
-
-        title = f"{name}\n" + ("Matching Author" if is_primary else "Co-author") + f" of {len(article_ids)} articles"
-        title += f"\n{list_articles_for_description(articles)}"
-        return {
-            "label": name,
-            "title": title,
-            "borderWidth": 2 if is_primary else 1,
-            "borderWidthSelected": 3 if is_primary else 2,
-            "size": 25 if is_primary else 15
-        }
-
-    def edge_configure(edge_data: list) -> dict:
-        """ Sets the properties of edges. """
-        article_ids = set()
-        articles = []
-        for author, author_rel, article, coauthor_rel, coauthor in edge_data:
-            if article.pmid not in article_ids:
-                article_ids.add(article.pmid)
-                articles.append(article)
-
-        articles_desc = list_articles_for_description(articles)
-        return {
-            "title": f"{len(article_ids)} Co-Authored Articles\n{articles_desc}",
-            "value": len(article_ids)
-        }
-
-    graph_json = graph.build(node_configure, edge_configure)
-    if graph.get_node_count() == 0:
+    graph = graph_builder.build(ArticleAuthorNode.collapse, ArticleCoAuthorEdge.collapse)
+    graph_json = graph.build_json(graph_options)
+    if len(graph.nodes) == 0:
         graph_json["empty_message"] = "There are no matching nodes."
 
     return graph_json

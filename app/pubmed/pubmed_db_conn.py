@@ -8,7 +8,7 @@ from typing import Optional
 
 import atomics
 import neo4j
-from app.pubmed.model import Article, DBMetadata, MeSHHeading, Author, ArticleAuthorRelation
+from app.pubmed.model import DBArticle, DBMetadata, DBMeSHHeading, DBAuthor, DBArticleAuthorRelation
 from config import NEO4J_URI, NEO4J_REQUIRES_AUTH
 
 
@@ -46,7 +46,7 @@ class PubMedCacheConn:
         self.author_id_counter: Optional[IdCounter] = None
 
         # We cache the MeSH headings, as they should almost never change.
-        self._mesh_headings: Optional[list[MeSHHeading]] = None
+        self._mesh_headings: Optional[list[DBMeSHHeading]] = None
 
     def clear_cached_mesh_headings(self):
         """
@@ -138,7 +138,7 @@ class PubMedCacheConn:
         # If there are no nodes, then None will be returned.
         return 0 if result is None else result
 
-    def insert_article_batch(self, articles: list[Article], *, max_batch_size=10000):
+    def insert_article_batch(self, articles: list[DBArticle], *, max_batch_size=10000):
         """
         Inserts a batch of articles into the database, including their authors.
         """
@@ -160,7 +160,7 @@ class PubMedCacheConn:
         # Just to be sure...
         assert total_articles_inserted == len(articles)
 
-    def _insert_article_batch(self, tx: neo4j.Transaction, articles: list[Article]):
+    def _insert_article_batch(self, tx: neo4j.Transaction, articles: list[DBArticle]):
         """
         Inserts a batch of articles into the database, including their authors.
         """
@@ -290,18 +290,18 @@ class PubMedCacheConn:
         ).consume()
 
     @staticmethod
-    def read_author_node(node: neo4j.graph.Node) -> Author:
+    def read_author_node(node: neo4j.graph.Node) -> DBAuthor:
         """ Reads an author node into an Author model object. """
-        return Author(
+        return DBAuthor(
             node["name"],
             node["is_collective"],
             author_id=node["id"]
         )
 
     @staticmethod
-    def read_article_node(node: neo4j.graph.Node) -> Article:
+    def read_article_node(node: neo4j.graph.Node) -> DBArticle:
         """ Reads an article node into an Article model object. """
-        return Article(
+        return DBArticle(
             node["pmid"],
             node["date"].to_native(),
             node["title"]
@@ -309,10 +309,10 @@ class PubMedCacheConn:
 
     @staticmethod
     def read_article_author_relation(
-            article: Article, author: Author, rel: neo4j.graph.Relationship
-    ) -> ArticleAuthorRelation:
+            article: DBArticle, author: DBAuthor, rel: neo4j.graph.Relationship
+    ) -> DBArticleAuthorRelation:
         """ Reads an article-author relationship into an ArticleAuthorRelation model object. """
-        return ArticleAuthorRelation(
+        return DBArticleAuthorRelation(
             article,
             author,
             rel["author_position"],
@@ -320,7 +320,7 @@ class PubMedCacheConn:
             rel["is_last_author"]
         )
 
-    def insert_mesh_heading_batch(self, headings: list[MeSHHeading], *, max_batch_size=500):
+    def insert_mesh_heading_batch(self, headings: list[DBMeSHHeading], *, max_batch_size=500):
         """
         Inserts a batch of headings into the database.
         """
@@ -342,7 +342,7 @@ class PubMedCacheConn:
         # Just to be sure...
         assert total_headings_inserted == len(headings)
 
-    def _insert_mesh_heading_batch(self, tx: neo4j.Transaction, headings: list[MeSHHeading]):
+    def _insert_mesh_heading_batch(self, tx: neo4j.Transaction, headings: list[DBMeSHHeading]):
         """
         Inserts a batch of headings into the database.
         """
@@ -370,7 +370,7 @@ class PubMedCacheConn:
             headings=headings_data
         ).consume()
 
-    def get_mesh_headings(self) -> list[MeSHHeading]:
+    def get_mesh_headings(self) -> list[DBMeSHHeading]:
         """
         Fetches the MeSH headings from the database.
         """
@@ -386,7 +386,7 @@ class PubMedCacheConn:
             )
             mesh_headings = []
             for id, name, tree_numbers in results:
-                mesh_headings.append(MeSHHeading(id, name, tree_numbers))
+                mesh_headings.append(DBMeSHHeading(id, name, tree_numbers))
 
         self._mesh_headings = mesh_headings
         return mesh_headings
