@@ -19,8 +19,7 @@ class AnalyticsThreading(object):
 # testing
 # GDS working with docker
 
-# prevent creating a snapshot if no nodes returned
-# deal with empty string filters 
+# prevent creating a snapshot if no nodes returned or node limit is reached
 
 update_degree_centrality_query = \
     """
@@ -137,6 +136,10 @@ def _create_query_from_filters(snapshot):
 
 
 def build_generic_query(snapshot):
+    """
+    Generates the first part of the node/relationship query.
+    """
+    
     query = ""
 
     query_journals = 'journal' in snapshot
@@ -185,14 +188,35 @@ def build_generic_query(snapshot):
     if 'author' in snapshot:
         author_name_filters = [] 
         for author_name in snapshot['author'].split(","):
-            author_name = author_name.strip()
+            author_name = author_name.strip().lower()
+            author_name_filter = "toLower(author.name)"
             if (author_name.startswith('"') and author_name.endswith('"')) or (author_name.startswith("'") and author_name.endswith("'")):
                 # exact match
-                author_name_filters.append("toLower(author.name) = '{}'".format(author_name.replace('"', '').replace("'", '').lower()))
-                # author_name_filters.append(f"toLower(author.name) = '{author_name.replace('\"', '').replace('\'', '').lower()}'")
+                author_name_filter += " = '{}'".format(author_name.replace('"', '').replace("'", ''))
             else:
-                author_name_filters.append(f"toLower(author.name) CONTAINS '{author_name.lower()}'")
+                author_name_segments = author_name.split(".")
+
+                if len(author_name_segments) == 1:
+                    # no initials in author name
+                    author_name_filter += f" CONTAINS '{author_name}'"
+
+                elif len(author_name_segments) == 2:
+                    # one initial in author name
+                    # use STARTS WITH as it is faster than regex
+                    author_name_filter += f" STARTS WITH '{author_name_segments[0]}' AND {author_name_filter} CONTAINS '{author_name_segments[1]}'"
+
+                elif len(author_name_segments) > 2:
+                    # more than one initial in the author name
+                    # have to use regex matching
+                    author_name_regex = ""
+                    for segment in author_name_segments:
+                        author_name_regex += f"{segment}.*"
+                    author_name_filter += " =~ '" + author_name_regex + "'"
+                        
+            author_name_filters.append(author_name_filter)
+
         author_filters.append("\n\tOR ".join(author_name_filters))
+
     if 'first_author' in snapshot:
         article_filters.append(f"author_rel.is_first_author = '{snapshot['first_author']}'")
     if 'last_author' in snapshot:
@@ -203,12 +227,13 @@ def build_generic_query(snapshot):
         query += "\n\tAND ".join(author_filters) + "\n"
 
     query += "OPTIONAL MATCH (author:Author) --> (article) <-- (coauthor:Author)\n"
-    # query += "RETURN\n"
-    # query += "\tDISTINCT author, coauthor"
 
     return query
 
 def build_node_query(snapshot):
+    """
+    Generates the node projection query from snapshot filters.
+    """
 
     node_limit = snapshot['graph_size'] if 'graph_size' in snapshot else 1000
 
@@ -218,17 +243,16 @@ def build_node_query(snapshot):
     query += "UNWIND ids as id\n"
     query += "RETURN DISTINCT id\n"
     
-    # query += "WITH COLLECT(author) + COLLECT(coauthor) AS authors\n"
-    # query += "UNWIND authors as a\n"
-    # query += "RETURN DISTINCT a\n"
-
     query += f"LIMIT {node_limit}"
 
     return query
 
 def build_relationship_query(snapshot):
-    query = build_generic_query(snapshot)
-    
+    """
+    Generates the relationship projection query from snapshot filters.
+    """
+
+    query = build_generic_query(snapshot)    
 
     central_author = True if 'author' in snapshot or 'first_author' in snapshot or 'last_author' in snapshot else False
 
@@ -246,13 +270,17 @@ def build_relationship_query(snapshot):
     # build main query
     query += "MATCH (author1:Author)-[:AUTHOR_OF]->(article:Article)<-[:AUTHOR_OF]-(author2:Author)\n"
     if central_author:
-        # we need to make the graph directed, as the graph cypher projection does not support undirected relationships
+        # we need to make the graph directed as the graph cypher projection does not support undirected relationships
         query += "WHERE author1 = author OR author2 = author\n"
     query += "RETURN id(author1) as source, id(author2) as target, apoc.create.vRelationship(author1, 'COAUTHOR', {count: count(*)}, author2) as rel"
     
     return query
 
-def _project_graph_and_run_analytics(graph_name: str, node_query: str, relationship_query: str, snapshot_id: int):
+def project_graph_and_run_analytics(graph_name: str, node_query: str, relationship_query: str, snapshot_id: int):
+    """
+    Projects the graph which the analytics are to be computed on, then computes these analytics.
+    """
+    
     if NEO4J_REQUIRES_AUTH:
         from config import NEO4J_PASSWORD, NEO4J_USER
         gds = GraphDataScience(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
@@ -290,7 +318,6 @@ def _project_graph_and_run_analytics(graph_name: str, node_query: str, relations
                 )
 
             # compute the degree distributions
-            # TODO may need to use a cut-off for very large graphs
             degree_distributions = []
             for score, count in res['score'].value_counts().sort_index().iteritems():
                 degree_distributions.append(
@@ -311,11 +338,11 @@ def _project_graph_and_run_analytics(graph_name: str, node_query: str, relations
 
             session.write_transaction(_update_snapshot_centrality, update_degree_centrality_query, snapshot_id, degree_centrality_record)
 
-            # compute degree centrality
+            # compute betweenness centrality
             res = gds.betweenness.stream(G)
             res = res.sort_values(by=['score'], ascending=False, ignore_index=True)
 
-            # get the top 5 nodes by degree centrality
+            # get the top 5 nodes by betweenness centrality
             top_5_betweenness = []
             for row in res.head(5).itertuples():
                 top_5_betweenness.append(
@@ -326,10 +353,7 @@ def _project_graph_and_run_analytics(graph_name: str, node_query: str, relations
                     }
                 )
 
-            # print(top_5_betweenness)
-
             # compute the betweenness distributions
-            # TODO may need to use a cut-off for very large graphs
             betweenness_distributions = []
             for score, count in res['score'].value_counts().sort_index().iteritems():
                 betweenness_distributions.append(
@@ -338,8 +362,6 @@ def _project_graph_and_run_analytics(graph_name: str, node_query: str, relations
                         "count": count
                     }
                 )
-
-            # print(betweenness_distributions)
 
             betweenness_centrality_record = json.dumps(
                 {
@@ -408,7 +430,7 @@ def get_analytics(snapshot_id: int):
         # create co-author relationships between these authors
         relationship_query = build_relationship_query(snapshot)
 
-        analytics_results = _project_graph_and_run_analytics(graph_name, node_query, relationship_query, snapshot_id)
+        analytics_results = project_graph_and_run_analytics(graph_name, node_query, relationship_query, snapshot_id)
 
     return analytics_results
 

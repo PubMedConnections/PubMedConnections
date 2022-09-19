@@ -125,6 +125,7 @@ class PubMedFilterBuilder:
         self._mesh_filters: list[str] = []
         self._article_filters: list[str] = []
         self._author_filters: list[str] = []
+        self._author_name_filters: list[str] = []
         self._variable_values: dict[str, Any] = {}
 
     def _next_filter_var(self, value) -> str:
@@ -133,7 +134,7 @@ class PubMedFilterBuilder:
         self._variable_values[name] = value
         return f"${name}"
 
-    def _create_text_filter(self, field: str, filter_key: str, filter_value: str) -> str:
+    def _create_text_filter(self, field: str, filter_key: str, filter_value: str, split_filter: bool = False) -> str:
         """
         Creates a filter to match text in a field.
         """
@@ -141,7 +142,26 @@ class PubMedFilterBuilder:
         if len(filter_value) == 0:
             raise PubMedFilterValueError(filter_key, f"{filter_key} cannot be empty")
 
-        return f"toLower({field}) CONTAINS {self._next_filter_var(filter_value)}"
+        if not split_filter:
+            return f"toLower({field}) CONTAINS {self._next_filter_var(filter_value)}"
+        else:
+            text_segments = filter_value.split(".")
+            if len(text_segments) == 2:
+                # use STARTS WITH as it is faster than regex
+                return f"toLower({field}) STARTS WITH {self._next_filter_var(text_segments[0])} AND toLower({field}) CONTAINS {self._next_filter_var(text_segments[1])}"
+            elif len(text_segments) > 2:
+                regex_string = f'{".*".join(text_segments)}.*'
+                return f"toLower({field}) =~ {self._next_filter_var(regex_string)}"
+    
+    def _create_exact_text_filter(self, field: str, filter_key: str, filter_value: str) -> str:
+        """
+        Creates a filter to match text in a field.
+        """
+        filter_value = filter_value.lower()
+        if len(filter_value) == 0:
+            raise PubMedFilterValueError(filter_key, f"{filter_key} cannot be empty")
+
+        return f"toLower({field}) = {self._next_filter_var(filter_value)}"
 
     def add_journal_name_filter(self, journal_name: str):
         """ Adds a filter for the name of the journal that articles are published in. """
@@ -162,7 +182,17 @@ class PubMedFilterBuilder:
 
     def add_author_name_filter(self, author_name: str):
         """ Adds a filter by the name of authors. """
-        self._author_filters.append(self._create_text_filter("author.name", "author", author_name))
+        for author in author_name.split(","):
+            author = author.strip()
+            if (author.startswith('"') and author.endswith('"')) or (author.startswith("'") and author.endswith("'")):
+                # exact match
+                author = author.replace('"', '').replace("'", '')
+                self._author_name_filters.append(self._create_exact_text_filter("author.name", "author", author))
+            else:
+                # check if author name contains initials; if so we need to split the name up
+                split_author_name = author.find(".") != -1
+                self._author_name_filters.append(self._create_text_filter("author.name", "author", author, split_author_name))
+                
 
     def add_first_author_filter(self):
         """ Adds a filter to only select first authors of articles. """
@@ -211,7 +241,7 @@ class PubMedFilterBuilder:
         contains_journal_filters = len(self._journal_filters) > 0
         contains_mesh_filters = len(self._mesh_filters) > 0
         contains_article_filters = len(self._article_filters) > 0
-        contains_author_filters = len(self._author_filters) > 0
+        contains_author_filters = len(self._author_filters) + len(self._author_name_filters) > 0
 
         # Querying authors by MeSH heading requires querying the articles.
         query_journals = force_journals or contains_journal_filters
@@ -259,7 +289,9 @@ class PubMedFilterBuilder:
 
         if contains_author_filters:
             query += "WHERE\n\t"
-            query += "\n\tAND ".join(self._author_filters) + "\n"
+            self._author_filters.append("(" + "\n\tOR ".join(self._author_name_filters) + ")")
+            query += "\n\tAND ".join(self._author_filters) 
+            query += "\n"
 
         # Return values.
         return_values = []
