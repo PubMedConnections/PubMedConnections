@@ -189,20 +189,34 @@ def build_generic_query(snapshot):
         author_name_filters = [] 
         for author_name in snapshot['author'].split(","):
             author_name = author_name.strip().lower()
+            author_name_filter = "toLower(author.name)"
             if (author_name.startswith('"') and author_name.endswith('"')) or (author_name.startswith("'") and author_name.endswith("'")):
                 # exact match
-                author_name_filters.append("toLower(author.name) = '{}'".format(author_name.replace('"', '').replace("'", '')))
+                author_name_filter += " = '{}'".format(author_name.replace('"', '').replace("'", ''))
             else:
-                if author_name[1] == ".":
-                    author_initial = author_name[0]
-                    author_name = author_name[2:]
-                
-                author_name_filter = f"toLower(author.name) CONTAINS '{author_name}'"
-                if author_initial:
-                    author_name_filter += f" AND toLower(author.name) STARTS WITH '{author_initial}'"
-                author_name_filters.append(author_name_filter)
+                author_name_segments = author_name.split(".")
+
+                if len(author_name_segments) == 1:
+                    # no initials in author name
+                    author_name_filter += f" CONTAINS '{author_name}'"
+
+                elif len(author_name_segments) == 2:
+                    # one initial in author name
+                    # use STARTS WITH as it is faster than regex
+                    author_name_filter += f" STARTS WITH '{author_name_segments[0]}' AND {author_name_filter} CONTAINS '{author_name_segments[1]}'"
+
+                elif len(author_name_segments) > 2:
+                    # more than one initial in the author name
+                    # have to use regex matching
+                    author_name_regex = ""
+                    for segment in author_name_segments:
+                        author_name_regex += f"{segment}.*"
+                    author_name_filter += " =~ '" + author_name_regex + "'"
+                        
+            author_name_filters.append(author_name_filter)
 
         author_filters.append("\n\tOR ".join(author_name_filters))
+
     if 'first_author' in snapshot:
         article_filters.append(f"author_rel.is_first_author = '{snapshot['first_author']}'")
     if 'last_author' in snapshot:
@@ -304,7 +318,6 @@ def project_graph_and_run_analytics(graph_name: str, node_query: str, relationsh
                 )
 
             # compute the degree distributions
-            # TODO may need to use a cut-off for very large graphs
             degree_distributions = []
             for score, count in res['score'].value_counts().sort_index().iteritems():
                 degree_distributions.append(
@@ -325,11 +338,11 @@ def project_graph_and_run_analytics(graph_name: str, node_query: str, relationsh
 
             session.write_transaction(_update_snapshot_centrality, update_degree_centrality_query, snapshot_id, degree_centrality_record)
 
-            # compute degree centrality
+            # compute betweenness centrality
             res = gds.betweenness.stream(G)
             res = res.sort_values(by=['score'], ascending=False, ignore_index=True)
 
-            # get the top 5 nodes by degree centrality
+            # get the top 5 nodes by betweenness centrality
             top_5_betweenness = []
             for row in res.head(5).itertuples():
                 top_5_betweenness.append(
@@ -341,7 +354,6 @@ def project_graph_and_run_analytics(graph_name: str, node_query: str, relationsh
                 )
 
             # compute the betweenness distributions
-            # TODO may need to use a cut-off for very large graphs
             betweenness_distributions = []
             for score, count in res['score'].value_counts().sort_index().iteritems():
                 betweenness_distributions.append(
