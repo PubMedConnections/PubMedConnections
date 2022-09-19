@@ -33,7 +33,7 @@ def scale_value_source_results_linear(values: dict[T, float]) -> dict[T, float]:
     value_range = max_value - min_value
     scaled: dict[T, float] = {}
     for key, value in values.items():
-        scaled[key] = (value - min_value) / value_range
+        scaled[key] = (value - min_value) / value_range if value_range != 0 else 1
 
     return scaled
 
