@@ -4,8 +4,9 @@ from config import NEO4J_URI, NEO4J_REQUIRES_AUTH
 import json
 import threading
 from app.controller.snapshot_get import get_snapshot
-from app.helpers import set_default_date
+from app.helpers import set_default_date, remove_snapshot_metadata
 from app import neo4j_conn
+from app.controller.snapshot_visualise import construct_graph_options, construct_graph_filter
 from app.PubMedErrors import PubMedSnapshotDoesNotExistError, PubMedUpdateSnapshotError, PubMedAnalyticsError
 
 class AnalyticsThreading(object):
@@ -92,49 +93,6 @@ def _retrieve_centrality(tx, retrieve_centrality_query: str, snapshot_id: int):
 
     return result.single()
 
-
-def _create_query_from_filters(snapshot):
-    """
-    Helper function to map the snapshot filters to query conditions. The query conditions are returned as a string.
-    """
-
-    filter_queries = []
-
-    if snapshot['mesh_heading'] != "":
-        filter_queries.append("toLower(m1.name) CONTAINS '{}'".format(snapshot['mesh_heading'].lower()))
-    if snapshot['author'] != "":
-        filter_queries.append("toLower(a1.name) CONTAINS '{}'".format(snapshot['author'].lower()))
-    if snapshot['first_author'] != "":
-        filter_queries.append("w.is_first_author = '{}'".format(snapshot['first_author']))
-    if snapshot['last_author'] != "":
-        filter_queries.append("w.is_last_author = '{}'".format(snapshot['last_author']))
-    if snapshot['published_after'] != "":
-        filter_queries.append(
-            "ar1.date >= date({year: %i, month:%i, day:%i})" % (
-                snapshot['published_after'].year,
-                snapshot['published_after'].month,
-                snapshot['published_after'].day))
-    if snapshot['published_before'] != "":
-        filter_queries.append(
-            "ar1.date <= date({year: %i, month:%i, day:%i})" % (
-                snapshot['published_before'].year,
-                snapshot['published_before'].month,
-                snapshot['published_before'].day))
-    if snapshot['journal'] != "":
-        filter_queries.append(
-            """
-            EXISTS {{
-                MATCH (ar)-[:PUBLISHED_IN]->(j:Journal)
-                WHERE toLower(j.title) CONTAINS '{}'
-            }}
-            """.format(snapshot['journal'].lower())
-        )
-    if snapshot['article'] != "":
-        filter_queries.append("toLower(ar.title) CONTAINS '{}'".format(snapshot['article'].lower()))
-
-    return " AND ".join(filter_queries)
-
-
 def build_generic_query(snapshot):
     """
     Generates the first part of the node/relationship query.
@@ -215,12 +173,12 @@ def build_generic_query(snapshot):
                         
             author_name_filters.append(author_name_filter)
 
-        author_filters.append("\n\tOR ".join(author_name_filters))
+        author_filters.append("(" + "\n\tOR ".join(author_name_filters) + ")")
 
     if 'first_author' in snapshot:
-        article_filters.append(f"author_rel.is_first_author = '{snapshot['first_author']}'")
+        author_filters.append(f"author_rel.is_first_author")
     if 'last_author' in snapshot:
-        article_filters.append(f"author_rel.is_last_author = '{snapshot['last_author']}'")
+        author_filters.append(f"author_rel.is_last_author")
 
     if len(author_filters) > 0:
         query += "WHERE\n\t"
@@ -287,8 +245,8 @@ def project_graph_and_run_analytics(graph_name: str, node_query: str, relationsh
     else:
         gds = GraphDataScience(NEO4J_URI)
 
-    print(node_query)
-    print(relationship_query)
+    # print(node_query)
+    # print(relationship_query)
 
     analytics_response = {}
 
@@ -419,16 +377,22 @@ def get_analytics(snapshot_id: int):
 
         print("starting analytics")
 
-        # parse date strings into date time
-        snapshot = set_default_date(snapshot)
-
         graph_name = "coauthors" + str(snapshot_id)
 
-        # return matching author nodes
-        node_query = build_node_query(snapshot)
+        # parse date strings into date time
+        snapshot = set_default_date(snapshot)
+        
+        snapshot = remove_snapshot_metadata(snapshot)
+
+        # construct filter object from snapshot
+        snapshot_options = construct_graph_options(snapshot)
+        snapshot_filter = construct_graph_filter(snapshot, snapshot_options, use_variables=False)
+
+        # query author nodes
+        node_query = snapshot_filter.build(force_authors=True, node_query=True).query
 
         # create co-author relationships between these authors
-        relationship_query = build_relationship_query(snapshot)
+        relationship_query = snapshot_filter.build(force_authors=True, relationship_query=True).query
 
         analytics_results = project_graph_and_run_analytics(graph_name, node_query, relationship_query, snapshot_id)
 
