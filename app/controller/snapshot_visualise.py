@@ -8,7 +8,7 @@ from datetime import datetime, date
 from app.controller.graph_builder import GraphOptions, GraphBuilder, ArticleAuthorNode, ArticleCoAuthorEdge, \
     ConstantNodesValueSource, MatchedNodesValueSource, ConstantEdgesValueSource, CoAuthoredArticlesEdgesValueSource, \
     NodesValueSource, EdgeCountNodesValueSource
-from app.controller.snapshot_analyse import _create_query_from_filters
+from app.helpers import _create_query_from_filters
 
 from app.pubmed.filtering import PubMedFilterBuilder, PubMedFilterLimitError, PubMedFilterValueError
 from app.pubmed.model import DBMeSHHeading
@@ -83,7 +83,7 @@ def construct_graph_options(filters: dict[str, Any]) -> GraphOptions:
     return options
 
 
-def construct_graph_filter(filters: dict[str, Any], graph_options: Optional[GraphOptions] = None) -> PubMedFilterBuilder:
+def construct_graph_filter(filters: dict[str, Any], graph_options: Optional[GraphOptions] = None, use_variables: bool = True) -> PubMedFilterBuilder:
     """
     Constructs a PubMedFilterBuilder that applies a set of filters to the PubMed graph
     to fetch a set of IDs corresponding to the nodes that match the filters.
@@ -97,7 +97,7 @@ def construct_graph_filter(filters: dict[str, Any], graph_options: Optional[Grap
         journal_name = filters["journal"]
         del filters["journal"]
         if len(journal_name.strip()) > 0:
-            filter_builder.add_journal_name_filter(journal_name)
+            filter_builder.add_journal_name_filter(journal_name, use_variables)
 
     if "mesh_heading" in filters:
         mesh_name = filters["mesh_heading"]
@@ -107,13 +107,13 @@ def construct_graph_filter(filters: dict[str, Any], graph_options: Optional[Grap
         if len(mesh_name.strip()) > 0:
             mesh_headings = DBMeSHHeading.search(neo4j_conn.get_mesh_headings(), mesh_name)
             mesh_desc_ids = [m.descriptor_id for m in mesh_headings]
-            filter_builder.add_mesh_descriptor_id_filter(mesh_desc_ids)
+            filter_builder.add_mesh_descriptor_id_filter(mesh_desc_ids, use_variables)
 
     if "author" in filters:
         author_name = filters["author"]
         del filters["author"]
         if len(author_name.strip()) > 0:
-            filter_builder.add_author_name_filter(author_name)
+            filter_builder.add_author_name_filter(author_name, use_variables)
 
     if "first_author" in filters:
         restrict_to_first_author = filters["first_author"]
@@ -131,19 +131,19 @@ def construct_graph_filter(filters: dict[str, Any], graph_options: Optional[Grap
         article_name = filters["article"]
         del filters["article"]
         if len(article_name.strip()) > 0:
-            filter_builder.add_article_name_filter(article_name)
+            filter_builder.add_article_name_filter(article_name, use_variables)
 
     if "published_after" in filters:
         filter_date = filters["published_after"]
         del filters["published_after"]
         boundary_date = date(year=filter_date.year, month=filter_date.month, day=filter_date.day)
-        filter_builder.add_published_after_filter(boundary_date)
+        filter_builder.add_published_after_filter(boundary_date, use_variables)
 
     if "published_before" in filters:
         filter_date = filters["published_before"]
         del filters["published_before"]
         boundary_date = date(year=filter_date.year, month=filter_date.month, day=filter_date.day)
-        filter_builder.add_published_before_filter(boundary_date)
+        filter_builder.add_published_before_filter(boundary_date, use_variables)
 
     if len(filters) != 0:
         print("Unknown filters present: " + str(filters), file=sys.stderr)

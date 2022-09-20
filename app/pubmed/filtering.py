@@ -134,7 +134,7 @@ class PubMedFilterBuilder:
         self._variable_values[name] = value
         return f"${name}"
 
-    def _create_text_filter(self, field: str, filter_key: str, filter_value: str, split_filter: bool = False) -> str:
+    def _create_text_filter(self, field: str, filter_key: str, filter_value: str, use_variables: bool, split_filter: bool = False) -> str:
         """
         Creates a filter to match text in a field.
         """
@@ -143,17 +143,19 @@ class PubMedFilterBuilder:
             raise PubMedFilterValueError(filter_key, f"{filter_key} cannot be empty")
 
         if not split_filter:
-            return f"toLower({field}) CONTAINS {self._next_filter_var(filter_value)}"
+            return "toLower({}) CONTAINS {}".format(field, self._next_filter_var(filter_value) if use_variables else "'" + filter_value + "'")
         else:
             text_segments = filter_value.split(".")
             if len(text_segments) == 2:
+                initial, last_name = text_segments
                 # use STARTS WITH as it is faster than regex
-                return f"toLower({field}) STARTS WITH {self._next_filter_var(text_segments[0])} AND toLower({field}) CONTAINS {self._next_filter_var(text_segments[1])}"
+                return "toLower({}) STARTS WITH {} AND toLower({}) CONTAINS {}".format(field, self._next_filter_var(initial) if use_variables else "'" + initial + "'", 
+                                                                                       field, self._next_filter_var(last_name) if use_variables else "'" + last_name + "'")
             elif len(text_segments) > 2:
                 regex_string = f'{".*".join(text_segments)}.*'
-                return f"toLower({field}) =~ {self._next_filter_var(regex_string)}"
+                return "toLower({}) =~ {}".format(field, self._next_filter_var(regex_string) if use_variables else "'" + regex_string + "'")
     
-    def _create_exact_text_filter(self, field: str, filter_key: str, filter_value: str) -> str:
+    def _create_exact_text_filter(self, field: str, filter_key: str, filter_value: str, use_variables: bool = True) -> str:
         """
         Creates a filter to match text in a field.
         """
@@ -161,38 +163,38 @@ class PubMedFilterBuilder:
         if len(filter_value) == 0:
             raise PubMedFilterValueError(filter_key, f"{filter_key} cannot be empty")
 
-        return f"toLower({field}) = {self._next_filter_var(filter_value)}"
+        return "toLower({}) = {}".format(field, self._next_filter_var(filter_value) if use_variables else "'" + filter_value + "'")
 
-    def add_journal_name_filter(self, journal_name: str):
+    def add_journal_name_filter(self, journal_name: str, use_variables: bool):
         """ Adds a filter for the name of the journal that articles are published in. """
-        self._journal_filters.append(self._create_text_filter("journal.title", "journal", journal_name))
+        self._journal_filters.append(self._create_text_filter("journal.title", "journal", journal_name, use_variables))
 
-    def add_mesh_descriptor_id_filter(self, mesh_desc_ids: list[int]):
+    def add_mesh_descriptor_id_filter(self, mesh_desc_ids: list[int], use_variables):
         """ Adds a filter by an article's Mesh Heading categorisations. """
         if len(mesh_desc_ids) == 0:
             raise PubMedFilterValueError("mesh", "There are no matching MeSH headings")
 
         self._mesh_filters.append(
-            f"mesh_heading.id IN {self._next_filter_var(mesh_desc_ids)}"
+            f"mesh_heading.id IN {self._next_filter_var(mesh_desc_ids) if use_variables else mesh_desc_ids}"
         )
 
-    def add_article_name_filter(self, article_name: str):
+    def add_article_name_filter(self, article_name: str, use_variables: bool):
         """ Adds a filter by the name of articles. """
-        self._article_filters.append(self._create_text_filter("article.title", "article", article_name))
+        self._article_filters.append(self._create_text_filter("article.title", "article", article_name, use_variables))
 
-    def add_author_name_filter(self, author_name: str):
+    def add_author_name_filter(self, author_name: str, use_variables: bool):
         """ Adds a filter by the name of authors. """
         for author in author_name.split(","):
             author = author.strip()
             if (author.startswith('"') and author.endswith('"')) or (author.startswith("'") and author.endswith("'")):
                 # exact match
                 author = author.replace('"', '').replace("'", '')
-                self._author_name_filters.append(self._create_exact_text_filter("author.name", "author", author))
+                self._author_name_filters.append(self._create_exact_text_filter("author.name", "author", author, use_variables))
             else:
                 # check if author name contains initials; if so we need to split the name up
                 split_author_name = author.find(".") != -1
-                self._author_name_filters.append(self._create_text_filter("author.name", "author", author, split_author_name))
-                
+                self._author_name_filters.append(self._create_text_filter("author.name", "author", author, use_variables, split_author_name))
+        self._author_filters.append("(" + "\n\tOR ".join(self._author_name_filters) + ")")
 
     def add_first_author_filter(self):
         """ Adds a filter to only select first authors of articles. """
@@ -202,16 +204,20 @@ class PubMedFilterBuilder:
         """ Adds a filter to only select last authors of articles. """
         self._author_filters.append("author_rel.is_last_author")
 
-    def add_published_after_filter(self, boundary_date: datetime.date):
+    def add_published_after_filter(self, boundary_date: datetime.date, use_variables: bool = True):
         """ Adds a filter for all articles published after the given date. """
+        if not use_variables:
+            boundary_date = f"date({{year: {boundary_date.year}, month: {boundary_date.month}, day: {boundary_date.day}}})"
         self._article_filters.append(
-            f"article.date >= {self._next_filter_var(boundary_date)}"
+            f"article.date >= {self._next_filter_var(boundary_date) if use_variables else boundary_date}"
         )
 
-    def add_published_before_filter(self, boundary_date: datetime.date):
+    def add_published_before_filter(self, boundary_date: datetime.date, use_variables: bool = True):
         """ Adds a filter for all articles published before the given date. """
+        if not use_variables:
+            boundary_date = f"date({{year: {boundary_date.year}, month: {boundary_date.month}, day: {boundary_date.day}}})"
         self._article_filters.append(
-            f"article.date <= {self._next_filter_var(boundary_date)}"
+            f"article.date <= {self._next_filter_var(boundary_date) if use_variables else boundary_date}"
         )
 
     def set_node_limit(self, node_limit: Optional[int]):
@@ -232,12 +238,21 @@ class PubMedFilterBuilder:
         return self._node_limit
 
     def build(
-            self, *, force_journals=False, force_mesh=False, force_articles=False, force_authors=False
+            self, *, force_journals=False, force_mesh=False, force_articles=False, force_authors=False,
+            node_query=False, relationship_query=False
     ) -> PubMedFilterQuery:
         """
         Builds this list of filters into a Cypher query.
         """
-        query = "CYPHER planner=dp\n"
+
+        visualise_query = not node_query and not relationship_query
+
+        query = ""
+        if visualise_query:
+            query += "CYPHER planner=dp\n"
+        elif relationship_query:
+            query += "CALL {\n"
+
         contains_journal_filters = len(self._journal_filters) > 0
         contains_mesh_filters = len(self._mesh_filters) > 0
         contains_article_filters = len(self._article_filters) > 0
@@ -289,27 +304,50 @@ class PubMedFilterBuilder:
 
         if contains_author_filters:
             query += "WHERE\n\t"
-            self._author_filters.append("(" + "\n\tOR ".join(self._author_name_filters) + ")")
             query += "\n\tAND ".join(self._author_filters) 
             query += "\n"
 
+        # Collect and Unwind.
+        if node_query:
+            query += "OPTIONAL MATCH (author:Author) --> (article) <-- (coauthor:Author)\n"
+            query += "WITH COLLECT(id(author)) + COLLECT(id(coauthor)) AS ids\n"
+            query += "UNWIND ids as id\n"
+        
+        if relationship_query:
+            query += "OPTIONAL MATCH (author:Author) --> (article) <-- (coauthor:Author)\n"
+            query += "WITH COLLECT(DISTINCT author) as authors, COLLECT(DISTINCT article) as articles\n"
+            query += "UNWIND authors as author\n"
+            query += "UNWIND articles as article\n"
+
         # Return values.
         return_values = []
-        if query_journals:
-            return_values.append("id(journal) AS journal_id")
-        if query_mesh:
-            return_values.append("mesh_heading.id AS mesh_id")
-        if query_articles:
-            return_values.append("id(article) AS article_id")
-        if query_authors:
-            return_values.append("id(author) AS author_id")
+        if visualise_query:
+            if query_journals:
+                return_values.append("id(journal) AS journal_id")
+            if query_mesh:
+                return_values.append("mesh_heading.id AS mesh_id")
+            if query_articles:
+                return_values.append("id(article) AS article_id")
+            if query_authors:
+                return_values.append("id(author) AS author_id")
+        if node_query:
+            return_values.append("DISTINCT id")
+        if relationship_query:
+            return_values.append("author")
+            return_values.append("article")
 
         # Return.
         query += "RETURN\n\t" + ",\n\t".join(return_values) + "\n"
 
         # Limits.
-        if self._node_limit is not None:
-            query += f"LIMIT {self._next_filter_var(self._node_limit)}\n"
+        if self._node_limit is not None and not relationship_query:
+            query += f"LIMIT {self._next_filter_var(self._node_limit) if visualise_query else self._node_limit}\n"
+
+        if relationship_query:
+            query += "}\n\n"
+            query += "MATCH (author1:Author)-[:AUTHOR_OF]->(article:Article)<-[:AUTHOR_OF]-(author2:Author)\n"
+            query += "WHERE author1 = author OR author2 = author\n"
+            query += "RETURN id(author1) as source, id(author2) as target, apoc.create.vRelationship(author1, 'COAUTHOR', {count: count(*)}, author2) as rel\n"
 
         return PubMedFilterQuery(
             query, self._variable_values, self._node_limit,
