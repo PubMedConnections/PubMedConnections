@@ -18,7 +18,7 @@ def scale_value_source_results_linear(values: dict[T, float]) -> dict[T, float]:
     and scales them linearly into the range [0, 1].
     """
     if len(values) == 0:
-        return values
+        return {}
 
     # Find the limits.
     min_value = None
@@ -31,9 +31,12 @@ def scale_value_source_results_linear(values: dict[T, float]) -> dict[T, float]:
 
     # Scale based upon the limits.
     value_range = max_value - min_value
-    scaled: dict[T, float] = {}
-    for key, value in values.items():
-        scaled[key] = (value - min_value) / value_range if value_range != 0 else 1
+    if value_range == 0:
+        scaled = {key: 0.75 for key in values.keys()}
+    else:
+        scaled: dict[T, float] = {}
+        for key, value in values.items():
+            scaled[key] = (value - min_value) / value_range
 
     return scaled
 
@@ -352,16 +355,17 @@ class ArticleCoAuthorEdge(GraphEdge):
         author_id = cast(ArticleCoAuthorEdge, edges[0]).author_id
         author_article_rels: list[DBArticleAuthorRelation] = []
         articles: list[DBArticle] = []
-        article_ids: set[int] = set()
         coauthor_article_rels: list[DBArticleAuthorRelation] = []
         coauthor_id = cast(ArticleCoAuthorEdge, edges[0]).coauthor_id
+
+        seen_articles: set[int] = set()
         for edge in edges:
             edge = cast(ArticleCoAuthorEdge, edge)
             # The edge can be added from both directions.
-            if edge.article.pmid not in article_ids:
+            if edge.article.pmid not in seen_articles:
+                seen_articles.add(edge.article.pmid)
                 author_article_rels.append(edge.author_article_rel)
                 articles.append(edge.article)
-                article_ids.add(edge.article.pmid)
                 coauthor_article_rels.append(edge.coauthor_article_rel)
 
         return CoAuthorEdge(author_id, author_article_rels, articles, coauthor_article_rels, coauthor_id)
