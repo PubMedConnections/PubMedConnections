@@ -1,6 +1,7 @@
 """
 Tool to construct graphs to pass to the frontend.
 """
+import math
 import textwrap
 import matplotlib.pyplot as plt
 from typing import Callable, cast, Optional, TypeVar
@@ -12,13 +13,24 @@ from app.pubmed.model import DBArticle, DBAuthor, DBArticleAuthorRelation
 T = TypeVar("T")
 
 
-def scale_value_source_results_linear(values: dict[T, float]) -> dict[T, float]:
+def scale_value_source_results_log(values: dict[T, float]) -> dict[T, float]:
     """
     Takes value source results that fall into an arbitrary range of values,
-    and scales them linearly into the range [0, 1].
+    and scales them into the range [0, 1]. This is done by shifting all
+    values such that the minimum value falls at 1, and then linearly
+    scaling the log-10 of the shifted values.
     """
     if len(values) == 0:
         return {}
+
+    # Find the limits.
+    shift_for_log_value = None
+    for value in values.values():
+        if shift_for_log_value is None or value < shift_for_log_value:
+            shift_for_log_value = value
+
+    # Take the log of all the values.
+    values = {key: math.log(value + shift_for_log_value + 1) for key, value in values.items()}
 
     # Find the limits.
     min_value = None
@@ -109,7 +121,7 @@ class EdgeCountNodesValueSource(NodesValueSource):
         for node_id in graph.nodes.keys():
             result[node_id] = len(graph.node_edges[node_id])
 
-        return scale_value_source_results_linear(result)
+        return scale_value_source_results_log(result)
 
 
 class AuthorCitationsNodesValueSource(NodesValueSource):
@@ -177,7 +189,7 @@ class CoAuthoredArticlesEdgesValueSource(EdgesValueSource):
         for edge_key, edge in graph.edges.items():
             result[edge_key] = len(cast(CoAuthorEdge, edge).articles)
 
-        return scale_value_source_results_linear(result)
+        return scale_value_source_results_log(result)
 
 
 class GraphOptions:
