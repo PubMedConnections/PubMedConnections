@@ -317,6 +317,7 @@ class PubMedCacheConn:
         return DBArticleAuthorRelation(
             article,
             author,
+            rel["affiliation"],
             rel["author_position"],
             rel["is_first_author"],
             rel["is_last_author"]

@@ -22,10 +22,13 @@ registration = ns.model('registration', {'username': fields.String(required=Fals
 
 
 @jwt.token_in_blocklist_loader
-def check_if_token_is_revoked(jwt_header, jwt_payload: dict):
+def check_if_token_is_revoked(jwt_header, jwt_payload: dict) -> bool:
     jti = jwt_payload["jti"]
     username = jwt_payload["sub"]
     user = get_user(username)
+    if user is None:
+        return False
+
     revoked_tokens = json.loads(user["revoked_tokens"])
     return jti in revoked_tokens.keys()
 

@@ -128,6 +128,13 @@ class PubMedFilterBuilder:
         self._author_filters: list[str] = []
         self._variable_values: dict[str, Any] = {}
 
+    def get_parameter_map(self):
+        """
+        Returns a parameter map that can be used for queries
+        built with multiple calls to build on this builder.
+        """
+        return self._variable_values
+
     def _next_filter_var(self, value) -> str:
         """
         Adds a new input variable for the filter into the query if
@@ -152,7 +159,6 @@ class PubMedFilterBuilder:
         Creates a filter to approximately match text in a field.
         Supports exact matching, matching multiple authors, and the use of wildcards.
         """
-        filter_value = filter_value.lower()
         if len(filter_value) == 0:
             raise PubMedFilterValueError(filter_key, f"{filter_key} should not be empty")
 
@@ -162,7 +168,7 @@ class PubMedFilterBuilder:
         quoted = False
         escape_next = False
         last_escape_char = None
-        for index, ch in filter_value:
+        for index, ch in enumerate(filter_value):
             next_ch = (filter_value[index + 1] if index + 1 < len(filter_value) else None)
             escaped = escape_next
             escape_next = False
@@ -238,11 +244,11 @@ class PubMedFilterBuilder:
 
             # No wildcards if the length is 1.
             if len(inexact_piece) == 1:
-                conditions.append(f"toLower({field}) CONTAINS {self._next_filter_var(inexact_piece[0])}")
+                term = inexact_piece[0]
+                conditions.append(f"toLower({field}) CONTAINS {self._next_filter_var(term)}")
             else:
                 regex = ".*".join(re.escape(term.lower()) for term in inexact_piece)
-                neo4j_friendly_regex = regex.replace('\\', '\\\\')
-                conditions.append(f"toLower({field}) =~ {self._next_filter_var(neo4j_friendly_regex)}")
+                conditions.append(f"toLower({field}) =~ {self._next_filter_var(regex)}")
 
         return "(" + " OR ".join(conditions) + ")"
     
@@ -256,13 +262,13 @@ class PubMedFilterBuilder:
         """ Adds a filter for the name of the journal that articles are published in. """
         self._journal_filters.append(self._create_text_filter("journal.title", "journal", journal_name))
 
-    def add_mesh_descriptor_id_filter(self, mesh_desc_ids: list[int], use_variables):
+    def add_mesh_descriptor_id_filter(self, mesh_desc_ids: list[int]):
         """ Adds a filter by an article's Mesh Heading categorisations. """
         if len(mesh_desc_ids) == 0:
             raise PubMedFilterValueError("mesh", "There are no matching MeSH headings")
 
         self._mesh_filters.append(
-            f"mesh_heading.id IN {self._next_filter_var(mesh_desc_ids) if use_variables else mesh_desc_ids}"
+            f"mesh_heading.id IN {self._next_filter_var(mesh_desc_ids)}"
         )
 
     def add_article_name_filter(self, article_name: str):
@@ -273,9 +279,6 @@ class PubMedFilterBuilder:
         """
         Adds a filter by the name of authors.
         """
-        if len(author_name) == 0:
-            return
-
         self._author_filters.append(self._create_text_filter(
             "author.name", "author", author_name,
             separator_chars=",;",
