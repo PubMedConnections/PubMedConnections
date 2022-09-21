@@ -175,6 +175,7 @@ class PubMedCacheConn:
                         "name": author.full_name,
                         "is_collective": author.is_collective
                     },
+                    "affiliation": author_relation.affiliation,
                     "author_position": author_relation.author_position,
                     "is_first_author": author_relation.is_first_author,
                     "is_last_author": author_relation.is_last_author
@@ -283,7 +284,8 @@ class PubMedCacheConn:
                 CREATE (author_node)-[:AUTHOR_OF {
                     author_position: author_relation.author_position,
                     is_first_author: author_relation.is_first_author,
-                    is_last_author: author_relation.is_last_author
+                    is_last_author: author_relation.is_last_author,
+                    affiliation: author_relation.affiliation
                 }]->(article_node)
             """,
             articles=articles_data

@@ -52,10 +52,18 @@ def extract_date(date_node: etree.Element) -> datetime.date:
     return datetime.date(year, month, day)
 
 
-def extract_author(author_node: etree.Element) -> DBAuthor:
+class AuthorAndRelInfo:
+    """ Holder for the author information, and its relationship info. """
+    def __init__(self, author: DBAuthor, affiliation: Optional[str]):
+        self.author = author
+        self.affiliation = affiliation
+
+
+def extract_author(author_node: etree.Element) -> AuthorAndRelInfo:
     """
     Extracts an author's information from an <Author> node.
     This does its best to canonicalize the names of authors into a standard format.
+    Returns a tuple of the author node, and their affiliation.
     """
     last_name = None
     fore_name = None
@@ -80,7 +88,8 @@ def extract_author(author_node: etree.Element) -> DBAuthor:
                 if child_node.tag == "Affiliation":
                     affiliation = child_node.text
 
-    return DBAuthor.generate(last_name, fore_name, initials, suffix, collective_name, affiliation)
+    author = DBAuthor.generate(last_name, fore_name, initials, suffix, collective_name)
+    return AuthorAndRelInfo(author, affiliation)
 
 
 def extract_authors(article: DBArticle, author_list_node: etree.Element) -> list[DBArticleAuthorRelation]:
@@ -88,7 +97,7 @@ def extract_authors(article: DBArticle, author_list_node: etree.Element) -> list
     Reads all the authors from an <AuthorList>.
     """
     seen_authors = set()  # Some articles can contain duplicate authors, hence the set.
-    authors: list[tuple[int, DBAuthor]] = []
+    authors: list[tuple[int, AuthorAndRelInfo]] = []
     position = 0
     if author_list_node is not None:
         for author_node in author_list_node:
@@ -96,17 +105,18 @@ def extract_authors(article: DBArticle, author_list_node: etree.Element) -> list
                 continue
 
             position += 1
-            author = extract_author(author_node)
-            if author.full_name not in seen_authors:
-                seen_authors.add(author.full_name)
-                authors.append((position, author))
+            author_info = extract_author(author_node)
+            if author_info.author.full_name not in seen_authors:
+                seen_authors.add(author_info.author.full_name)
+                authors.append((position, author_info))
 
     author_relations = []
-    for author_position, author in authors:
+    for author_position, author_info in authors:
         is_first_author = (author_position == 1)
         is_last_author = (author_position == position)
         author_relations.append(DBArticleAuthorRelation(
-            article, author, author_position, is_first_author, is_last_author
+            article, author_info.author, author_info.affiliation,
+            author_position, is_first_author, is_last_author
         ))
 
     return author_relations

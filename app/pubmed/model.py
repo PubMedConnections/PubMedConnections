@@ -201,7 +201,6 @@ class DBAuthor:
     def __init__(self,
                  full_name: str = None,
                  is_collective: bool = False,
-                 affiliation: Optional[str] = None,
                  *,
                  author_id: int = None):
 
@@ -211,13 +210,11 @@ class DBAuthor:
         self.author_id = author_id
         self.full_name = full_name
         self.is_collective = is_collective
-        self.affiliation = affiliation
 
     @staticmethod
     def generate(
             last_name: str, fore_name: str, initials: str,
             suffix: str, collective_name: str,
-            affiliation: Optional[str] = None,
             *, max_name_length: int = 512
     ) -> 'DBAuthor':
 
@@ -244,7 +241,7 @@ class DBAuthor:
 
                 collective_name = truncated + truncated_suffix
 
-            return DBAuthor(collective_name, True, affiliation)
+            return DBAuthor(collective_name, True)
 
         last = " {}".format(last_name) if last_name is not None else ""
         suffix = " {}".format(suffix) if suffix is not None else ""
@@ -263,7 +260,7 @@ class DBAuthor:
         if len(full_name) > max_name_length:
             full_name = full_name[:(max_name_length - 3)] + "..."
 
-        return DBAuthor(full_name, False, affiliation)
+        return DBAuthor(full_name, False)
 
     def __str__(self):
         return self.full_name
@@ -337,11 +334,16 @@ class DBArticleAuthorRelation:
     The authorship is represented by the
     """
     def __init__(self,
-                 article: 'DBArticle', author: DBAuthor,
-                 author_position: int, is_first_author: bool, is_last_author: bool):
+                 article: 'DBArticle',
+                 author: DBAuthor,
+                 affiliation: Optional[str],
+                 author_position: int,
+                 is_first_author: bool,
+                 is_last_author: bool):
 
         self.article = article
         self.author = author
+        self.affiliation = affiliation
         self.author_position = author_position
         self.is_first_author = is_first_author
         self.is_last_author = is_last_author
@@ -349,6 +351,7 @@ class DBArticleAuthorRelation:
     def __str__(self):
         return f"({str(self.author)}) " \
                f"-[:AUTHOR_OF {{author_pos={self.author_position}, " \
+               f"affiliation={self.affiliation}, " \
                f"first={self.is_first_author}, " \
                f"last={self.is_last_author} }}]-> " \
                f"({str(self.article)})"
