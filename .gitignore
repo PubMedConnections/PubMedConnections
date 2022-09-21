@@ -4,6 +4,7 @@ logs/
 data-backup/
 error.node.txt
 deployment/image.tar
+deployment/deployment-config.py
 
 # General
 .git

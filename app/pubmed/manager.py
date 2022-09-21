@@ -321,3 +321,120 @@ class PubMedManager:
             f"data files in {format_minutes(overall_duration / 60)}\n"
         )
         return 0
+
+    def run_stats(
+            self, *,
+            log_dir=None, target_directory=None, report_every=60) -> int:
+        """
+        Extracts data from the synchronized PubMed data files.
+        Returns 0 on success, and an error code on failure.
+        """
+        overall_start = time.time()
+
+        # Use the config defaults if not supplied explicitly.
+        if target_directory is None:
+            target_directory = DATA_DIR
+        if log_dir is None:
+            log_dir = LOGS_DIR
+
+        # List the data files that have been downloaded.
+        baseline_info, latest_info, pubmed_file_specs = list_downloaded_pubmed_files(target_directory)
+        (_, latest_baseline_year) = baseline_info
+        (_, latest_update_year) = latest_info
+
+        pubmed_file_specs = pubmed_file_specs
+
+        # Check that the baseline and updatefiles years match.
+        if latest_baseline_year != latest_update_year:
+            flush_print(
+                f"The latest baseline dataset and the latest updatefiles dataset\n"
+                f"do not match. (latest_baseline={latest_baseline_year}, latest_update={latest_update_year})\n"
+                f"Has the sync of a new year's dataset not completed successfully?",
+                file=sys.stderr
+            )
+            return 1
+
+        pubmed_files = [f for _, _, f in pubmed_file_specs]
+        pubmed_file_sizes = []
+        for pubmed_file in pubmed_files:
+            pubmed_file_sizes.append(os.path.getsize(pubmed_file))
+
+        # Make sure the directory where we store warnings has been created.
+        if not os.path.isdir(log_dir):
+            os.mkdir(log_dir)
+
+        # Track the generation of the stats.
+        analytics = DownloadAnalytics(
+            pubmed_file_sizes,
+            no_threads=1,
+            prediction_size_bias=0.6,
+            history_for_prediction=150
+        )
+
+        # Then, we get started on the data files...
+        flush_print(f"\nPubMedStats: Processing statistics for {len(pubmed_files)} PubMed files\n")
+
+        file_queue = read_all_pubmed_files(
+            log_dir, target_directory, pubmed_files
+        )
+
+        stats = {
+            "article_count": 0,
+            "author_count": 0,
+            "author_with_affiliation_count": 0
+        }
+        rows = [
+            ("file_index", "article_count", "author_count", "author_with_affiliation_count")
+        ]
+
+        last_report_time = time.time()
+        while True:
+            start = time.time()
+            file = file_queue.get()
+            if file.articles is None:
+                break  # Marks that there are no more files.
+
+            article_count = len(file.articles)
+            author_count = 0
+            author_with_affiliation_count = 0
+
+            for article in file.articles:
+                author_count += len(article.authors)
+                for author in article.authors:
+                    if author.affiliation is not None:
+                        author_with_affiliation_count += 1
+
+            stats["article_count"] += article_count
+            stats["author_count"] += author_count
+            stats["author_with_affiliation_count"] += author_with_affiliation_count
+            rows.append((file.index, article_count, author_count, author_with_affiliation_count))
+
+            duration = time.time() - start
+            analytics.update(duration, pubmed_file_sizes[file.index])
+            analytics.update_remaining(pubmed_file_sizes[file.index + 1:])
+
+            if time.time() - last_report_time >= report_every:
+                last_report_time = time.time()
+                analytics.report(prefix="PubMedStats: ", verb="Processed")
+
+        overall_duration = time.time() - overall_start
+        flush_print(
+            f"PubMedStats: Completed extraction of {len(pubmed_files)} "
+            f"data files in {format_minutes(overall_duration / 60)}\n"
+        )
+
+        for key, value in stats.items():
+            print(f"PubMedStats: {key}: {value}")
+
+        print()
+        affiliation_percent = 100 * stats["author_with_affiliation_count"] / stats["author_count"]
+        print(f"PubMedStats: Percentage of authors with affiliation = {affiliation_percent:.2f}%")
+
+        print()
+        print("PubMedStats: Writing stats.csv...")
+        with open(os.path.join(target_directory, "stats.csv"), "w") as f:
+            for row in rows:
+                f.write(",".join(str(v) for v in row) + "\n")
+
+        print("PubMedStats: Done")
+        return 0

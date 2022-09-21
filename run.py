@@ -62,6 +62,15 @@ if __name__ == "__main__":
         exit_code = manager.run_extract()
         sys.exit(exit_code)
 
+    elif mode == "stats":
+        if len(args) != 2:
+            err_print("Expected no arguments to stats")
+            sys.exit(1)
+
+        manager = PubMedManager()
+        exit_code = manager.run_stats()
+        sys.exit(exit_code)
+
     elif mode == "clear":
         if len(args) != 2:
             err_print("Expected no arguments to clear")

@@ -62,6 +62,7 @@ def extract_author(author_node: etree.Element) -> DBAuthor:
     initials = None
     suffix = None
     collective_name = None
+    affiliation = None
     for node in author_node:
         tag = node.tag
         if tag == "LastName":
@@ -74,8 +75,12 @@ def extract_author(author_node: etree.Element) -> DBAuthor:
             suffix = node.text
         elif tag == "CollectiveName":
             collective_name = node.text
+        elif tag == "AffiliationInfo":
+            for child_node in node:
+                if child_node.tag == "Affiliation":
+                    affiliation = child_node.text
 
-    return DBAuthor.generate_from_name_pieces(last_name, fore_name, initials, suffix, collective_name)
+    return DBAuthor.generate(last_name, fore_name, initials, suffix, collective_name, affiliation)
 
 
 def extract_authors(article: DBArticle, author_list_node: etree.Element) -> list[DBArticleAuthorRelation]:
