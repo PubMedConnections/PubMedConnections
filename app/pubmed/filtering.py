@@ -126,6 +126,7 @@ class PubMedFilterBuilder:
         self._mesh_filters: list[str] = []
         self._article_filters: list[str] = []
         self._author_filters: list[str] = []
+        self._author_of_rel_filters: list[str] = []
         self._variable_values: dict[str, Any] = {}
 
     def get_parameter_map(self):
@@ -277,6 +278,12 @@ class PubMedFilterBuilder:
         """ Adds a filter by the name of articles. """
         self._article_filters.append(self._create_text_filter("article.title", "article", article_name))
 
+    def add_affiliation_filter(self, affiliation_name: str):
+        """ Adds a filter by the name of articles. """
+        self._author_of_rel_filters.append(
+            self._create_text_filter("author_rel.affiliation", "affiliation", affiliation_name)
+        )
+
     def add_author_name_filter(self, author_name: str):
         """
         Adds a filter by the name of authors.
@@ -289,11 +296,11 @@ class PubMedFilterBuilder:
 
     def add_first_author_filter(self):
         """ Adds a filter to only select first authors of articles. """
-        self._author_filters.append("author_rel.is_first_author")
+        self._author_of_rel_filters.append("author_rel.is_first_author")
 
     def add_last_author_filter(self):
         """ Adds a filter to only select last authors of articles. """
-        self._author_filters.append("author_rel.is_last_author")
+        self._author_of_rel_filters.append("author_rel.is_last_author")
 
     def add_published_after_filter(self, boundary_date: datetime.date):
         """ Adds a filter for all articles published after the given date. """
@@ -339,11 +346,12 @@ class PubMedFilterBuilder:
         contains_mesh_filters = len(self._mesh_filters) > 0
         contains_article_filters = len(self._article_filters) > 0
         contains_author_filters = len(self._author_filters) > 0
+        contains_author_of_rel_filters = len(self._author_of_rel_filters) > 0
 
         # Querying authors by MeSH heading requires querying the articles.
         query_journals = force_journals or contains_journal_filters
-        query_authors = force_authors or contains_author_filters
-        query_articles = force_articles or contains_article_filters or query_authors
+        query_authors = force_authors or contains_author_filters or contains_author_of_rel_filters
+        query_articles = force_articles or contains_article_filters or contains_author_of_rel_filters or query_authors
         query_mesh = force_mesh or contains_mesh_filters
 
         if not query_journals and not query_authors and not query_articles and not query_mesh:
@@ -384,9 +392,9 @@ class PubMedFilterBuilder:
             else:
                 query += "MATCH (author:Author)\n"
 
-        if contains_author_filters:
+        if contains_author_filters or contains_author_of_rel_filters:
             query += "WHERE\n\t"
-            query += "\n\tAND ".join(self._author_filters) 
+            query += "\n\tAND ".join(self._author_filters + self._author_of_rel_filters)
             query += "\n"
 
         # Collect and Unwind.

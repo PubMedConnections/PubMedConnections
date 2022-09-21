@@ -52,7 +52,7 @@ const Graph = () => {
               avoidOverlap: 1,
               damping: 0.5,
               theta: 0.4,
-              springConstant: 0.02,
+              springConstant: 0.06,
               springLength: 100,
           },
           stabilization: {
@@ -103,6 +103,16 @@ const Graph = () => {
                   data: graphData
               });
               setLoadingProgress(100)
+
+              // Fit the network for a few seconds.
+              const start = performance.now();
+              function fit() {
+                  VISJSNetwork.fit();
+                  if (performance.now() - start < 3000) {
+                       requestAnimationFrame(fit);
+                  }
+              }
+              setTimeout(fit);
           }
 
           POST('snapshot/visualise/', filters)

@@ -110,11 +110,7 @@ def project_graph_and_run_analytics(
     Projects the graph which the analytics are to be computed on, then computes these analytics.
     """
     
-    if NEO4J_REQUIRES_AUTH:
-        from config import NEO4J_PASSWORD, NEO4J_USER
-        gds = GraphDataScience(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
-    else:
-        gds = GraphDataScience(NEO4J_URI)
+    gds = GraphDataScience(neo4j_conn.driver)
 
     # print(node_query)
     # print(relationship_query)

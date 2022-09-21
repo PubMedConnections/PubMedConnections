@@ -4,6 +4,7 @@ const resetState = {
     filters: {
         mesh_heading: "",
         author: "",
+        affiliation: "",
         first_author: true,
         last_author: true,
         published_before: "",

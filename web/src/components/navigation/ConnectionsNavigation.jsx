@@ -21,7 +21,7 @@ const ConnectionsNavigation = (props) => {
     <AppBar
       position='fixed'
       color='secondary'
-      sx={{ height: CONNECTIONS_NAVBAR_HEIGHT, zIndex: 1301 }}
+      sx={{ height: CONNECTIONS_NAVBAR_HEIGHT, zIndex: 1299 }}
     >
       <Container
         maxWidth='xl'

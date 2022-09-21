@@ -260,6 +260,7 @@ class AuthorNode(GraphNode):
     def get_title(self) -> Optional[str]:
         """ Returns the tooltip text of this node in the graph. """
         title = f"{self.author.full_name}\n"
+        title += "\n"
         title += ("Matching Author" if self.is_root_node else "Co-author") + f" of {len(self.articles)} articles"
         title += f"\n{list_articles_for_description(self.articles)}"
         return title

@@ -113,6 +113,12 @@ def construct_graph_filter(filters: dict[str, Any], graph_options: Optional[Grap
         if len(author_name.strip()) > 0:
             filter_builder.add_author_name_filter(author_name)
 
+    if "affiliation" in filters:
+        affiliation_name = filters["affiliation"]
+        del filters["affiliation"]
+        if len(affiliation_name.strip()) > 0:
+            filter_builder.add_affiliation_filter(affiliation_name)
+
     if "first_author" in filters:
         restrict_to_first_author = filters["first_author"]
         del filters["first_author"]

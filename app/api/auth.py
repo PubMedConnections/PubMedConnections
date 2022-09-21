@@ -27,7 +27,7 @@ def check_if_token_is_revoked(jwt_header, jwt_payload: dict) -> bool:
     username = jwt_payload["sub"]
     user = get_user(username)
     if user is None:
-        return False
+        return True
 
     revoked_tokens = json.loads(user["revoked_tokens"])
     return jti in revoked_tokens.keys()

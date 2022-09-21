@@ -110,7 +110,7 @@ class VisualiseThreeHopNeighbourhoodSnapshot(Resource):
 @ns.route('/analyse/<int:snapshot_id>')
 class AnalyseSnapshot(Resource):
     @staticmethod
-    @jwt_required()
+    # @jwt_required()
     @ns.doc(params={'snapshot_id': {'default': '1'}}, security="api_key")
     def get(snapshot_id: int):
         try:

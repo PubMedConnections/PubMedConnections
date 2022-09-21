@@ -16,7 +16,7 @@ import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker'
 import {useSelector, useDispatch} from 'react-redux'
-import { setFilter, resetFilter, setActiveFilters, removeActiveFilter } from '../../store/slices/filterSlice'
+import { setFilter, setActiveFilters, removeActiveFilter } from '../../store/slices/filterSlice'
 
 
 
@@ -50,6 +50,12 @@ const availableFilters = {
         key: "author",
         name: "Author Name",
         form_name: "Author Name",
+        category: filterCategories.Author
+    },
+    affiliation: {
+        key: "affiliation",
+        name: "Author Affiliation",
+        form_name: "Affiliation",
         category: filterCategories.Author
     },
     first_author: {
@@ -317,6 +323,7 @@ const Filters = () => {
     let filterComponents = {
         mesh_heading: makeTextFieldEntry(availableFilters.mesh_heading),
         author: makeTextFieldEntry(availableFilters.author),
+        affiliation: makeTextFieldEntry(availableFilters.affiliation),
         first_author: makeCheckboxFieldEntry(availableFilters.first_author),
         last_author: makeCheckboxFieldEntry(availableFilters.last_author),
         published_after: makeDateFieldEntry(availableFilters.published_after),
@@ -360,8 +367,8 @@ const Filters = () => {
                     } else {
                         return filterCount + " Selected Filter" + (filterCount > 1 ? "s" : "");
                     }
-                }}
-                sx={{border: "white"}}>
+                }}>
+
             {Object.keys(availableFilters).map(f => {
                 return <MenuItem key={f} value={f}>
                     <Checkbox checked={activeFilters.indexOf(f) > -1} />
