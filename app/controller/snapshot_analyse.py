@@ -1,3 +1,5 @@
+from typing import Any
+
 from neo4j.exceptions import ClientError
 from graphdatascience import GraphDataScience
 from config import NEO4J_URI, NEO4J_REQUIRES_AUTH
@@ -9,11 +11,13 @@ from app import neo4j_conn
 from app.controller.snapshot_visualise import construct_graph_options, construct_graph_filter
 from app.PubMedErrors import PubMedSnapshotDoesNotExistError, PubMedUpdateSnapshotError, PubMedAnalyticsError
 
+
 class AnalyticsThreading(object):
     def __init__(self, graph_type: str, snapshot_id: int, filters):
         thread = threading.Thread(target=get_analytics, args=(graph_type, snapshot_id, filters))
         thread.daemon = True
         thread.start()
+
 
 # TODO
 # force timeing out of analytics
@@ -67,7 +71,8 @@ retrieve_betweenness_centrality_query = \
     MATCH (s: Snapshot { id: $snapshot_id })
     RETURN s.betweenness_centrality AS betweenness_centrality
     """
-    
+
+
 def _update_snapshot_centrality(tx, update_snapshot_centrality_query: str, snapshot_id: int, centrality_record):
     """
     Helper function that updates a snapshot with the corresponding centrality results.
@@ -81,6 +86,7 @@ def _update_snapshot_centrality(tx, update_snapshot_centrality_query: str, snaps
     if result is None:
         raise PubMedUpdateSnapshotError("Unable to update snapshot with centrality results.")
 
+
 def _retrieve_centrality(tx, retrieve_centrality_query: str, snapshot_id: int):
     """
     Helper function to retrieve centrality results.
@@ -93,7 +99,13 @@ def _retrieve_centrality(tx, retrieve_centrality_query: str, snapshot_id: int):
 
     return result.single()
 
-def project_graph_and_run_analytics(graph_name: str, node_query: str, relationship_query: str, snapshot_id: int):
+
+def project_graph_and_run_analytics(
+        graph_name: str,
+        node_query: str,
+        relationship_query: str,
+        parameter_map: dict[str, Any],
+        snapshot_id: int):
     """
     Projects the graph which the analytics are to be computed on, then computes these analytics.
     """
@@ -116,6 +128,7 @@ def project_graph_and_run_analytics(graph_name: str, node_query: str, relationsh
                 graph_name,
                 node_query,
                 relationship_query,
+                parameters=parameter_map,
                 validateRelationships=False
             )
 
@@ -153,7 +166,12 @@ def project_graph_and_run_analytics(graph_name: str, node_query: str, relationsh
                 }
             )
 
-            session.write_transaction(_update_snapshot_centrality, update_degree_centrality_query, snapshot_id, degree_centrality_record)
+            session.write_transaction(
+                _update_snapshot_centrality,
+                update_degree_centrality_query,
+                snapshot_id,
+                degree_centrality_record
+            )
 
             # compute betweenness centrality
             res = gds.betweenness.stream(G)
@@ -187,7 +205,12 @@ def project_graph_and_run_analytics(graph_name: str, node_query: str, relationsh
                 }
             )
 
-            session.write_transaction(_update_snapshot_centrality, update_betweenness_centrality_query, snapshot_id, betweenness_centrality_record)
+            session.write_transaction(
+                _update_snapshot_centrality,
+                update_betweenness_centrality_query,
+                snapshot_id,
+                betweenness_centrality_record
+            )
 
             print("analytics completed")
 
@@ -223,7 +246,7 @@ def get_analytics(snapshot_id: int):
 
     snapshot = get_snapshot(snapshot_id)
 
-    if snapshot == []:
+    if len(snapshot) == 0:
         raise PubMedSnapshotDoesNotExistError(f"There is no snapshot with the id: {snapshot_id}")
     
     snapshot = snapshot[0]
@@ -231,8 +254,8 @@ def get_analytics(snapshot_id: int):
     analytics_results = retrieve_analytics(snapshot_id)
 
     if analytics_results == {} or \
-        'degree' not in analytics_results or \
-        'betweenness' not in analytics_results:
+            'degree' not in analytics_results or \
+            'betweenness' not in analytics_results:
 
         print("starting analytics")
 
@@ -245,7 +268,7 @@ def get_analytics(snapshot_id: int):
 
         # construct filter object from snapshot
         snapshot_options = construct_graph_options(snapshot)
-        snapshot_filter = construct_graph_filter(snapshot, snapshot_options, use_variables=False)
+        snapshot_filter = construct_graph_filter(snapshot, snapshot_options)
 
         # query author nodes
         node_query = snapshot_filter.build(force_authors=True, node_query=True).query
@@ -253,7 +276,9 @@ def get_analytics(snapshot_id: int):
         # create co-author relationships between these authors
         relationship_query = snapshot_filter.build(force_authors=True, relationship_query=True).query
 
-        analytics_results = project_graph_and_run_analytics(graph_name, node_query, relationship_query, snapshot_id)
+        analytics_results = project_graph_and_run_analytics(
+            graph_name, node_query, relationship_query, snapshot_filter.get_parameter_map(), snapshot_id
+        )
 
     return analytics_results
 
@@ -267,23 +292,34 @@ def retrieve_analytics(snapshot_id: int):
 
     with neo4j_conn.new_session() as session:
 
-        # retrieve the degree centrality record
-        degree_centrality_record = session.read_transaction(_retrieve_centrality, retrieve_degree_centrality_query, snapshot_id)
+        # Retrieve the degree centrality record.
+        degree_centrality_record = session.read_transaction(
+            _retrieve_centrality,
+            retrieve_degree_centrality_query,
+            snapshot_id
+        )
 
-        if degree_centrality_record.data() is not None:
-
-            # if the degree centrality record is the empty string it means the analytics results
-            # have not yet been added to the db
-            if (degree_centrality_record.data()['degree_centrality'] is not None and degree_centrality_record.data()['degree_centrality'] != ""):
-                degree_centrality = json.loads(degree_centrality_record.data()['degree_centrality'])
+        degree_data = degree_centrality_record.data()
+        if degree_data is not None:
+            # If the degree centrality record is the empty string it means the analytics results
+            # have not yet been added to the db.
+            degree_centrality_json = degree_data['degree_centrality']
+            if degree_centrality_json is not None and len(degree_centrality_json) > 0:
+                degree_centrality = json.loads(degree_centrality_json)
                 analytics_response['degree'] = degree_centrality
 
-        # retrieve the betweenness_centrality record
-        betweenness_centrality_record = session.read_transaction(_retrieve_centrality, retrieve_betweenness_centrality_query, snapshot_id)
+        # Retrieve the betweenness_centrality record.
+        betweenness_centrality_record = session.read_transaction(
+            _retrieve_centrality,
+            retrieve_betweenness_centrality_query,
+            snapshot_id
+        )
 
-        if betweenness_centrality_record.data() is not None:
-            if (betweenness_centrality_record.data()['betweenness_centrality'] is not None and betweenness_centrality_record.data()['betweenness_centrality'] != ""):
-                betweenness_centrality = json.loads(betweenness_centrality_record.data()['betweenness_centrality'])
+        betweenness_data = betweenness_centrality_record.data()
+        if betweenness_data is not None:
+            betweenness_centrality_json = betweenness_data['betweenness_centrality']
+            if betweenness_centrality_json is not None and len(betweenness_centrality_json) > 0:
+                betweenness_centrality = json.loads(betweenness_centrality_json)
                 analytics_response['betweenness'] = betweenness_centrality
-        
+
     return analytics_response

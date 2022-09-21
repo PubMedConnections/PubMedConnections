@@ -1,6 +1,7 @@
 import datetime
 from typing import Any, Optional, Iterable
 
+import re
 import neo4j
 
 
@@ -125,76 +126,166 @@ class PubMedFilterBuilder:
         self._mesh_filters: list[str] = []
         self._article_filters: list[str] = []
         self._author_filters: list[str] = []
-        self._author_name_filters: list[str] = []
         self._variable_values: dict[str, Any] = {}
 
+    def get_parameter_map(self):
+        """
+        Returns a parameter map that can be used for queries
+        built with multiple calls to build on this builder.
+        """
+        return self._variable_values
+
     def _next_filter_var(self, value) -> str:
-        """ Adds a new input variable for the filter into the query. """
+        """
+        Adds a new input variable for the filter into the query if
+        variable use is enabled, or otherwise adds the value in-situ.
+        """
         name = f"_filter_var{len(self._variable_values) + 1}"
         self._variable_values[name] = value
         return f"${name}"
 
-    def _create_text_filter(self, field: str, filter_key: str, filter_value: str, use_variables: bool, split_filter: bool = False) -> str:
+    def _create_text_filter(
+            self,
+            field: str,
+            filter_key: str,
+            filter_value: str,
+            *,
+            escape_chars: str = "\\",
+            quote_chars: str = "'\"",
+            separator_chars: str = ";",
+            wildcard_chars: str = "*"
+    ) -> str:
         """
-        Creates a filter to match text in a field.
+        Creates a filter to approximately match text in a field.
+        Supports exact matching, matching multiple authors, and the use of wildcards.
         """
-        filter_value = filter_value.lower()
         if len(filter_value) == 0:
-            raise PubMedFilterValueError(filter_key, f"{filter_key} cannot be empty")
+            raise PubMedFilterValueError(filter_key, f"{filter_key} should not be empty")
 
-        if not split_filter:
-            return "toLower({}) CONTAINS {}".format(field, self._next_filter_var(filter_value) if use_variables else "'" + filter_value + "'")
-        else:
-            text_segments = filter_value.split(".")
-            if len(text_segments) == 2:
-                initial, last_name = text_segments
-                # use STARTS WITH as it is faster than regex
-                return "toLower({}) STARTS WITH {} AND toLower({}) CONTAINS {}".format(field, self._next_filter_var(initial) if use_variables else "'" + initial + "'", 
-                                                                                       field, self._next_filter_var(last_name) if use_variables else "'" + last_name + "'")
-            elif len(text_segments) > 2:
-                regex_string = f'{".*".join(text_segments)}.*'
-                return "toLower({}) =~ {}".format(field, self._next_filter_var(regex_string) if use_variables else "'" + regex_string + "'")
+        # Parse the text pieces to match.
+        pieces = [[""]]
+        exact_pieces = []
+        quoted = False
+        escape_next = False
+        last_escape_char = None
+        for index, ch in enumerate(filter_value):
+            next_ch = (filter_value[index + 1] if index + 1 < len(filter_value) else None)
+            escaped = escape_next
+            escape_next = False
+
+            # If the first character of a piece is a quote, then treat it as an exact match without wildcards.
+            if ch in quote_chars:
+                if not escaped:
+                    # We only allow starting an exact quotation after whitespace.
+                    if len(pieces[-1]) == 1 and len(pieces[-1][0].strip()) == 0:
+                        quoted = True
+                        pieces[-1][0] = ""  # Quotation ignores the preceding whitespace.
+                        continue
+                else:
+                    escaped = False
+
+            # If a quotation mark is found before the next separator (or EOF), then mark the end of quoting.
+            if quoted and ch in quote_chars and (next_ch is None or next_ch in separator_chars):
+                if not escaped:
+                    quoted = False
+                    assert len(pieces[-1]) == 1
+                    # Move the piece to the exact_pieces array and delete it from the pieces list.
+                    exact_pieces.append(pieces[-1][0])
+                    del pieces[-1]
+                    continue
+                else:
+                    escaped = False
+
+            # If we are in an exact match quote, then treat all special characters as escaped.
+            if quoted:
+                escaped = True
+
+            # Allow escaping special characters to ignore their special meaning.
+            if ch in escape_chars:
+                if not escaped:
+                    escape_next = True
+                    last_escape_char = ch
+                    continue
+                else:
+                    escaped = False
+
+            # Allow separators to match multiple pieces of text.
+            if ch in separator_chars:
+                if not escaped:
+                    pieces.append([""])
+                    continue
+                else:
+                    escaped = False
+
+            # Allow wildcards to match more varying text patterns.
+            if ch in wildcard_chars:
+                if not escaped:
+                    pieces[-1].append("")
+                    continue
+                else:
+                    escaped = False
+
+            # If the escape wasn't used, then treat it like a normal character.
+            if not quoted and escaped:
+                pieces[-1][-1] += last_escape_char
+
+            # Add the character to the last piece.
+            pieces[-1][-1] += ch
+
+        # Construct the conditions from the pieces.
+        conditions = []
+        for exact_piece in exact_pieces:
+            conditions.append(f"{field} = {self._next_filter_var(exact_piece)}")
+
+        for inexact_piece in pieces:
+            # Strip whitespace from the start and end of the piece.
+            inexact_piece[0] = inexact_piece[0].lstrip()
+            inexact_piece[-1] = inexact_piece[-1].rstrip()
+
+            # No wildcards if the length is 1.
+            if len(inexact_piece) == 1:
+                term = inexact_piece[0].lower()
+                conditions.append(f"toLower({field}) CONTAINS {self._next_filter_var(term)}")
+            else:
+                regex = ".*".join(re.escape(term.lower()) for term in inexact_piece)
+                conditions.append(f"toLower({field}) =~ {self._next_filter_var(regex)}")
+
+        return "(" + " OR ".join(conditions) + ")"
     
     def _create_exact_text_filter(self, field: str, filter_key: str, filter_value: str, use_variables: bool = True) -> str:
         """
-        Creates a filter to match text in a field.
+        Creates a filter to exactly match text in a field.
         """
-        filter_value = filter_value.lower()
-        if len(filter_value) == 0:
-            raise PubMedFilterValueError(filter_key, f"{filter_key} cannot be empty")
+        return f"{field} = {self._next_filter_var(filter_value)}"
 
-        return "toLower({}) = {}".format(field, self._next_filter_var(filter_value) if use_variables else "'" + filter_value + "'")
-
-    def add_journal_name_filter(self, journal_name: str, use_variables: bool):
+    def add_journal_name_filter(self, journal_name: str):
         """ Adds a filter for the name of the journal that articles are published in. """
-        self._journal_filters.append(self._create_text_filter("journal.title", "journal", journal_name, use_variables))
+        self._journal_filters.append(self._create_text_filter("journal.title", "journal", journal_name))
 
-    def add_mesh_descriptor_id_filter(self, mesh_desc_ids: list[int], use_variables):
+    def add_mesh_descriptor_id_filter(self, mesh_desc_ids: list[int]):
         """ Adds a filter by an article's Mesh Heading categorisations. """
         if len(mesh_desc_ids) == 0:
             raise PubMedFilterValueError("mesh", "There are no matching MeSH headings")
 
-        self._mesh_filters.append(
-            f"mesh_heading.id IN {self._next_filter_var(mesh_desc_ids) if use_variables else mesh_desc_ids}"
-        )
+        self._mesh_filters.append(f"mesh_heading.id IN {self._next_filter_var(mesh_desc_ids)}")
 
-    def add_article_name_filter(self, article_name: str, use_variables: bool):
+    def add_mesh_name_filter(self, mesh_name: str):
+        """ Adds a filter by the name of MeSH headings. """
+        self._mesh_filters.append(self._create_text_filter("mesh_heading.name", "mesh_heading", mesh_name))
+
+    def add_article_name_filter(self, article_name: str):
         """ Adds a filter by the name of articles. """
-        self._article_filters.append(self._create_text_filter("article.title", "article", article_name, use_variables))
+        self._article_filters.append(self._create_text_filter("article.title", "article", article_name))
 
-    def add_author_name_filter(self, author_name: str, use_variables: bool):
-        """ Adds a filter by the name of authors. """
-        for author in author_name.split(","):
-            author = author.strip()
-            if (author.startswith('"') and author.endswith('"')) or (author.startswith("'") and author.endswith("'")):
-                # exact match
-                author = author.replace('"', '').replace("'", '')
-                self._author_name_filters.append(self._create_exact_text_filter("author.name", "author", author, use_variables))
-            else:
-                # check if author name contains initials; if so we need to split the name up
-                split_author_name = author.find(".") != -1
-                self._author_name_filters.append(self._create_text_filter("author.name", "author", author, use_variables, split_author_name))
-        self._author_filters.append("(" + "\n\tOR ".join(self._author_name_filters) + ")")
+    def add_author_name_filter(self, author_name: str):
+        """
+        Adds a filter by the name of authors.
+        """
+        self._author_filters.append(self._create_text_filter(
+            "author.name", "author", author_name,
+            separator_chars=",;",
+            wildcard_chars=".*"
+        ))
 
     def add_first_author_filter(self):
         """ Adds a filter to only select first authors of articles. """
@@ -204,21 +295,13 @@ class PubMedFilterBuilder:
         """ Adds a filter to only select last authors of articles. """
         self._author_filters.append("author_rel.is_last_author")
 
-    def add_published_after_filter(self, boundary_date: datetime.date, use_variables: bool = True):
+    def add_published_after_filter(self, boundary_date: datetime.date):
         """ Adds a filter for all articles published after the given date. """
-        if not use_variables:
-            boundary_date = f"date({{year: {boundary_date.year}, month: {boundary_date.month}, day: {boundary_date.day}}})"
-        self._article_filters.append(
-            f"article.date >= {self._next_filter_var(boundary_date) if use_variables else boundary_date}"
-        )
+        self._article_filters.append(f"article.date >= {self._next_filter_var(boundary_date)}")
 
-    def add_published_before_filter(self, boundary_date: datetime.date, use_variables: bool = True):
+    def add_published_before_filter(self, boundary_date: datetime.date):
         """ Adds a filter for all articles published before the given date. """
-        if not use_variables:
-            boundary_date = f"date({{year: {boundary_date.year}, month: {boundary_date.month}, day: {boundary_date.day}}})"
-        self._article_filters.append(
-            f"article.date <= {self._next_filter_var(boundary_date) if use_variables else boundary_date}"
-        )
+        self._article_filters.append(f"article.date <= {self._next_filter_var(boundary_date)}")
 
     def set_node_limit(self, node_limit: Optional[int]):
         """
@@ -244,7 +327,6 @@ class PubMedFilterBuilder:
         """
         Builds this list of filters into a Cypher query.
         """
-
         visualise_query = not node_query and not relationship_query
 
         query = ""
@@ -256,7 +338,7 @@ class PubMedFilterBuilder:
         contains_journal_filters = len(self._journal_filters) > 0
         contains_mesh_filters = len(self._mesh_filters) > 0
         contains_article_filters = len(self._article_filters) > 0
-        contains_author_filters = len(self._author_filters) + len(self._author_name_filters) > 0
+        contains_author_filters = len(self._author_filters) > 0
 
         # Querying authors by MeSH heading requires querying the articles.
         query_journals = force_journals or contains_journal_filters
@@ -341,7 +423,7 @@ class PubMedFilterBuilder:
 
         # Limits.
         if self._node_limit is not None and not relationship_query:
-            query += f"LIMIT {self._next_filter_var(self._node_limit) if visualise_query else self._node_limit}\n"
+            query += f"LIMIT {self._next_filter_var(self._node_limit)}\n"
 
         if relationship_query:
             query += "}\n\n"

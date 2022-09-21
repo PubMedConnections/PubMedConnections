@@ -212,7 +212,7 @@ class DBAuthor:
         self.is_collective = is_collective
 
     @staticmethod
-    def generate_from_name_pieces(
+    def generate(
             last_name: str, fore_name: str, initials: str,
             suffix: str, collective_name: str,
             *, max_name_length: int = 512
@@ -334,11 +334,16 @@ class DBArticleAuthorRelation:
     The authorship is represented by the
     """
     def __init__(self,
-                 article: 'DBArticle', author: DBAuthor,
-                 author_position: int, is_first_author: bool, is_last_author: bool):
+                 article: 'DBArticle',
+                 author: DBAuthor,
+                 affiliation: Optional[str],
+                 author_position: int,
+                 is_first_author: bool,
+                 is_last_author: bool):
 
         self.article = article
         self.author = author
+        self.affiliation = affiliation
         self.author_position = author_position
         self.is_first_author = is_first_author
         self.is_last_author = is_last_author
@@ -346,6 +351,7 @@ class DBArticleAuthorRelation:
     def __str__(self):
         return f"({str(self.author)}) " \
                f"-[:AUTHOR_OF {{author_pos={self.author_position}, " \
+               f"affiliation={self.affiliation}, " \
                f"first={self.is_first_author}, " \
                f"last={self.is_last_author} }}]-> " \
                f"({str(self.article)})"
