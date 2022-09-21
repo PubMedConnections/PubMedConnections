@@ -244,7 +244,7 @@ class PubMedFilterBuilder:
 
             # No wildcards if the length is 1.
             if len(inexact_piece) == 1:
-                term = inexact_piece[0]
+                term = inexact_piece[0].lower()
                 conditions.append(f"toLower({field}) CONTAINS {self._next_filter_var(term)}")
             else:
                 regex = ".*".join(re.escape(term.lower()) for term in inexact_piece)
@@ -267,9 +267,11 @@ class PubMedFilterBuilder:
         if len(mesh_desc_ids) == 0:
             raise PubMedFilterValueError("mesh", "There are no matching MeSH headings")
 
-        self._mesh_filters.append(
-            f"mesh_heading.id IN {self._next_filter_var(mesh_desc_ids)}"
-        )
+        self._mesh_filters.append(f"mesh_heading.id IN {self._next_filter_var(mesh_desc_ids)}")
+
+    def add_mesh_name_filter(self, mesh_name: str):
+        """ Adds a filter by the name of MeSH headings. """
+        self._mesh_filters.append(self._create_text_filter("mesh_heading.name", "mesh_heading", mesh_name))
 
     def add_article_name_filter(self, article_name: str):
         """ Adds a filter by the name of articles. """

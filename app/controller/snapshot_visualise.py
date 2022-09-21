@@ -105,9 +105,7 @@ def construct_graph_filter(filters: dict[str, Any], graph_options: Optional[Grap
 
         # Find all the matching MeSH headings.
         if len(mesh_name.strip()) > 0:
-            mesh_headings = DBMeSHHeading.search(neo4j_conn.get_mesh_headings(), mesh_name)
-            mesh_desc_ids = [m.descriptor_id for m in mesh_headings]
-            filter_builder.add_mesh_descriptor_id_filter(mesh_desc_ids)
+            filter_builder.add_mesh_name_filter(mesh_name)
 
     if "author" in filters:
         author_name = filters["author"]
