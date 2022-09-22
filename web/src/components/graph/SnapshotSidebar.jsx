@@ -16,6 +16,7 @@ import {setFilters, resetAllFilters, setLoadResults} from '../../store/slices/fi
 import {Delete, Save} from "@mui/icons-material";
 import {IconButton, Popover, TextField} from "@mui/material";
 import {availableFilters} from './filterInfo'
+import { Link } from 'react-router-dom';
 
 const drawerWidth = 500;
 
@@ -222,7 +223,7 @@ function SnapshotSidebar() {
             <div id="user-details">
               <p>Signed in as</p>
               <h4>{user}</h4>
-              <Button variant="contained" onClick={logout} id="logout-button">Log out</Button>
+              <Button component={Link} to="/" variant="contained" onClick={logout} id="logout-button">Log out</Button>
             </div>
           </div>
         </Drawer>

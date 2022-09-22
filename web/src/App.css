@@ -276,51 +276,57 @@ code {
 }
 
 #snapshot-naming-popover {
-    z-index: 1000;
-    min-width: 300px;
-    padding: 10px;
-    height: 5em;
+  z-index: 1000;
+  min-width: 300px;
+  padding: 10px;
+  height: 5em;
 }
 
 #snapshot-naming-popover:after {
-    content: "";
-    display: table;
-    clear: both;
+  content: "";
+  display: table;
+  clear: both;
 }
 
 #snapshot-name-entry {
-    float: left;
-    width: 80%;
+  float: left;
+  width: 80%;
 }
 
 #snapshot-name-save {
-    float: left;
-    width: 20%;
-    height: 100%;
+  float: left;
+  width: 20%;
+  height: 100%;
 }
 
 .snapshot-item-container:after {
-    content: "";
-    display: table;
-    clear: both;
+  content: "";
+  display: table;
+  clear: both;
 }
 
 .snapshot-description {
-    float: left;
-    width: 80%;
+  /*margin-left: 10%;*/
+  float: left;
+  width: 90%;
 }
 
 .snapshot-description p {
-    margin: 0;
+  margin: 0;
 }
 
 .snapshot-date {
-    color: darkgray;
-    font-size: smaller;
+  color: gray;
+  font-size: smaller;
 }
 
 .snapshot-delete {
-    float: left;
-    width: 20%;
-    height: 2em;
+  float: left;
+  width: 10%;
+  height: 100%;
+
+}
+
+.snapshot-delete svg{
+  transform: scale(1.5);
 }
