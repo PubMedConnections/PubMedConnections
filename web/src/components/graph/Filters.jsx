@@ -16,8 +16,15 @@ import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker'
 import {useSelector, useDispatch} from 'react-redux'
-import { setFilter, setActiveFilters, removeActiveFilter, setLoadResults } from '../../store/slices/filterSlice'
+import {
+    setFilter,
+    setActiveFilters,
+    removeActiveFilter,
+    setLoadResults,
+    setResultsLoaded
+} from '../../store/slices/filterSlice'
 import {availableFilters, availableFiltersMap, filterCategories} from './filterInfo';
+import {useEffect} from "react";
 
 const Filters = () => {
     const filters = useSelector((state) => state.filters.filters);
@@ -279,6 +286,8 @@ const Filters = () => {
     function loadResults() {
         dispatch(setLoadResults(true));
     }
+
+    useEffect(() => dispatch(setResultsLoaded(false)), [filters])
 
     return <div id="filters">
         <div id="filters-header">
