@@ -46,7 +46,7 @@ function SnapshotSidebar() {
 
   useEffect(() => {
     document.getElementById('sidebar-contents').style.marginBottom =
-        document.getElementById('sidebar-user-details').clientHeight;
+        document.getElementById('sidebar-user-details').clientHeight + "px";
 
     updateSnapshots();
   }, [])
