@@ -152,7 +152,7 @@ const Graph = () => {
 
   useEffect(() => loadGraphData(true), [VISJSNetwork]) // The first time
 
-  return <div className="full-size" style={{opacity: resultsLoaded ? 1 : 0.6}}>
+  return <div className="full-size" style={{opacity: resultsLoaded || loadResults ? 1 : 0.6}}>
       <VisJSGraph className="full-size" graph={graphInfo.data} options={graphInfo.options}
           getNetwork={setNetwork}
       />
