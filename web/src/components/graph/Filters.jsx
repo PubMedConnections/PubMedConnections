@@ -17,7 +17,7 @@ import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker'
 import {useSelector, useDispatch} from 'react-redux'
 import { setFilter, setActiveFilters, removeActiveFilter } from '../../store/slices/filterSlice'
-import {availableFilters, filterCategories} from './filterInfo';
+import {availableFilters, availableFiltersMap, filterCategories} from './filterInfo';
 
 const Filters = () => {
     const filters = useSelector((state) => state.filters.filters);
@@ -214,20 +214,20 @@ const Filters = () => {
     }
 
     let filterComponents = {
-        mesh_heading: makeTextFieldEntry(availableFilters.mesh_heading),
-        author: makeTextFieldEntry(availableFilters.author),
-        affiliation: makeTextFieldEntry(availableFilters.affiliation),
-        first_author: makeCheckboxFieldEntry(availableFilters.first_author),
-        last_author: makeCheckboxFieldEntry(availableFilters.last_author),
-        published_after: makeDateFieldEntry(availableFilters.published_after),
-        published_before: makeDateFieldEntry(availableFilters.published_before),
-        journal: makeTextFieldEntry(availableFilters.journal),
-        article: makeTextFieldEntry(availableFilters.article),
-        graph_size: makeNodeCountSliderEntry(availableFilters.graph_size),
-        graph_type: makeGraphNodeTypeEntry(availableFilters.graph_type),
-        graph_node_size: makeGraphNodeValueEntry(availableFilters.graph_node_size),
-        graph_node_colour:  makeGraphNodeValueEntry(availableFilters.graph_node_colour),
-        graph_edge_size: makeGraphEdgeValueEntry(availableFilters.graph_edge_size),
+        mesh_heading: makeTextFieldEntry(availableFiltersMap.mesh_heading),
+        author: makeTextFieldEntry(availableFiltersMap.author),
+        affiliation: makeTextFieldEntry(availableFiltersMap.affiliation),
+        first_author: makeCheckboxFieldEntry(availableFiltersMap.first_author),
+        last_author: makeCheckboxFieldEntry(availableFiltersMap.last_author),
+        published_after: makeDateFieldEntry(availableFiltersMap.published_after),
+        published_before: makeDateFieldEntry(availableFiltersMap.published_before),
+        journal: makeTextFieldEntry(availableFiltersMap.journal),
+        article: makeTextFieldEntry(availableFiltersMap.article),
+        graph_size: makeNodeCountSliderEntry(availableFiltersMap.graph_size),
+        graph_type: makeGraphNodeTypeEntry(availableFiltersMap.graph_type),
+        graph_node_size: makeGraphNodeValueEntry(availableFiltersMap.graph_node_size),
+        graph_node_colour:  makeGraphNodeValueEntry(availableFiltersMap.graph_node_colour),
+        graph_edge_size: makeGraphEdgeValueEntry(availableFiltersMap.graph_edge_size),
     }
     let selectedFilterComponents = activeFilters.map(f => filterComponents[f]);
 
@@ -252,7 +252,7 @@ const Filters = () => {
                 onChange={handleFilterSelectionChange}
                 displayEmpty={true}
                 renderValue={(selected) => {
-                    let filterCount = selected.filter(f => f in availableFilters).length;
+                    let filterCount = selected.filter(f => f in availableFiltersMap).length;
                     if (filterCount === 0) {
                         return <Button variant="text" startIcon={<Add />} style={{padding: 0}}>
                             Click to Add Filters
@@ -262,10 +262,10 @@ const Filters = () => {
                     }
                 }}>
 
-            {Object.keys(availableFilters).map(f => {
-                return <MenuItem key={f} value={f}>
-                    <Checkbox checked={activeFilters.indexOf(f) > -1} />
-                    <ListItemText primary={availableFilters[f].name} />
+            {availableFilters.map(filterSpec => {
+                return <MenuItem key={filterSpec.key} value={filterSpec.key}>
+                    <Checkbox checked={activeFilters.indexOf(filterSpec.key) > -1} />
+                    <ListItemText primary={filterSpec.name} />
                 </MenuItem>;
             })}
         </Select>

@@ -118,11 +118,12 @@ function SnapshotSidebar() {
           const snapshot = snapshots.find(s => s.id === selectedSnapshot);
           let allSame = true;
 
-          Object.keys(availableFilters).forEach(f => {
-              if (filters.filters[f] !== snapshot[f]) {
+          for (let index = 0; index < availableFilters.length; ++index) {
+              const filterKey = availableFilters[index].key;
+              if (filters.filters[filterKey] !== snapshot[filterKey]) {
                   allSame = false; // Our filters have changed
               }
-          });
+          }
 
           if (!allSame) {
             setSelectedSnapshot(-1); // So deselect our selected snapshot
