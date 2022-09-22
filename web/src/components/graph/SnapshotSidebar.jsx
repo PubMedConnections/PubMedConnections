@@ -54,6 +54,10 @@ function SnapshotSidebar() {
   }, [])
 
   function saveSnapshot() {
+    if (snapshotName.length === 0) {
+        window.alert("Please enter a snapshot name");
+        return;
+    }
     const submit_filters = {...filters.filters, "snapshot_name": snapshotName};
     PUT('snapshot/create/', submit_filters)
         .then((resp) => {
@@ -148,7 +152,7 @@ function SnapshotSidebar() {
                           className="snapshot-item-container"
                       >
                           <div className="snapshot-description">
-                              <p><strong>{snapshot.snapshot_name}</strong></p>
+                              <p><strong>{snapshot.snapshot_name || "(Unnamed)"}</strong></p>
                               <p className="snapshot-date"><i>{snapshot.creation_time}</i></p>
                           </div>
                           <div className="snapshot-delete">
@@ -205,6 +209,7 @@ function SnapshotSidebar() {
                           label={"Snapshot name"}
                           variant={"outlined"}
                           onChange={(event) => setSnapshotName(event.target.value)}
+                          required={true}
                       />
                   </div>
                   <div id={"snapshot-name-save"}>
