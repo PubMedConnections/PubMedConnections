@@ -15,6 +15,7 @@ import {clearAuth} from "../../store/slices/userSlice";
 import {setFilters, resetAllFilters} from '../../store/slices/filterSlice'
 import {Delete, Save} from "@mui/icons-material";
 import {IconButton, Popover, TextField} from "@mui/material";
+import {availableFilters} from './filterInfo'
 
 const drawerWidth = 450;
 
@@ -107,6 +108,23 @@ function SnapshotSidebar() {
   }
 
   const namingOpen = Boolean(namingAnchor);
+
+  useEffect(() => {
+      if (selectedSnapshot > -1) {
+          const snapshot = snapshots.find(s => s.id === selectedSnapshot);
+          let allSame = true;
+
+          Object.keys(availableFilters).forEach(f => {
+              if (filters.filters[f] !== snapshot[f]) {
+                  allSame = false; // Our filters have changed
+              }
+          });
+
+          if (!allSame) {
+            setSelectedSnapshot(-1); // So deselect our selected snapshot
+          }
+      }
+  }, [filters, selectedSnapshot, snapshots])
 
   return (
       <div>
