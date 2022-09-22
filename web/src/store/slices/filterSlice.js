@@ -17,7 +17,8 @@ const resetState = {
         graph_node_colour: "matched_nodes",
         graph_edge_size: "coauthored_articles"
     },
-    activeFilters: []
+    activeFilters: [],
+    resultsReturned: false
 }
 
 const initialState = {
@@ -26,7 +27,8 @@ const initialState = {
         author: "J ",
         graph_node_size: "edge_count"
     },
-    activeFilters: ["mesh_heading", "author", "graph_node_size"]
+    activeFilters: ["mesh_heading", "author", "graph_node_size"],
+    resultsReturned: false
 };
 
 function copyAndRemoveElement(obj, key) {
@@ -75,10 +77,14 @@ export const filterSlice = createSlice({
                 }
             }
             return state;
+        },
+        setResultsReturned: (state, action) => {
+            state.resultsReturned = action.payload;
+            return state;
         }
     },
 });
 
-export const { setFilter, resetFilter, setActiveFilters, removeActiveFilter, setFilters } = filterSlice.actions;
+export const { setFilter, resetFilter, setActiveFilters, removeActiveFilter, setFilters, setResultsReturned} = filterSlice.actions;
 
 export default filterSlice.reducer;

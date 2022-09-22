@@ -1,12 +1,3 @@
-/**
- * Code Inspired from:
- 		* https://stackoverflow.com/questions/40792649/rendering-vis-js-network-into-container-via-react-js
-
- * Data from:
- 		* https://visjs.github.io/vis-network/examples/
-		* https://visjs.github.io/vis-network/examples/static/codepen.03abfb6443c182fdd9fdb252aa1d7baab3900da615e980199e21189c8f7a41e4.html
- */
-
 import React, { useEffect, useRef, useState } from 'react';
 import LinearProgress from '@mui/material/LinearProgress'
 import {useSelector, useDispatch} from 'react-redux'
@@ -14,9 +5,12 @@ import {POST, PUT} from "../../utils/APIRequests";
 import VisJSGraph from 'react-graph-vis';
 import { useSnackbar } from 'notistack';
 import { DisplayError } from '../common/SnackBar';
+import {setResultsReturned} from '../../store/slices/filterSlice'
 
 const Graph = () => {
   const snackbar = useSnackbar();
+
+  const dispatch = useDispatch();
   const filters = useSelector((state) => state.filters.filters);
 
   const [VISJSNetwork, setNetwork] = useState(null);
@@ -103,6 +97,7 @@ const Graph = () => {
                   data: graphData
               });
               setLoadingProgress(100)
+              dispatch(setResultsReturned(graphData.nodes.length > 0))
 
               // Fit the network for a few seconds.
               const start = performance.now();

@@ -22,6 +22,8 @@ function SnapshotSidebar() {
   const [selectedSnapshot, setSelectedSnapshot] = useState(-1);
   const user = useSelector((state) => state.user.username);
   const filters = useSelector((state) => state.filters);
+  const resultsReturned = useSelector((state) => state.filters.resultsReturned);
+
   const dispatch = useDispatch();
 
   const [snapshots, setSnapshots] = useState([]);
@@ -164,6 +166,7 @@ function SnapshotSidebar() {
                 id="save-snapshot-button"
                 size="large"
                 onClick={saveSnapshot}
+                disabled={!resultsReturned}
         >
           Save as snapshot
         </Button>
