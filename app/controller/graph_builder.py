@@ -288,7 +288,7 @@ class AuthorNode(GraphNode):
         title = f"{self.author.full_name}\n"
         title += "\n"
         title += ("Matching Author" if self.is_root_node else "Co-author") + f" of {len(self.articles)} articles"
-        title += f"{list_articles_for_description(self.articles)}"
+        title += f"\n{list_articles_for_description(self.articles)}"
         return title
 
 
