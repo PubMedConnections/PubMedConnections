@@ -301,7 +301,7 @@ const Filters = () => {
                     variant="contained"
                     color="success"
                 >
-                    Load graph
+                    Load
                 </Button>
             </div>
         </div>

@@ -146,6 +146,11 @@ code {
 #filters-load-button {
     width: 20%;
     float: right;
+    padding-right: 15px;
+}
+
+#filters-load-button button {
+    width: 100%;
 }
 
 .not-loaded {
