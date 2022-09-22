@@ -20,7 +20,8 @@ const resetState = {
     },
     activeFilters: [],
     resultsReturned: false,
-    loadResults: false
+    loadResults: true,
+    resultsLoaded: false,
 }
 
 const initialState = {
@@ -31,7 +32,8 @@ const initialState = {
     },
     activeFilters: ["mesh_heading", "author", "graph_node_size"],
     resultsReturned: false,
-    loadResults: false
+    loadResults: true,
+    resultsLoaded: false,
 };
 
 function copyAndRemoveElement(obj, key) {
@@ -91,6 +93,10 @@ export const filterSlice = createSlice({
         setLoadResults: (state, action) => {
             state.loadResults = action.payload;
             return state;
+        },
+        setResultsLoaded: (state, action) => {
+            state.resultsLoaded = action.payload;
+            return state;
         }
     }
     ,
@@ -98,7 +104,8 @@ export const filterSlice = createSlice({
 
 export const {
     setFilter, resetFilter, setActiveFilters, removeActiveFilter,
-    setFilters, setResultsReturned, resetAllFilters, setLoadResults
+    setFilters, setResultsReturned, resetAllFilters, setLoadResults,
+    setResultsLoaded
 } = filterSlice.actions;
 
 export default filterSlice.reducer;

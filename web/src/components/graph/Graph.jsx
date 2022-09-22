@@ -5,7 +5,7 @@ import {POST, PUT} from "../../utils/APIRequests";
 import VisJSGraph from 'react-graph-vis';
 import { useSnackbar } from 'notistack';
 import { DisplayError } from '../common/SnackBar';
-import {setLoadResults, setResultsReturned} from '../../store/slices/filterSlice'
+import {setLoadResults, setResultsReturned, setResultsLoaded} from '../../store/slices/filterSlice'
 
 const Graph = () => {
   const snackbar = useSnackbar();
@@ -13,6 +13,7 @@ const Graph = () => {
   const dispatch = useDispatch();
   const filters = useSelector((state) => state.filters.filters);
   const loadResults = useSelector((state) => state.filters.loadResults);
+  const resultsLoaded = useSelector((state) => state.filters.resultsLoaded);
 
   const [VISJSNetwork, setNetwork] = useState(null);
 
@@ -59,8 +60,8 @@ const Graph = () => {
     },
   });
 
-  function loadGraphData() {
-      if (!loadResults) {
+  function loadGraphData(override_load) {
+      if (!override_load && !loadResults){ // Must be ordered this way
           return;
       }
 
@@ -79,7 +80,6 @@ const Graph = () => {
       setLoadingProgress(-1);
 
       function processResponse(resp, errorMessage) {
-          dispatch(setLoadResults(false));
           let data = resp.data;
           if (resp.status !== 200) {
               const err = errorMessage || resp.statusText
@@ -103,8 +103,10 @@ const Graph = () => {
               options: graphInfo.options,
               data: graphData
           });
-          setLoadingProgress(100)
-          dispatch(setResultsReturned(graphData.nodes.length > 0))
+          setLoadingProgress(100);
+          dispatch(setResultsReturned(graphData.nodes.length > 0));
+          dispatch(setResultsLoaded(true));
+          dispatch(setLoadResults(false));
 
           // Fit the network for a few seconds.
           const start = performance.now();
@@ -148,9 +150,12 @@ const Graph = () => {
 
   useEffect(loadGraphData, [loadResults])
 
+  useEffect(() => loadGraphData(true), [VISJSNetwork]) // The first time
+
   return <div className="full-size">
       <VisJSGraph className="full-size" graph={graphInfo.data} options={graphInfo.options}
-          getNetwork={setNetwork} />
+          getNetwork={setNetwork}
+      />
 
       {loadingProgress < 100 &&
           <div id="visjs-loading-cover">
@@ -171,6 +176,7 @@ const Graph = () => {
           <div id="visjs-graph-info">
               {graphInfo.data.nodes.length.toLocaleString()} Nodes,&nbsp;
               {graphInfo.data.edges.length.toLocaleString()} Edges
+              {resultsLoaded ? "" : " (Graph not refreshed)"}
           </div>
       }
     </div>;
