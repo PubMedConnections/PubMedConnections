@@ -99,6 +99,10 @@ code {
   font-size: 0.86em !important;
 }
 
+span.MuiTypography-root {
+  font-size: 1em;
+}
+
 /** Filters **/
 #root header {
   height: 72px;
@@ -260,6 +264,10 @@ code {
   padding-bottom: 20px;
 }
 
+#user-details > p {
+  margin-top: 10px;
+}
+
 #logout-button {
   width: 100%;
 }
@@ -317,7 +325,7 @@ code {
 
 .snapshot-date {
   color: gray;
-  font-size: smaller;
+  font-size: 1em;
 }
 
 .snapshot-delete {
