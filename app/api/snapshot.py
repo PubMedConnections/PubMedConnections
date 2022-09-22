@@ -1,5 +1,7 @@
 from flask import request, jsonify
 from flask_restx import Namespace, Resource, fields
+
+from app.controller.graph_builder import PubMedGraphError
 from app.controller.snapshot_visualise import query_by_snapshot_id, parse_dates, get_author_graph, query_graph
 from app.controller.snapshot_create import create_by_filters
 from app.controller.snapshot_get import get_snapshot, get_user_snapshots
@@ -83,7 +85,7 @@ class VisualiseSnapshot(Resource):
         try:
             filter_params = parse_dates(filter_params)
             return query_graph(filter_params)
-        except PubMedFilterLimitError as e:
+        except (PubMedFilterLimitError, PubMedGraphError) as e:
             return {
                 "error": str(e),
                 "empty_message": f"{e}."

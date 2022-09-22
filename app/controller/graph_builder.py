@@ -11,6 +11,14 @@ import neo4j
 from app.pubmed.model import DBArticle, DBAuthor, DBArticleAuthorRelation
 
 
+class PubMedGraphError(Exception):
+    """
+    An error that is raised when there is an issue with the visualisation of a graph.
+    """
+    def __init__(self, message: str):
+        super().__init__(message)
+
+
 T = TypeVar("T")
 
 
@@ -523,6 +531,9 @@ class Graph:
         for node_key in self.nodes.keys():
             if len(self.node_edges[node_key]) >= options.minimum_edges:
                 visible_nodes.add(node_key)
+
+        if len(visible_nodes) == 0:
+            raise PubMedGraphError("The graph filter options removed all nodes")
 
         return {
             "nodes": self._build_node_json(options, visible_nodes, session),
