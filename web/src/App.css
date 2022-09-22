@@ -120,14 +120,14 @@ code {
 }
 
 #filters-header {
-    margin-top: 1.2em;
-    margin-bottom: 1.6em;
-    padding-right: 10px;
-    content: "";
-    display: table;
-    clear: both;
-    width: 100%;
-    height: 1em;
+  margin-top: 1.2em;
+  margin-bottom: 1.6em;
+  padding-right: 10px;
+  content: "";
+  display: table;
+  clear: both;
+  width: 100%;
+  height: 1em;
 }
 
 #add-filters {
@@ -144,17 +144,18 @@ code {
 }
 
 #filters-load-button {
-    width: 20%;
-    float: right;
-    padding-right: 15px;
+  width: 20%;
+  float: right;
+  padding-right: 15px;
 }
 
-#filters-load-button button {
-    width: 100%;
+#filters-load-button > button {
+  width: 100%;
+  font-size: 0.86em;
 }
 
 .not-loaded {
-    color: red
+  color: red
 }
 
 .filter-row {
@@ -180,7 +181,8 @@ code {
   margin-bottom: auto;
 }
 
-.filter-class>p {
+.filter-class > p {
+  min-width: 50px;
   border-radius: 5px;
   padding: 0.2em 0.5em;
   text-align: center;
