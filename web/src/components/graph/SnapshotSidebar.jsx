@@ -12,7 +12,7 @@ import Filters from "./Filters";
 import {GET, POST, PUT, DELETE} from "../../utils/APIRequests";
 import {useDispatch, useSelector} from 'react-redux'
 import {clearAuth} from "../../store/slices/userSlice";
-import {setFilters, resetAllFilters} from '../../store/slices/filterSlice'
+import {setFilters, resetAllFilters, setLoadResults} from '../../store/slices/filterSlice'
 import {Delete, Save} from "@mui/icons-material";
 import {IconButton, Popover, TextField} from "@mui/material";
 import {availableFilters} from './filterInfo'
@@ -116,6 +116,11 @@ function SnapshotSidebar() {
   useEffect(() => {
       if (selectedSnapshot > -1) {
           const snapshot = snapshots.find(s => s.id === selectedSnapshot);
+
+          if (!snapshot) {
+              return;
+          }
+
           let allSame = true;
 
           for (let index = 0; index < availableFilters.length; ++index) {
@@ -170,6 +175,7 @@ function SnapshotSidebar() {
                           })
 
                           dispatch(setFilters(new_filters));
+                          dispatch(setLoadResults(true)); // Load our selected snapshot
                         }
                         }
                     >
