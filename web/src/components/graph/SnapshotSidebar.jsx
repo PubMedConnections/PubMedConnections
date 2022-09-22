@@ -42,7 +42,9 @@ function SnapshotSidebar() {
     GET('snapshot/list/')
         .then((resp) => {
           let retrievedSnapshots = resp.data;
-          retrievedSnapshots.sort((a,b) => (a.id - b.id));
+          retrievedSnapshots.sort((a,b) => {
+              return Date.parse(a.creation_time) - Date.parse(b.creation_time)
+          });
           setSnapshots(retrievedSnapshots);
 
           if (id) {
