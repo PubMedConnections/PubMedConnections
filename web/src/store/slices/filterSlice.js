@@ -81,12 +81,16 @@ export const filterSlice = createSlice({
         setResultsReturned: (state, action) => {
             state.resultsReturned = action.payload;
             return state;
+        },
+        resetAllFilters: (state, action) => {
+            return initialState;
         }
     },
 });
 
 export const {
-    setFilter, resetFilter, setActiveFilters, removeActiveFilter, setFilters, setResultsReturned
+    setFilter, resetFilter, setActiveFilters, removeActiveFilter,
+    setFilters, setResultsReturned, resetAllFilters
 } = filterSlice.actions;
 
 export default filterSlice.reducer;
