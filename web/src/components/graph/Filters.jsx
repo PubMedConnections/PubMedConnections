@@ -1,4 +1,4 @@
-import {Add, Delete} from '@mui/icons-material'
+import {Add, Delete, Refresh} from '@mui/icons-material'
 import {
     Button,
     TextField,
@@ -16,8 +16,15 @@ import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker'
 import {useSelector, useDispatch} from 'react-redux'
-import { setFilter, setActiveFilters, removeActiveFilter } from '../../store/slices/filterSlice'
+import {
+    setFilter,
+    setActiveFilters,
+    removeActiveFilter,
+    setLoadResults,
+    setResultsLoaded
+} from '../../store/slices/filterSlice'
 import {availableFilters, availableFiltersMap, filterCategories} from './filterInfo';
+import {useEffect} from "react";
 
 const Filters = () => {
     const filters = useSelector((state) => state.filters.filters);
@@ -279,11 +286,32 @@ const Filters = () => {
         </Select>
     </FormControl>;
 
+    function loadResults() {
+        dispatch(setLoadResults(true));
+    }
+
+    useEffect(() => dispatch(setResultsLoaded(false)), [filters])
+
     return <div id="filters">
-        <div id="add-filters">{activeFiltersSelector}</div>
+        <div id="filters-header">
+            <div id="add-filters">
+                    {activeFiltersSelector}
+            </div>
+            <div id="filters-load-button">
+                <Button
+                    onClick={loadResults}
+                    endIcon={<Refresh />}
+                    variant="contained"
+                    color="success"
+                >
+                    Load
+                </Button>
+            </div>
+        </div>
         <LocalizationProvider dateAdapter={AdapterDayjs}>
             {selectedFilterComponents}
         </LocalizationProvider>
+
     </div>;
 };
 

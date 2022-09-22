@@ -5,13 +5,15 @@ import {POST, PUT} from "../../utils/APIRequests";
 import VisJSGraph from 'react-graph-vis';
 import { useSnackbar } from 'notistack';
 import { DisplayError } from '../common/SnackBar';
-import {setResultsReturned} from '../../store/slices/filterSlice'
+import {setLoadResults, setResultsReturned, setResultsLoaded} from '../../store/slices/filterSlice'
 
 const Graph = () => {
   const snackbar = useSnackbar();
 
   const dispatch = useDispatch();
   const filters = useSelector((state) => state.filters.filters);
+  const loadResults = useSelector((state) => state.filters.loadResults);
+  const resultsLoaded = useSelector((state) => state.filters.resultsLoaded);
 
   const [VISJSNetwork, setNetwork] = useState(null);
 
@@ -58,94 +60,102 @@ const Graph = () => {
     },
   });
 
-  function loadGraphData() {
-      const delayDebounceLoad = setTimeout(() => {
-          if (VISJSNetwork == null)
-              return;
+  function loadGraphData(override_load) {
+      if (!override_load && !loadResults){ // Must be ordered this way
+          return;
+      }
 
-          setGraphInfo({
-              options: graphInfo.options,
-              data: {
-                  nodes: [],
-                  edges: [],
-              }
-          });
-          setLoadingProgress(-1);
+      if (VISJSNetwork == null) {
+          return;
+      }
 
-          function processResponse(resp, errorMessage) {
-              let data = resp.data;
-              if (resp.status !== 200) {
-                  const err = errorMessage || resp.statusText
-                  DisplayError(snackbar, err);
-                  data = {"error": err};
-              }
+      setGraphInfo({
+          options: graphInfo.options,
+          data: {
+              nodes: [],
+              edges: [],
+          }
+      });
 
-              if (data.error) {
-                  DisplayError(snackbar, data.error);
-                  if (!data.empty_message) {
-                      data.empty_message = data.error + ".";
-                  }
-              }
+      setLoadingProgress(-1);
 
-              let graphData = {
-                  nodes: data.nodes || [],
-                  edges: data.edges || [],
-                  empty_message: data.empty_message
-              }
-              setGraphInfo({
-                  options: graphInfo.options,
-                  data: graphData
-              });
-              setLoadingProgress(100)
-              dispatch(setResultsReturned(graphData.nodes.length > 0))
-
-              // Fit the network for a few seconds.
-              const start = performance.now();
-              const lastFitParameters = {
-                  "initialised": false
-              };
-              function fit() {
-                  // If the user changed the viewport, stop trying to fit it.
-                  if (lastFitParameters["initialised"]) {
-                      const position = VISJSNetwork.getViewPosition();
-                      if (VISJSNetwork.getScale() !== lastFitParameters["scale"] ||
-                          position.x !== lastFitParameters["x"] || position.y !== lastFitParameters["y"]) {
-
-                          // Stop fitting.
-                          return;
-                      }
-                  }
-
-                  VISJSNetwork.fit();
-
-                  const position = VISJSNetwork.getViewPosition();
-                  lastFitParameters["scale"] = VISJSNetwork.getScale();
-                  lastFitParameters["x"] = position.x;
-                  lastFitParameters["y"] = position.y;
-                  lastFitParameters["initialised"] = true;
-
-                  if (performance.now() - start < 10000) {
-                       requestAnimationFrame(fit);
-                  }
-              }
-              setTimeout(() => requestAnimationFrame(fit));
+      function processResponse(resp, errorMessage) {
+          let data = resp.data;
+          if (resp.status !== 200) {
+              const err = errorMessage || resp.statusText
+              DisplayError(snackbar, err);
+              data = {"error": err};
           }
 
-          POST('snapshot/visualise/', filters)
-              .then(processResponse)
-              .catch((err) => {
-                  processResponse(err.response, err.message)
-              });
-      }, 1500)
+          if (data.error) {
+              DisplayError(snackbar, data.error);
+              if (!data.empty_message) {
+                  data.empty_message = data.error + ".";
+              }
+          }
 
-      return () => clearTimeout(delayDebounceLoad);
+          let graphData = {
+              nodes: data.nodes || [],
+              edges: data.edges || [],
+              empty_message: data.empty_message
+          }
+          setGraphInfo({
+              options: graphInfo.options,
+              data: graphData
+          });
+          setLoadingProgress(100);
+          dispatch(setResultsReturned(graphData.nodes.length > 0));
+          dispatch(setResultsLoaded(true));
+          dispatch(setLoadResults(false));
+
+          // Fit the network for a few seconds.
+          const start = performance.now();
+          const lastFitParameters = {
+              "initialised": false
+          };
+
+          function fit() {
+              // If the user changed the viewport, stop trying to fit it.
+              if (lastFitParameters["initialised"]) {
+                  const position = VISJSNetwork.getViewPosition();
+                  if (VISJSNetwork.getScale() !== lastFitParameters["scale"] ||
+                      position.x !== lastFitParameters["x"] || position.y !== lastFitParameters["y"]) {
+
+                      // Stop fitting.
+                      return;
+                  }
+              }
+
+              VISJSNetwork.fit();
+
+              const position = VISJSNetwork.getViewPosition();
+              lastFitParameters["scale"] = VISJSNetwork.getScale();
+              lastFitParameters["x"] = position.x;
+              lastFitParameters["y"] = position.y;
+              lastFitParameters["initialised"] = true;
+
+              if (performance.now() - start < 10000) {
+                   requestAnimationFrame(fit);
+              }
+          }
+          setTimeout(() => requestAnimationFrame(fit));
+      }
+
+      POST('snapshot/visualise/', filters)
+          .then(processResponse)
+          .catch((err) => {
+              processResponse(err.response, err.message)
+          });
   }
 
-  useEffect(loadGraphData, [VISJSNetwork, filters]);
+  useEffect(loadGraphData, [loadResults])
 
-  return <div className="full-size">
+  useEffect(() => loadGraphData(true), [VISJSNetwork]) // The first time
+
+  return <div className="full-size" style={{opacity: resultsLoaded || loadResults ? 1 : 0.6}}>
       <VisJSGraph className="full-size" graph={graphInfo.data} options={graphInfo.options}
-          getNetwork={setNetwork} />
+          getNetwork={setNetwork}
+      />
 
       {loadingProgress < 100 &&
           <div id="visjs-loading-cover">
@@ -166,6 +176,7 @@ const Graph = () => {
           <div id="visjs-graph-info">
               {graphInfo.data.nodes.length.toLocaleString()} Nodes,&nbsp;
               {graphInfo.data.edges.length.toLocaleString()} Edges
+              <span className="not-loaded" >{resultsLoaded ? "" : " (Graph not refreshed)"}</span>
           </div>
       }
     </div>;
