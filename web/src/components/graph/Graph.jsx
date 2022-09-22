@@ -152,7 +152,7 @@ const Graph = () => {
 
   useEffect(() => loadGraphData(true), [VISJSNetwork]) // The first time
 
-  return <div className="full-size">
+  return <div className="full-size" style={{opacity: resultsLoaded ? 1 : 0.6}}>
       <VisJSGraph className="full-size" graph={graphInfo.data} options={graphInfo.options}
           getNetwork={setNetwork}
       />
@@ -176,7 +176,7 @@ const Graph = () => {
           <div id="visjs-graph-info">
               {graphInfo.data.nodes.length.toLocaleString()} Nodes,&nbsp;
               {graphInfo.data.edges.length.toLocaleString()} Edges
-              {resultsLoaded ? "" : " (Graph not refreshed)"}
+              <span className="not-loaded" >{resultsLoaded ? "" : " (Graph not refreshed)"}</span>
           </div>
       }
     </div>;

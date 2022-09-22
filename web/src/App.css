@@ -148,6 +148,10 @@ code {
     float: right;
 }
 
+.not-loaded {
+    color: red
+}
+
 .filter-row {
   margin-top: 15px;
   margin-bottom: 15px;
