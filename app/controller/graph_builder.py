@@ -30,7 +30,7 @@ def scale_value_source_results_log(values: dict[T, float]) -> dict[T, float]:
             shift_for_log_value = value
 
     # Take the log of all the values.
-    values = {key: math.log(value + shift_for_log_value + 1) for key, value in values.items()}
+    values = {key: math.log(value + max(0.0, shift_for_log_value) + 1) for key, value in values.items()}
 
     # Find the limits.
     min_value = None
