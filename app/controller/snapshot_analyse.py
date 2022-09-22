@@ -2,13 +2,13 @@ from typing import Any
 
 from neo4j.exceptions import ClientError
 from graphdatascience import GraphDataScience
-from config import NEO4J_URI, NEO4J_REQUIRES_AUTH
+
 import json
 import threading
 from app.controller.snapshot_get import get_snapshot
 from app.helpers import set_default_date, remove_snapshot_metadata
 from app import neo4j_conn
-from app.controller.snapshot_visualise import construct_graph_options, construct_graph_filter
+from app.controller.snapshot_visualise import construct_graph_filter, construct_query_settings
 from app.PubMedErrors import PubMedSnapshotDoesNotExistError, PubMedUpdateSnapshotError, PubMedAnalyticsError
 
 
@@ -263,14 +263,15 @@ def get_analytics(snapshot_id: int):
         snapshot = remove_snapshot_metadata(snapshot)
 
         # construct filter object from snapshot
-        snapshot_options = construct_graph_options(snapshot)
-        snapshot_filter = construct_graph_filter(snapshot, snapshot_options)
+        query_settings = construct_query_settings(snapshot)
+        query_settings.query_authors = True
+        snapshot_filter = construct_graph_filter(snapshot)
 
         # query author nodes
-        node_query = snapshot_filter.build(force_authors=True, node_query=True).query
+        node_query = snapshot_filter.build(query_settings, node_query=True).query
 
         # create co-author relationships between these authors
-        relationship_query = snapshot_filter.build(force_authors=True, relationship_query=True).query
+        relationship_query = snapshot_filter.build(query_settings, relationship_query=True).query
 
         analytics_results = project_graph_and_run_analytics(
             graph_name, node_query, relationship_query, snapshot_filter.get_parameter_map(), snapshot_id
