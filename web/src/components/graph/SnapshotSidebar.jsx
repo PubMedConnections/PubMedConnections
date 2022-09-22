@@ -17,7 +17,7 @@ import {Delete, Save} from "@mui/icons-material";
 import {IconButton, Popover, TextField} from "@mui/material";
 import {availableFilters} from './filterInfo'
 
-const drawerWidth = 450;
+const drawerWidth = 500;
 
 function SnapshotSidebar() {
   const [selectedSnapshot, setSelectedSnapshot] = useState(-1);

@@ -63,36 +63,45 @@ code {
 
 #visjs-graph-info,
 #visjs-graph-message {
-    position: absolute;
-    display: inline-block;
-    vertical-align: middle;
-    text-align: center;
+  position: absolute;
+  display: inline-block;
+  vertical-align: middle;
+  text-align: center;
 }
 
 #visjs-graph-info {
-    right: 0;
-    bottom: 0;
-    height: 2em;
-    line-height: 2em;
-    padding: 0 1em;
-    z-index: 1;
-    background-color: rgba(255, 255, 255, 0.9);
-    color: #333333;
-    font-size: 0.84em;
-    box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
-    border-top-right-radius: 0.5em;
+  right: 0;
+  bottom: 0;
+  height: 2em;
+  line-height: 2em;
+  padding: 0 1em;
+  z-index: 1;
+  background-color: rgba(255, 255, 255, 0.9);
+  color: #333333;
+  font-size: 0.84em;
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
+  border-top-right-radius: 0.5em;
 }
 
 #visjs-graph-message {
-    top: 55%;
-    left: 50%;
-    color: #888888;
-    transform: translate(-50%, -50%);
+  top: 55%;
+  left: 50%;
+  color: #888888;
+  transform: translate(-50%, -50%);
+}
+
+/** Material UI **/
+.MuiButtonBase-root {
+  font-size: 0.86em !important;
+}
+
+.MuiInputBase-root {
+  font-size: 0.86em !important;
 }
 
 /** Filters **/
 #root header {
-    height: 72px;
+  height: 72px;
 }
 #filter-dropdown {
   position: absolute;
@@ -101,12 +110,12 @@ code {
   box-shadow: 0 0 5px gray;
   z-index: 999;
   background-color: rgba(255, 255, 255, 0.95);
-  min-width: 50vw;
+  min-width: 40vw;
   max-width: 100vw;
 }
 
 #filter-dropdown #filters {
-  max-height: 60vh;
+  max-height: 80vh;
   overflow: auto;
 }
 
@@ -132,7 +141,7 @@ code {
 
 #add-filters {
   float: left;
-  width: 80%;
+  width: 75%;
   text-align: center;
   padding-left: 15px;
   padding-right: 15px;
@@ -144,14 +153,13 @@ code {
 }
 
 #filters-load-button {
-  width: 20%;
+  width: 25%;
   float: right;
   padding-right: 15px;
 }
 
 #filters-load-button > button {
   width: 100%;
-  font-size: 0.86em;
 }
 
 .not-loaded {
@@ -214,7 +222,6 @@ code {
 }
 
 .filter-entry input {
-  font-size: 1.2em;
   padding: 1.2em;
 }
 
