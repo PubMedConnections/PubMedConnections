@@ -12,7 +12,7 @@ import Filters from "./Filters";
 import {GET, POST, PUT, DELETE} from "../../utils/APIRequests";
 import {useDispatch, useSelector} from 'react-redux'
 import {clearAuth} from "../../store/slices/userSlice";
-import {setFilters} from '../../store/slices/filterSlice'
+import {setFilters, resetAllFilters} from '../../store/slices/filterSlice'
 import {Delete, Save} from "@mui/icons-material";
 import {IconButton, Popover, TextField} from "@mui/material";
 
@@ -39,12 +39,16 @@ function SnapshotSidebar() {
     });
   }
 
-  function updateSnapshots() {
+  function updateSnapshots(id) {
     GET('snapshot/list/')
         .then((resp) => {
           let retrievedSnapshots = resp.data;
-          retrievedSnapshots.sort((a,b) => (a.id - b.id))
-          setSnapshots(retrievedSnapshots)
+          retrievedSnapshots.sort((a,b) => (a.id - b.id));
+          setSnapshots(retrievedSnapshots);
+
+          if (id) {
+              setSelectedSnapshot(id);
+          }
         })
   }
 
@@ -64,7 +68,7 @@ function SnapshotSidebar() {
     PUT('snapshot/create/', submit_filters)
         .then((resp) => {
           if (resp.data.success) {
-            updateSnapshots();
+            updateSnapshots(resp.data.id);
             setSnapshotName("");
             handleNamingClose();
             window.alert("Snapshot saved.");
@@ -90,6 +94,10 @@ function SnapshotSidebar() {
           .then((resp) => {
               if (resp.data.success) {
                   updateSnapshots();
+
+                  if (id === selectedSnapshot) {
+                    dispatch(resetAllFilters());
+                  }
                   window.alert("Snapshot deleted.");
               } else {
                   window.alert("Could not delete snapshot.");
@@ -123,10 +131,10 @@ function SnapshotSidebar() {
                   <ListItem key={snapshot.id} disablePadding>
                     <ListItemButton
                         sx={{
-                          background: selectedSnapshot === index ? '#c9c5f8' : '#fffff',
+                          background: selectedSnapshot === snapshot.id ? '#c9c5f8' : '#fffff',
                         }}
                         onClick={() => {
-                          setSelectedSnapshot(index);
+                          setSelectedSnapshot(snapshot.id);
                           let new_filters = {}
                           Object.keys(snapshot).forEach(f => {
                             if (f !== "id" && f !== "creation_time") {
@@ -158,7 +166,12 @@ function SnapshotSidebar() {
                               <p className="snapshot-date"><i>{snapshot.creation_time}</i></p>
                           </div>
                           <div className="snapshot-delete">
-                              <IconButton aria-label="delete" onClick={() => deleteSnapshot(snapshot.id)}>
+                              <IconButton
+                                  aria-label="delete"
+                                  onClick={(e) => {
+                                      e.stopPropagation();
+                                      deleteSnapshot(snapshot.id);
+                                  }}>
                                   <Delete />
                               </IconButton>
                           </div>
