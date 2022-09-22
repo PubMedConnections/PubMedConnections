@@ -57,7 +57,7 @@ const Graph = () => {
           },
           stabilization: {
               enabled: true,
-              iterations: 1000,
+              iterations: 200,
               updateInterval: 50
           }
       }
@@ -106,13 +106,34 @@ const Graph = () => {
 
               // Fit the network for a few seconds.
               const start = performance.now();
+              const lastFitParameters = {
+                  "initialised": false
+              };
               function fit() {
+                  // If the user changed the viewport, stop trying to fit it.
+                  if (lastFitParameters["initialised"]) {
+                      const position = VISJSNetwork.getViewPosition();
+                      if (VISJSNetwork.getScale() !== lastFitParameters["scale"] ||
+                          position.x !== lastFitParameters["x"] || position.y !== lastFitParameters["y"]) {
+
+                          // Stop fitting.
+                          return;
+                      }
+                  }
+
                   VISJSNetwork.fit();
-                  if (performance.now() - start < 3000) {
+
+                  const position = VISJSNetwork.getViewPosition();
+                  lastFitParameters["scale"] = VISJSNetwork.getScale();
+                  lastFitParameters["x"] = position.x;
+                  lastFitParameters["y"] = position.y;
+                  lastFitParameters["initialised"] = true;
+
+                  if (performance.now() - start < 10000) {
                        requestAnimationFrame(fit);
                   }
               }
-              setTimeout(fit);
+              setTimeout(() => requestAnimationFrame(fit));
           }
 
           POST('snapshot/visualise/', filters)
