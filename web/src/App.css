@@ -219,3 +219,29 @@ code {
   right: 20px;
   top: 95px;
 }
+
+.snapshot-item-container:after {
+    content: "";
+    display: table;
+    clear: both;
+}
+
+.snapshot-description {
+    float: left;
+    width: 80%;
+}
+
+.snapshot-description p {
+    margin: 0;
+}
+
+.snapshot-date {
+    color: darkgray;
+    font-size: smaller;
+}
+
+.snapshot-delete {
+    float: left;
+    width: 20%;
+    height: 2em;
+}
