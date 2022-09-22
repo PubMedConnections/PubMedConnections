@@ -1,7 +1,6 @@
 from flask import request, jsonify
 from flask_restx import Namespace, Resource, fields
-from app.controller.snapshot_visualise import query_by_snapshot_id, parse_dates, get_author_graph, \
-    query_coauthor_graph
+from app.controller.snapshot_visualise import query_by_snapshot_id, parse_dates, get_author_graph, query_graph
 from app.controller.snapshot_create import create_by_filters
 from app.controller.snapshot_get import get_snapshot, get_user_snapshots
 from app.controller.snapshot_delete import delete_by_snapshot_id
@@ -21,6 +20,7 @@ ns = Namespace('snapshot', description='snapshot related operations',
 filters = ns.model('filters',
                    {'mesh_heading': fields.String(required=False, default="Skin Neoplasms"),
                     'author': fields.String(required=False, default="Vittorio Bolcato"),
+                    'affiliation': fields.String(required=False, default=""),
                     'first_author': fields.String(required=False, default=""),
                     'last_author': fields.String(required=False, default=""),
                     'published_before': fields.String(required=False, default=""),
@@ -28,7 +28,7 @@ filters = ns.model('filters',
                     'journal': fields.String(required=False, default=""),
                     'article': fields.String(required=False, default=""),
                     'graph_size': fields.Integer(required=False, default=100),
-                    'graph_type': fields.String(required=False, default="author"),
+                    'graph_type': fields.String(required=False, default="author_coauthors_open"),
                     'snapshot_name': fields.String(required=False, default="My snapshot"),
                     })
 
@@ -82,7 +82,7 @@ class VisualiseSnapshot(Resource):
         filter_params = request.json
         try:
             filter_params = parse_dates(filter_params)
-            return query_coauthor_graph(filter_params)
+            return query_graph(filter_params)
         except PubMedFilterLimitError as e:
             return {
                 "error": str(e),

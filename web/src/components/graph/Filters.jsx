@@ -164,7 +164,12 @@ const Filters = () => {
                 label={filterDesc.form_name}
                 value={currentFilterValue}
                 onChange={updateStateFromEventValueCallbackGenerator(filterDesc.key)}>
-                    <MenuItem value={"author"}>Author</MenuItem>
+                    <MenuItem value={"author_coauthors_open"}>
+                        Authors and their Co-Authors on Matched Articles
+                    </MenuItem>
+                    <MenuItem value={"author_coauthors_closed"}>
+                        Authors and their Matched Co-Authors on Matched Articles
+                    </MenuItem>
                     {/*<MenuItem value={"mesh"}>Journal</MenuItem>*/}
             </Select>
         </FormControl>;

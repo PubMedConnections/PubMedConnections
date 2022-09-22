@@ -165,7 +165,24 @@ def construct_graph_filter(filters: dict[str, Any]) -> PubMedFilterBuilder:
     return filter_builder
 
 
-def query_coauthor_graph(filters: dict[str, Any]):
+def query_graph(filters: dict[str, Any]):
+    """
+    Builds a graph from the given filter options.
+    """
+    graph_type = "author_coauthors_open"
+    if "graph_type" in filters:
+        graph_type = filters["graph_type"]
+        del filters["graph_type"]
+
+    if graph_type == "author_coauthors_open":
+        return query_coauthor_graph(filters, True)
+    elif graph_type == "author_coauthors_closed":
+        return query_coauthor_graph(filters, False)
+    else:
+        return {"error": f"Unknown graph type {graph_type}"}
+
+
+def query_coauthor_graph(filters: dict[str, Any], open: bool):
     """
     Builds a co-author graph based upon a set of filters
     that returns the central authors to expand upon.
@@ -190,6 +207,9 @@ def query_coauthor_graph(filters: dict[str, Any]):
             WHERE id(article) in $article_ids
             OPTIONAL MATCH (article) <-[coauthor_rel:AUTHOR_OF]- (coauthor)
             WHERE author <> coauthor
+            """
+            + (" AND id(coauthor) IN $author_ids" if not open else "") +
+            """
             RETURN id(author), author, author_rel, article, coauthor_rel, id(coauthor), coauthor
             """,
             author_ids=filter_results.author_ids,
@@ -250,7 +270,8 @@ def query_by_snapshot_id(snapshot_id):
 
     with neo4j_conn.new_session() as neo4j_session:
         filters = neo4j_session.read_transaction(cypher_snapshot)
-    return query_coauthor_graph(filters)
+
+    return query_graph(filters)
 
 
 def get_author_graph(filters):

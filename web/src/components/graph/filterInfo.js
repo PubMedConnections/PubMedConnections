@@ -81,8 +81,8 @@ const availableFilters = [
     },
     {
         key: "graph_type",
-        name: "Graph Node Type",
-        form_name: "Graph Node Type",
+        name: "Graph Type",
+        form_name: "Graph Type",
         category: filterCategories.Graph
     },
     {
