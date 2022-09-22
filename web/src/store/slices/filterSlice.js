@@ -75,10 +75,13 @@ export const filterSlice = createSlice({
                 }
             }
             return state;
+        },
+        resetAllFilters: (state, action) => {
+            return initialState;
         }
     },
 });
 
-export const { setFilter, resetFilter, setActiveFilters, removeActiveFilter, setFilters } = filterSlice.actions;
+export const { setFilter, resetFilter, setActiveFilters, removeActiveFilter, setFilters, resetAllFilters } = filterSlice.actions;
 
 export default filterSlice.reducer;
