@@ -16,7 +16,7 @@ import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker'
 import {useSelector, useDispatch} from 'react-redux'
-import { setFilter, setActiveFilters, removeActiveFilter } from '../../store/slices/filterSlice'
+import { setFilter, setActiveFilters, removeActiveFilter, setLoadResults } from '../../store/slices/filterSlice'
 import {availableFilters, availableFiltersMap, filterCategories} from './filterInfo';
 
 const Filters = () => {
@@ -276,11 +276,25 @@ const Filters = () => {
         </Select>
     </FormControl>;
 
+    function loadResults() {
+        dispatch(setLoadResults(true));
+    }
+
     return <div id="filters">
-        <div id="add-filters">{activeFiltersSelector}</div>
+        <div>
+            <div id="add-filters">
+                    {activeFiltersSelector}
+            </div>
+            <div>
+                <Button onClick={loadResults}>
+                    Load graph results
+                </Button>
+            </div>
+        </div>
         <LocalizationProvider dateAdapter={AdapterDayjs}>
             {selectedFilterComponents}
         </LocalizationProvider>
+
     </div>;
 };
 
