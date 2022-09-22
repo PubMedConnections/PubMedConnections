@@ -149,6 +149,8 @@ code {
 
 .filter-class {
   padding-right: 0.6em;
+  margin-top: auto;
+  margin-bottom: auto;
 }
 
 .filter-class>p {
@@ -158,6 +160,8 @@ code {
   font-weight: bold;
   color: #333333;
   font-size: 0.8em;
+  margin-top: auto;
+  margin-bottom: auto;
 }
 
 .filter-name {
@@ -167,6 +171,8 @@ code {
 .filter-name,
 .filter-name > p {
   font-size: 1em;
+  margin-top: auto;
+  margin-bottom: auto;
 }
 
 .filter-entry {
@@ -178,17 +184,30 @@ code {
   width: 100%;
 }
 
+.filter-entry input {
+  font-size: 1.2em;
+  padding: 1.2em;
+}
+
 .filter-delete {
   width: 3em;
+  margin-top: auto;
+  margin-bottom: auto;
+}
+
+.filter-delete > button > svg {
+  transform: scale(1.4);
 }
 
 .filter-entry-slider {
-    padding-left: 1em;
-    padding-right: 1em;
+  padding-left: 1em;
+  padding-right: 1em;
+  margin-top: auto;
+  margin-bottom: auto;
 }
 
 .filter-entry-slider>span {
-    display: block;
+  display: block;
 }
 
 #sidebar-user-details {

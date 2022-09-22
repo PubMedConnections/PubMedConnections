@@ -161,6 +161,7 @@ const Filters = () => {
         const selector = <FormControl>
             <InputLabel>{filterDesc.form_name}</InputLabel>
             <Select
+                sx={{fontSize: "12px"}}
                 label={filterDesc.form_name}
                 value={currentFilterValue}
                 onChange={updateStateFromEventValueCallbackGenerator(filterDesc.key)}>
@@ -184,6 +185,7 @@ const Filters = () => {
         const selector = <FormControl>
             <InputLabel>{filterDesc.form_name}</InputLabel>
             <Select
+                sx={{fontSize: "12px"}}
                 label={filterDesc.form_name}
                 value={currentFilterValue}
                 onChange={updateStateFromEventValueCallbackGenerator(filterDesc.key)}>
@@ -205,6 +207,7 @@ const Filters = () => {
         const selector = <FormControl>
             <InputLabel>{filterDesc.form_name}</InputLabel>
             <Select
+                sx={{fontSize: "12px"}}
                 label={filterDesc.form_name}
                 value={currentFilterValue}
                 onChange={updateStateFromEventValueCallbackGenerator(filterDesc.key)}>
