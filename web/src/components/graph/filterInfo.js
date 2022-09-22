@@ -103,6 +103,12 @@ const availableFilters = [
         form_name: "Edge Width Source",
         category: filterCategories.Graph
     },
+    {
+        key: "graph_minimum_edges",
+        name: "Graph Node Minimum Edges",
+        form_name: "Minimum Edges",
+        category: filterCategories.Graph
+    },
 ];
 
 const availableFiltersMap = {};

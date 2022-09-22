@@ -170,7 +170,6 @@ const Filters = () => {
                     <MenuItem value={"author_coauthors_closed"}>
                         Authors and their Matched Co-Authors on Matched Articles
                     </MenuItem>
-                    {/*<MenuItem value={"mesh"}>Journal</MenuItem>*/}
             </Select>
         </FormControl>;
 
@@ -233,6 +232,7 @@ const Filters = () => {
         graph_node_size: makeGraphNodeValueEntry(availableFiltersMap.graph_node_size),
         graph_node_colour:  makeGraphNodeValueEntry(availableFiltersMap.graph_node_colour),
         graph_edge_size: makeGraphEdgeValueEntry(availableFiltersMap.graph_edge_size),
+        graph_minimum_edges: makeTextFieldEntry(availableFiltersMap.graph_minimum_edges),
     }
     let selectedFilterComponents = activeFilters.map(f => filterComponents[f]);
 

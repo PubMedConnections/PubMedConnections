@@ -15,7 +15,8 @@ const resetState = {
         graph_type: "author_coauthors_open",
         graph_node_size: "matched_nodes",
         graph_node_colour: "matched_nodes",
-        graph_edge_size: "coauthored_articles"
+        graph_edge_size: "coauthored_articles",
+        graph_minimum_edges: "0",
     },
     activeFilters: [],
     resultsReturned: false

@@ -225,6 +225,7 @@ class GraphOptions:
         self.node_size_source: NodesValueSource = MatchedNodesValueSource()
         self.node_colour_source: NodesValueSource = MatchedNodesValueSource()
         self.edge_size_source: EdgesValueSource = ConstantEdgesValueSource()
+        self.minimum_edges: int = 0
 
 
 class GraphNode:
@@ -457,22 +458,25 @@ class Graph:
         self._edges_value_source_results.append((source, results))
         return results
 
-    def _build_node_json(self, options: GraphOptions, session: neo4j.Session) -> list[dict]:
+    def _build_node_json(self, options: GraphOptions, visible_nodes: set[int], session: neo4j.Session) -> list[dict]:
         node_size_values: dict[int, float] = self._query_node_value_source(options.node_size_source, session)
         node_colour_values: dict[int, float] = self._query_node_value_source(options.node_colour_source, session)
 
         cmap = plt.get_cmap("viridis")
 
         nodes: list[dict] = []
-        for node_id, node in self.nodes.items():
+        for node_key, node in self.nodes.items():
+            if node_key not in visible_nodes:
+                continue
+
             node_label = node.get_label()
             node_title = node.get_title()
-            node_size = node_size_values[node_id]
-            r, g, b, _ = cmap(node_colour_values[node_id])
+            node_size = node_size_values[node_key]
+            r, g, b, _ = cmap(node_colour_values[node_key])
             node_colour = f"rgb({round(255*r)}, {round(255*g)}, {round(255*b)})"
 
             node_json = {
-                "id": node_id,
+                "id": node_key,
                 "borderWidth": round(1 + node_size),
                 "borderWidthSelected": round(2 + node_size),
                 "size": round(20 + 20 * node_size),
@@ -487,20 +491,23 @@ class Graph:
 
         return nodes
 
-    def _build_edge_json(self, options: GraphOptions, session: neo4j.Session) -> list[dict]:
+    def _build_edge_json(self, options: GraphOptions, visible_nodes: set[int], session: neo4j.Session) -> list[dict]:
         edge_size_values: dict[tuple[int, int], float] = self._query_edge_value_source(
             options.edge_size_source, session
         )
 
         edges: list[dict] = []
         for edge_key, edge in self.edges.items():
-            from_id, to_id = edge_key
+            from_node_key, to_node_key = edge_key
+            if from_node_key not in visible_nodes or to_node_key not in visible_nodes:
+                continue
+
             edge_title = edge.get_title()
             edge_size = edge_size_values[edge_key]
 
             edge_json = {
-                "from": from_id,
-                "to": to_id,
+                "from": from_node_key,
+                "to": to_node_key,
                 "value": edge_size
             }
             if edge_title is not None:
@@ -512,9 +519,14 @@ class Graph:
 
     def build_json(self, options: GraphOptions, session: neo4j.Session):
         """ Builds the graph using the given options. """
+        visible_nodes: set[int] = set()
+        for node_key in self.nodes.keys():
+            if len(self.node_edges[node_key]) >= options.minimum_edges:
+                visible_nodes.add(node_key)
+
         return {
-            "nodes": self._build_node_json(options, session),
-            "edges": self._build_edge_json(options, session)
+            "nodes": self._build_node_json(options, visible_nodes, session),
+            "edges": self._build_edge_json(options, visible_nodes, session)
         }
 
 

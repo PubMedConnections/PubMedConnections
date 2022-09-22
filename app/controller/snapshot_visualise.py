@@ -93,6 +93,19 @@ def construct_graph_options(filters: dict[str, Any]) -> GraphOptions:
     else:
         options.edge_size_source = CoAuthoredArticlesEdgesValueSource()
 
+    if "graph_minimum_edges" in filters:
+        minimum_edges_text = filters["graph_minimum_edges"].strip()
+        del filters["graph_minimum_edges"]
+        try:
+            minimum_edges = int(minimum_edges_text)
+        except ValueError:
+            raise PubMedFilterValueError(
+                "graph_minimum_edges",
+                "The Graph Node Minimum Edges filter has an invalid value: it should contain an integer value"
+            )
+
+        options.minimum_edges = minimum_edges
+
     return options
 
 
