@@ -1,4 +1,4 @@
-import {Add, Delete} from '@mui/icons-material'
+import {Add, Delete, Refresh} from '@mui/icons-material'
 import {
     Button,
     TextField,
@@ -281,13 +281,18 @@ const Filters = () => {
     }
 
     return <div id="filters">
-        <div>
+        <div id="filters-header">
             <div id="add-filters">
                     {activeFiltersSelector}
             </div>
-            <div>
-                <Button onClick={loadResults}>
-                    Load graph results
+            <div id="filters-load-button">
+                <Button
+                    onClick={loadResults}
+                    endIcon={<Refresh />}
+                    variant="contained"
+                    color="success"
+                >
+                    Load graph
                 </Button>
             </div>
         </div>
