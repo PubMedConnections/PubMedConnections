@@ -130,11 +130,17 @@ function SnapshotSidebar() {
                             color: '#333333',
                             letterSpacing: 0,
                           }}
+                          className="snapshot-item-container"
                       >
-                          Snapshot {snapshot.id} ({snapshot.creation_time})
-                          <IconButton aria-label="delete" onClick={() => deleteSnapshot(snapshot.id)}>
-                              <Delete />
-                          </IconButton>
+                          <div className="snapshot-description">
+                              <p><strong>{snapshot.snapshot_name}</strong></p>
+                              <p className="snapshot-date"><i>{snapshot.creation_time}</i></p>
+                          </div>
+                          <div className="snapshot-delete">
+                              <IconButton aria-label="delete" onClick={() => deleteSnapshot(snapshot.id)}>
+                                  <Delete />
+                              </IconButton>
+                          </div>
                       </ListItemText>
                     </ListItemButton>
                   </ListItem>
