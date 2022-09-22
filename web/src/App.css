@@ -220,6 +220,31 @@ code {
   top: 95px;
 }
 
+#snapshot-naming-popover {
+    z-index: 1000;
+    min-width: 300px;
+    padding: 10px;
+    height: 5em;
+}
+
+#snapshot-naming-popover:after {
+    content: "";
+    display: table;
+    clear: both;
+}
+
+#snapshot-name-entry {
+    float: left;
+    width: 80%;
+}
+
+#snapshot-name-save {
+    float: left;
+    width: 20%;
+    height: 2em;
+    height: 100%;
+}
+
 .snapshot-item-container:after {
     content: "";
     display: table;

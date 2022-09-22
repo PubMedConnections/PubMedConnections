@@ -28,7 +28,8 @@ filters = ns.model('filters',
                     'journal': fields.String(required=False, default=""),
                     'article': fields.String(required=False, default=""),
                     'graph_size': fields.Integer(required=False, default=100),
-                    'graph_type': fields.String(required=False, default="author")
+                    'graph_type': fields.String(required=False, default="author"),
+                    'snapshot_name': fields.String(required=False, default="My snapshot"),
                     })
 
 

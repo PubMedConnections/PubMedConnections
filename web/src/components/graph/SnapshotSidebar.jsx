@@ -14,7 +14,7 @@ import {useDispatch, useSelector} from 'react-redux'
 import {clearAuth} from "../../store/slices/userSlice";
 import {setFilters} from '../../store/slices/filterSlice'
 import {Delete, Save} from "@mui/icons-material";
-import {IconButton} from "@mui/material";
+import {IconButton, Popover, TextField} from "@mui/material";
 
 const drawerWidth = 450;
 
@@ -25,6 +25,8 @@ function SnapshotSidebar() {
   const dispatch = useDispatch();
 
   const [snapshots, setSnapshots] = useState([]);
+  const [snapshotName, setSnapshotName] = useState("");
+  const [namingAnchor, setNamingAnchor] = useState(null);
 
   function logout()  {
     POST('auth/logout')
@@ -52,10 +54,13 @@ function SnapshotSidebar() {
   }, [])
 
   function saveSnapshot() {
-    PUT('snapshot/create/', filters.filters)
+    const submit_filters = {...filters.filters, "snapshot_name": snapshotName};
+    PUT('snapshot/create/', submit_filters)
         .then((resp) => {
           if (resp.data.success) {
             updateSnapshots();
+            setSnapshotName("");
+            handleNamingClose();
             window.alert("Snapshot saved.");
           } else {
             window.alert("Could not save snapshot.");
@@ -64,6 +69,14 @@ function SnapshotSidebar() {
         .catch((err) => {
           window.alert("Could not save snapshot.", err);
         })
+  }
+
+  function toggleSnapshotNaming(event) {
+      setNamingAnchor(event.target)
+  }
+
+  function handleNamingClose() {
+      setNamingAnchor(null);
   }
 
   function deleteSnapshot(id) {
@@ -80,6 +93,8 @@ function SnapshotSidebar() {
               window.alert("Could not delete snapshot.", err);
           })
   }
+
+  const namingOpen = Boolean(namingAnchor);
 
   return (
       <div>
@@ -166,13 +181,39 @@ function SnapshotSidebar() {
           </div>
         </Drawer>
         <Button variant={"contained"}
-                endIcon={<Save />}
+                endIcon={namingOpen ? null : <Save />}
                 id="save-snapshot-button"
                 size="large"
-                onClick={saveSnapshot}
+                onClick={toggleSnapshotNaming}
         >
-          Save as snapshot
+            {namingOpen ? "Cancel" : "Save as snapshot..."}
         </Button>
+          <Popover
+              open={namingOpen}
+              anchorEl={namingAnchor}
+              onClose={handleNamingClose}
+              anchorOrigin={{
+                  vertical: 'bottom',
+                  horizontal: 'right'
+              }}>
+              <div id={"snapshot-naming-popover"}>
+                  <div id={"snapshot-name-entry"}>
+                      <TextField
+                          placeholder={"Set snapshot name..."}
+                          value={snapshotName}
+                          style={{width: "100%"}}
+                          label={"Snapshot name"}
+                          variant={"outlined"}
+                          onChange={(event) => setSnapshotName(event.target.value)}
+                      />
+                  </div>
+                  <div id={"snapshot-name-save"}>
+                      <IconButton aria-label="save" onClick={saveSnapshot} style={{height: "100%"}} color={"primary"}>
+                          <Save style={{height: "100%", width: "100%"}}/>
+                      </IconButton>
+                  </div>
+              </div>
+          </Popover>
       </div>
   );
 }
