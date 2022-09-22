@@ -19,7 +19,8 @@ const resetState = {
         graph_minimum_edges: "0",
     },
     activeFilters: [],
-    resultsReturned: false
+    resultsReturned: false,
+    loadResults: false
 }
 
 const initialState = {
@@ -29,7 +30,8 @@ const initialState = {
         graph_node_size: "edge_count"
     },
     activeFilters: ["mesh_heading", "author", "graph_node_size"],
-    resultsReturned: false
+    resultsReturned: false,
+    loadResults: false
 };
 
 function copyAndRemoveElement(obj, key) {
@@ -85,13 +87,18 @@ export const filterSlice = createSlice({
         },
         resetAllFilters: (state, action) => {
             return initialState;
+        },
+        setLoadResults: (state, action) => {
+            state.loadResults = action.payload;
+            return state;
         }
-    },
+    }
+    ,
 });
 
 export const {
     setFilter, resetFilter, setActiveFilters, removeActiveFilter,
-    setFilters, setResultsReturned, resetAllFilters
+    setFilters, setResultsReturned, resetAllFilters, setLoadResults
 } = filterSlice.actions;
 
 export default filterSlice.reducer;
