@@ -7,7 +7,7 @@ from datetime import datetime, date
 
 from app.controller.graph_builder import GraphOptions, GraphBuilder, ArticleAuthorNode, ArticleCoAuthorEdge, \
     ConstantNodesValueSource, MatchedNodesValueSource, ConstantEdgesValueSource, CoAuthoredArticlesEdgesValueSource, \
-    NodesValueSource, EdgeCountNodesValueSource, AuthorCitationsNodesValueSource
+    NodesValueSource, EdgeCountNodesValueSource, AuthorCitationsNodesValueSource, MeanPublicationDateNodesValueSource
 from app.helpers import _create_query_from_filters
 
 from app.pubmed.filtering import PubMedFilterBuilder, PubMedFilterLimitError, PubMedFilterValueError, \
@@ -48,6 +48,8 @@ def _parse_node_value_source_filter(
         return EdgeCountNodesValueSource()
     elif node_size_type == "citations":
         return AuthorCitationsNodesValueSource()
+    elif node_size_type == "mean_date":
+        return MeanPublicationDateNodesValueSource()
     else:
         raise PubMedFilterValueError("graph_node_size", f"Unknown {filter_key} type {node_size_type}")
 

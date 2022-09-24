@@ -195,9 +195,10 @@ const Filters = () => {
                 value={currentFilterValue}
                 onChange={updateStateFromEventValueCallbackGenerator(filterDesc.key)}>
                     <MenuItem value={"constant"}>Constant</MenuItem>
-                    <MenuItem value={"matched_nodes"}>Increase for Matched Nodes</MenuItem>
-                    <MenuItem value={"edge_count"}>Increase with Number of Edges</MenuItem>
-                    <MenuItem value={"citations"}>Increase with Citations</MenuItem>
+                    <MenuItem value={"matched_nodes"}>Matched Nodes</MenuItem>
+                    <MenuItem value={"edge_count"}>Number of Edges</MenuItem>
+                    <MenuItem value={"citations"}>Author Citations</MenuItem>
+                    <MenuItem value={"mean_date"}>Mean Publication Date</MenuItem>
             </Select>
         </FormControl>;
 
@@ -216,8 +217,8 @@ const Filters = () => {
                 value={currentFilterValue}
                 onChange={updateStateFromEventValueCallbackGenerator(filterDesc.key)}>
                     <MenuItem value={"constant"}>Constant</MenuItem>
-                    <MenuItem value={"coauthored_articles"}>Increase with Co-Authored Articles</MenuItem>
-                    <MenuItem value={"citations"}>Increase with Shared Citations</MenuItem>
+                    <MenuItem value={"coauthored_articles"}>Co-Authored Articles</MenuItem>
+                    <MenuItem value={"citations"}>Citations of Co-Authored Articles</MenuItem>
             </Select>
         </FormControl>;
 

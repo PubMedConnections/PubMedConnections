@@ -1,6 +1,7 @@
 """
 Tool to construct graphs to pass to the frontend.
 """
+import datetime
 import math
 import textwrap
 import matplotlib.pyplot as plt
@@ -20,6 +21,35 @@ class PubMedGraphError(Exception):
 
 
 T = TypeVar("T")
+
+
+def scale_value_source_results_linear(values: dict[T, float]) -> dict[T, float]:
+    """
+    Takes value source results that fall into an arbitrary range of values,
+    and linearly scales them into the range [0, 1].
+    """
+    if len(values) == 0:
+        return {}
+
+    # Find the limits.
+    min_value = None
+    max_value = None
+    for value in values.values():
+        if min_value is None or value < min_value:
+            min_value = value
+        if max_value is None or value > max_value:
+            max_value = value
+
+    # Scale based upon the limits.
+    value_range = max_value - min_value
+    if value_range == 0:
+        scaled = {key: 0.75 for key in values.keys()}
+    else:
+        scaled: dict[T, float] = {}
+        for key, value in values.items():
+            scaled[key] = (value - min_value) / value_range
+
+    return scaled
 
 
 def scale_value_source_results_log(values: dict[T, float]) -> dict[T, float]:
@@ -42,24 +72,7 @@ def scale_value_source_results_log(values: dict[T, float]) -> dict[T, float]:
     values = {key: math.log(value + max(0.0, shift_for_log_value) + 1) for key, value in values.items()}
 
     # Find the limits.
-    min_value = None
-    max_value = None
-    for value in values.values():
-        if min_value is None or value < min_value:
-            min_value = value
-        if max_value is None or value > max_value:
-            max_value = value
-
-    # Scale based upon the limits.
-    value_range = max_value - min_value
-    if value_range == 0:
-        scaled = {key: 0.75 for key in values.keys()}
-    else:
-        scaled: dict[T, float] = {}
-        for key, value in values.items():
-            scaled[key] = (value - min_value) / value_range
-
-    return scaled
+    return scale_value_source_results_linear(values)
 
 
 class NodesValueSource:
@@ -132,6 +145,31 @@ class EdgeCountNodesValueSource(NodesValueSource):
             result[node_id] = len(graph.node_edges[node_id])
 
         return scale_value_source_results_log(result)
+
+
+class MeanPublicationDateNodesValueSource(NodesValueSource):
+    """
+    A source that assigns one value to matched nodes, and another to connected nodes.
+    """
+    def __init__(self):
+        super().__init__()
+
+    def query(self, graph: 'Graph', session: neo4j.Session) -> dict[int, float]:
+        result: dict[int, float] = {}
+        for node_id, author_node in graph.nodes.items():
+            author_node = cast(AuthorNode, author_node)
+
+            # Calculate the mean timestamp of their matching articles.
+            year_sum = 0.0
+            # 366 to account for leap years. We don't need that much accuracy.
+            one_year = datetime.timedelta(days=366)
+            for article in author_node.articles:
+                since_start_of_year = article.date - datetime.date(year=article.date.year, month=1, day=1)
+                year_sum += article.date.year + since_start_of_year / one_year
+
+            result[node_id] = year_sum / len(author_node.articles)
+
+        return scale_value_source_results_linear(result)
 
 
 class AuthorCitationsNodesValueSource(NodesValueSource):
