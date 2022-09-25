@@ -84,15 +84,15 @@ function SnapshotSidebar() {
 
 
       <div style={{position: "absolute", left: "15%", top: "15%", width: '70%', height: "70%", backgroundColor: "white", zIndex: 100000}}>
-        <div style={{position: "absolute", left: "98%", top: "0%", width: '2%', height: "2%", backgroundColor: "red"}}>
-          <Button onClick={() => setShowModal(false)} >
+          <Button onClick={() => setShowModal(false)} style={{position: "fixed", left: "50%", top: "80%", width: '2%', height: "2%", backgroundColor: "red"}}>
             <b> &#10005; </b>
           </Button>
+
+        <div style={{position: "fixed", left: "17.5%", top: "17.5%", width: "30%", height:"30%"}}>
+          <p>Hellos</p>
         </div>
         
-        <Analytics data={analyticsData} />
-        
-        
+        <Analytics data={analyticsData} />        
       </div>
     </Box>
   )
