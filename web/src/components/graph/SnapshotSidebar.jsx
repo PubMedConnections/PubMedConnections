@@ -16,6 +16,7 @@ import {setFilters} from '../../store/slices/filterSlice'
 import {Save} from "@mui/icons-material";
 import Box from '@mui/material/Box';
 import Analytics from '../graph/Analytics'
+import JsonData from '../../json/analytics1.json';
 const drawerWidth = 450;
 
 
@@ -71,6 +72,12 @@ function SnapshotSidebar() {
         })
   }
 
+  const [analyticsData, setAnalyticsData] = useState({});
+    
+    useEffect(() => {
+      setAnalyticsData(JsonData);
+  }, []);
+
   const AnalyticsModal = () => (
     <Box style={{position: 'absolute', zIndex: 10000,  width: "100%", height: "100%", opacity: '1', textAlign: 'center'}}>
       <div style={{position: 'absolute', zIndex: 10000, backgroundColor: "black",  width: "100%", height: "100%", opacity: '0.4', textAlign: 'center'}} onClick={() => setShowModal(false)}></div>
@@ -82,7 +89,8 @@ function SnapshotSidebar() {
             <b> &#10005; </b>
           </Button>
         </div>
-        <div style={{position: "absolute", left: "2%", top: "2%", width: '96%', height: "96%", backgroundColor: 'blue'}}> <Analytics /></div>
+        
+        <Analytics data={analyticsData} />
         
         
       </div>
