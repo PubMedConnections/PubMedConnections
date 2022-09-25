@@ -63,36 +63,49 @@ code {
 
 #visjs-graph-info,
 #visjs-graph-message {
-    position: absolute;
-    display: inline-block;
-    vertical-align: middle;
-    text-align: center;
+  position: absolute;
+  display: inline-block;
+  vertical-align: middle;
+  text-align: center;
 }
 
 #visjs-graph-info {
-    right: 0;
-    bottom: 0;
-    height: 2em;
-    line-height: 2em;
-    padding: 0 1em;
-    z-index: 1;
-    background-color: rgba(255, 255, 255, 0.9);
-    color: #333333;
-    font-size: 0.84em;
-    box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
-    border-top-right-radius: 0.5em;
+  right: 0;
+  bottom: 0;
+  height: 2em;
+  line-height: 2em;
+  padding: 0 1em;
+  z-index: 1;
+  background-color: rgba(255, 255, 255, 0.9);
+  color: #333333;
+  font-size: 0.84em;
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
+  border-top-right-radius: 0.5em;
 }
 
 #visjs-graph-message {
-    top: 55%;
-    left: 50%;
-    color: #888888;
-    transform: translate(-50%, -50%);
+  top: 55%;
+  left: 50%;
+  color: #888888;
+  transform: translate(-50%, -50%);
+}
+
+/** Material UI **/
+.MuiButtonBase-root {
+  font-size: 0.86em !important;
+}
+
+.MuiInputBase-root {
+  font-size: 0.86em !important;
+}
+
+span.MuiTypography-root {
+  font-size: 1em;
 }
 
 /** Filters **/
 #root header {
-    height: 72px;
+  height: 72px;
 }
 #filter-dropdown {
   position: absolute;
@@ -101,12 +114,12 @@ code {
   box-shadow: 0 0 5px gray;
   z-index: 999;
   background-color: rgba(255, 255, 255, 0.95);
-  min-width: 50vw;
+  min-width: 40vw;
   max-width: 100vw;
 }
 
 #filter-dropdown #filters {
-  max-height: 60vh;
+  max-height: 80vh;
   overflow: auto;
 }
 
@@ -120,19 +133,19 @@ code {
 }
 
 #filters-header {
-    margin-top: 1.2em;
-    margin-bottom: 1.6em;
-    padding-right: 10px;
-    content: "";
-    display: table;
-    clear: both;
-    width: 100%;
-    height: 1em;
+  margin-top: 1.2em;
+  margin-bottom: 1.6em;
+  padding-right: 10px;
+  content: "";
+  display: table;
+  clear: both;
+  width: 100%;
+  height: 1em;
 }
 
 #add-filters {
   float: left;
-  width: 80%;
+  width: 75%;
   text-align: center;
   padding-left: 15px;
   padding-right: 15px;
@@ -144,17 +157,17 @@ code {
 }
 
 #filters-load-button {
-    width: 20%;
-    float: right;
-    padding-right: 15px;
+  width: 25%;
+  float: right;
+  padding-right: 15px;
 }
 
-#filters-load-button button {
-    width: 100%;
+#filters-load-button > button {
+  width: 100%;
 }
 
 .not-loaded {
-    color: red
+  color: red
 }
 
 .filter-row {
@@ -176,15 +189,20 @@ code {
 
 .filter-class {
   padding-right: 0.6em;
+  margin-top: auto;
+  margin-bottom: auto;
 }
 
-.filter-class>p {
+.filter-class > p {
+  min-width: 50px;
   border-radius: 5px;
   padding: 0.2em 0.5em;
   text-align: center;
   font-weight: bold;
   color: #333333;
   font-size: 0.8em;
+  margin-top: auto;
+  margin-bottom: auto;
 }
 
 .filter-name {
@@ -194,6 +212,8 @@ code {
 .filter-name,
 .filter-name > p {
   font-size: 1em;
+  margin-top: auto;
+  margin-bottom: auto;
 }
 
 .filter-entry {
@@ -205,17 +225,29 @@ code {
   width: 100%;
 }
 
+.filter-entry input {
+  padding: 1.2em;
+}
+
 .filter-delete {
   width: 3em;
+  margin-top: auto;
+  margin-bottom: auto;
+}
+
+.filter-delete > button > svg {
+  transform: scale(1.4);
 }
 
 .filter-entry-slider {
-    padding-left: 1em;
-    padding-right: 1em;
+  padding-left: 1em;
+  padding-right: 1em;
+  margin-top: auto;
+  margin-bottom: auto;
 }
 
 .filter-entry-slider>span {
-    display: block;
+  display: block;
 }
 
 #sidebar-user-details {
@@ -230,6 +262,10 @@ code {
   padding-left: 20px;
   padding-right: 20px;
   padding-bottom: 20px;
+}
+
+#user-details > p {
+  margin-top: 10px;
 }
 
 #logout-button {
@@ -248,51 +284,57 @@ code {
 }
 
 #snapshot-naming-popover {
-    z-index: 1000;
-    min-width: 300px;
-    padding: 10px;
-    height: 5em;
+  z-index: 1000;
+  min-width: 300px;
+  padding: 10px;
+  height: 5em;
 }
 
 #snapshot-naming-popover:after {
-    content: "";
-    display: table;
-    clear: both;
+  content: "";
+  display: table;
+  clear: both;
 }
 
 #snapshot-name-entry {
-    float: left;
-    width: 80%;
+  float: left;
+  width: 80%;
 }
 
 #snapshot-name-save {
-    float: left;
-    width: 20%;
-    height: 100%;
+  float: left;
+  width: 20%;
+  height: 100%;
 }
 
 .snapshot-item-container:after {
-    content: "";
-    display: table;
-    clear: both;
+  content: "";
+  display: table;
+  clear: both;
 }
 
 .snapshot-description {
-    float: left;
-    width: 80%;
+  /*margin-left: 10%;*/
+  float: left;
+  width: 90%;
 }
 
 .snapshot-description p {
-    margin: 0;
+  margin: 0;
 }
 
 .snapshot-date {
-    color: darkgray;
-    font-size: smaller;
+  color: gray;
+  font-size: 1em;
 }
 
 .snapshot-delete {
-    float: left;
-    width: 20%;
-    height: 2em;
+  float: left;
+  width: 10%;
+  height: 100%;
+
+}
+
+.snapshot-delete svg{
+  transform: scale(1.5);
 }
