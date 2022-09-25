@@ -31,6 +31,8 @@ function SnapshotSidebar() {
 
   const [showModal, setShowModal] = useState(false);
 
+  const [analyticsData, setAnalyticsData] = useState({});
+
   function logout()  {
     POST('auth/logout')
         .then((resp) => {
@@ -71,12 +73,14 @@ function SnapshotSidebar() {
           window.alert("Could not save snapshot.", err);
         })
   }
-
-  const [analyticsData, setAnalyticsData] = useState({});
     
-    useEffect(() => {
+  useEffect(() => {
       setAnalyticsData(JsonData);
   }, []);
+
+  
+
+  
 
   const AnalyticsModal = () => (
     <Box style={{position: 'absolute', zIndex: 10000,  width: "100%", height: "100%", opacity: '1', textAlign: 'center'}}>
@@ -84,12 +88,11 @@ function SnapshotSidebar() {
 
 
       <div style={{position: "absolute", left: "15%", top: "15%", width: '70%', height: "70%", backgroundColor: "white", zIndex: 100000}}>
-          <Button onClick={() => setShowModal(false)} style={{position: "fixed", left: "50%", top: "80%", width: '2%', height: "2%", backgroundColor: "red"}}>
-            <b> &#10005; </b>
-          </Button>
 
-        <div style={{position: "fixed", left: "17.5%", top: "17.5%", width: "30%", height:"30%"}}>
-          <p>Hellos</p>
+        <div style={{position: "fixed", left: "17.5%", top: "25%", width: "30%", height:"30%"}}>
+          <h1>Graph Analytics</h1>
+
+          <p>Snapshot ID: {snapshots[0]}</p>
         </div>
         
         <Analytics data={analyticsData} />        
@@ -166,7 +169,7 @@ function SnapshotSidebar() {
                 sx={{ background: '#c4c4c4', width: '100%', height: '1px' }}
             />
             <div id="user-details" >
-            <Button onClick={() => setShowModal(true)} style={{position: 'relative', top: '10px', left: "35%", backgroundColor: "#6372ff", padding: "10px 15px 10px", color: "white"}}>
+            <Button onClick={() => {setShowModal(true)}} style={{position: 'relative', top: '10px', left: "35%", backgroundColor: "#6372ff", padding: "10px 15px 10px", color: "white"}}>
                 Open Analytics
             </Button>
             </div>
