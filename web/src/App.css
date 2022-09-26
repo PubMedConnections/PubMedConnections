@@ -268,10 +268,6 @@ span.MuiTypography-root {
   margin-top: 10px;
 }
 
-#logout-button {
-  width: 100%;
-}
-
 #sidebar-contents {
   overflow-y: auto;
 }
@@ -337,4 +333,32 @@ span.MuiTypography-root {
 
 .snapshot-delete svg{
   transform: scale(1.5);
+}
+
+#header-user-details {
+  float:left;
+  bottom: 0;
+}
+
+#header-user-details p {
+  margin: 0;
+}
+
+#tabs-and-logout {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 3.5em;
+}
+
+#tabs {
+  float: left;
+}
+
+#tab-user-divider {
+  background: darkgray;
+  height: 75%;
+  width: 2px;
+  margin: 10px;
+  float: left;
 }
