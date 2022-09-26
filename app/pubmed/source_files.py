@@ -14,7 +14,7 @@ from typing import Optional
 from lxml import etree
 
 from app.pubmed.extract_xml import extract_articles
-from app.pubmed.model import Article
+from app.pubmed.model import DBArticle
 from app.pubmed.warning_log import WarningLog, LogFile
 from app.utils import calc_md5_hash_of_file
 
@@ -58,7 +58,7 @@ def list_downloaded_pubmed_files(
 class ReadPubMedItem:
     """ The contents of a PubMed file that has been read. """
 
-    def __init__(self, index: int, md5_hash: Optional[str], articles: Optional[list[Article]]):
+    def __init__(self, index: int, md5_hash: Optional[str], articles: Optional[list[DBArticle]]):
         self.index = index
         self.md5_hash = md5_hash
         self.articles = articles
@@ -79,7 +79,7 @@ def read_all_pubmed_files(
         target_directory: str,
         file_paths: list[str],
         *,
-        read_thread_count=4
+        read_thread_count=1
 ) -> queue.PriorityQueue[ReadPubMedItem]:
     """
     Reads the contents of all the downloaded PubMed files and places
@@ -247,7 +247,7 @@ def _do_parse_pubmed_xml(log_dir: str, target_directory: str, path: str, return_
         return_queue.put(extract_articles(WarningLog(log), tree))
 
 
-def parse_pubmed_xml(log_dir: str, target_directory: str, path: str) -> list[Article]:
+def parse_pubmed_xml(log_dir: str, target_directory: str, path: str) -> list[DBArticle]:
     """
     Parses the contents of the file at the given path into a Python object.
     A new process is started to perform the parsing due to repeated calls
@@ -266,6 +266,6 @@ def parse_pubmed_xml(log_dir: str, target_directory: str, path: str) -> list[Art
         daemon=True
     )
     process.start()
-    result: list[Article] = return_queue.get()
+    result: list[DBArticle] = return_queue.get()
     process.terminate()
     return result

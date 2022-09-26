@@ -3,9 +3,11 @@ from datetime import datetime
 from app import neo4j_conn
 from app.controller.snapshot_visualise import parse_dates
 from app.controller.snapshot_analyse import AnalyticsThreading
+from app.helpers import remove_empty_filters
 
 
-def create_by_filters(graph_type: str, filters):
+def create_by_filters(filters, current_user):
+    filters = remove_empty_filters(filters)
     filters = parse_dates(filters)
 
     filters['creation_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -24,34 +26,12 @@ def create_by_filters(graph_type: str, filters):
             MATCH (u: User)
             WHERE u.username = $username
 
-            CREATE (u)-[:USER_SNAPSHOT]->(s:Snapshot {
-            creation_time: $creation_time,
-            mesh_heading: $mesh_heading,
-            author: $author,
-            first_author: $first_author,
-            last_author: $last_author,
-            published_before: $published_before,
-            published_after: $published_after,
-            journal: $journal,
-            article: $article,
-            graph_size: $graph_size,
-            graph_type: $graph_type,
-            database_version: max_version
-            })
+            CREATE (u)-[:USER_SNAPSHOT]->(s:Snapshot {database_version: max_version})
+            SET s += $filters
             SET s.id = ID(s)
             RETURN ID(s) AS snapshot_id
             ''',
-            {'mesh_heading': filters['mesh_heading'],
-             'author': filters['author'],
-             'first_author': filters['first_author'],
-             'last_author': filters['last_author'],
-             'published_before': filters['published_before'],
-             'published_after': filters['published_after'],
-             'journal': filters['journal'],
-             'article': filters['article'],
-             'creation_time': filters['creation_time'],
-             'graph_size': filters['graph_size'],
-             'graph_type': filters['graph_type'],
+            {'filters': filters,
              'username': current_user
              }
         )

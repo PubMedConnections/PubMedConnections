@@ -15,8 +15,9 @@ SQLALCHEMY_ECHO = False
 
 
 # Define the application directory
-BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+BASE_DIR = os.getcwd()
 DATA_DIR = os.path.join(BASE_DIR, "data")
+LOGS_DIR = os.path.join(BASE_DIR, "logs")
 APP_DB_FILE = os.path.join(DATA_DIR, "app.db")
 PUBMED_DIR = os.path.join(DATA_DIR, "pubmed")
 PUBMED_DB_FILE = os.path.join(PUBMED_DIR, "pubmed.db")
@@ -24,6 +25,7 @@ PUBMED_DB_FILE = os.path.join(PUBMED_DIR, "pubmed.db")
 
 # Neo4J
 NEO4J_URI = "bolt://localhost:7687"
+NEO4J_REQUIRES_AUTH = True
 NEO4J_USER = "neo4j"
 NEO4J_PASSWORD = "password"
 

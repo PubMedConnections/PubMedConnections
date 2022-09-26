@@ -4,6 +4,7 @@ const resetState = {
     filters: {
         mesh_heading: "",
         author: "",
+        affiliation: "",
         first_author: true,
         last_author: true,
         published_before: "",
@@ -11,17 +12,28 @@ const resetState = {
         journal: "",
         article: "",
         graph_size: 1000,
-        graph_type: "author",
+        graph_type: "author_coauthors_open",
+        graph_node_size: "matched_nodes",
+        graph_node_colour: "matched_nodes",
+        graph_edge_size: "coauthored_articles",
+        graph_minimum_edges: "0",
     },
-    activeFilters: []
+    activeFilters: [],
+    resultsReturned: false,
+    loadResults: true,
+    resultsLoaded: false,
 }
 
 const initialState = {
     filters: {
         mesh_heading: "Brain Stem Neoplasms",
         author: "J ",
+        graph_node_size: "edge_count"
     },
-    activeFilters: ["mesh_heading", "author"]
+    activeFilters: ["mesh_heading", "author", "graph_node_size"],
+    resultsReturned: false,
+    loadResults: true,
+    resultsLoaded: false,
 };
 
 function copyAndRemoveElement(obj, key) {
@@ -70,10 +82,30 @@ export const filterSlice = createSlice({
                 }
             }
             return state;
+        },
+        setResultsReturned: (state, action) => {
+            state.resultsReturned = action.payload;
+            return state;
+        },
+        resetAllFilters: (state, action) => {
+            return initialState;
+        },
+        setLoadResults: (state, action) => {
+            state.loadResults = action.payload;
+            return state;
+        },
+        setResultsLoaded: (state, action) => {
+            state.resultsLoaded = action.payload;
+            return state;
         }
-    },
+    }
+    ,
 });
 
-export const { setFilter, resetFilter, setActiveFilters, removeActiveFilter, setFilters } = filterSlice.actions;
+export const {
+    setFilter, resetFilter, setActiveFilters, removeActiveFilter,
+    setFilters, setResultsReturned, resetAllFilters, setLoadResults,
+    setResultsLoaded
+} = filterSlice.actions;
 
 export default filterSlice.reducer;

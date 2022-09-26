@@ -1,4 +1,4 @@
-import React, { Fragment, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { Graph } from '../../components/graph';
 import SnapshotSidebar from '../../components/graph/SnapshotSidebar';
 
@@ -8,10 +8,10 @@ function Snapshots() {
   }, []);
 
   return (
-    <Fragment className="full-size">
+    <div className="full-size">
       <SnapshotSidebar />
       <Graph />
-    </Fragment>
+    </div>
   );
 }
 

@@ -1,13 +1,15 @@
-from flask import request
+from flask import request, jsonify
 from flask_restx import Namespace, Resource, fields
-from app.controller.snapshot_visualise import query_by_snapshot_id, parse_dates, get_author_graph, \
-    query_coauthor_graph
+
+from app.controller.graph_builder import PubMedGraphError
+from app.controller.snapshot_visualise import query_by_snapshot_id, parse_dates, get_author_graph, query_graph
 from app.controller.snapshot_create import create_by_filters
 from app.controller.snapshot_get import get_snapshot, get_user_snapshots
 from app.controller.snapshot_delete import delete_by_snapshot_id
-from app.controller.snapshot_analyse import run_analytics
+from app.controller.snapshot_analyse import get_analytics
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.pubmed.filtering import PubMedFilterLimitError, PubMedFilterValueError
+from app.PubMedErrors import PubMedSnapshotDoesNotExistError, PubMedUpdateSnapshotError, PubMedAnalyticsError
 
 ns = Namespace('snapshot', description='snapshot related operations',
                authorizations={'api_key':
@@ -20,6 +22,7 @@ ns = Namespace('snapshot', description='snapshot related operations',
 filters = ns.model('filters',
                    {'mesh_heading': fields.String(required=False, default="Skin Neoplasms"),
                     'author': fields.String(required=False, default="Vittorio Bolcato"),
+                    'affiliation': fields.String(required=False, default=""),
                     'first_author': fields.String(required=False, default=""),
                     'last_author': fields.String(required=False, default=""),
                     'published_before': fields.String(required=False, default=""),
@@ -27,7 +30,8 @@ filters = ns.model('filters',
                     'journal': fields.String(required=False, default=""),
                     'article': fields.String(required=False, default=""),
                     'graph_size': fields.Integer(required=False, default=100),
-                    'graph_type': fields.String(required=False, default="author")
+                    'graph_type': fields.String(required=False, default="author_coauthors_open"),
+                    'snapshot_name': fields.String(required=False, default="My snapshot"),
                     })
 
 
@@ -60,7 +64,7 @@ class DeleteSnapshot(Resource):
     @jwt_required()
     @ns.doc(params={'snapshot_id': {'default': '1'}}, security='api_key')
     def delete(snapshot_id: int):
-        return delete_by_snapshot_id(snapshot_id)
+        return {'id': delete_by_snapshot_id(snapshot_id), 'success': True}
 
 
 @ns.route('/visualise/')
@@ -78,17 +82,19 @@ class VisualiseSnapshot(Resource):
     @ns.doc(security="api_key")
     def post():
         filter_params = request.json
-        filter_params = parse_dates(filter_params)
         try:
-            return query_coauthor_graph(filter_params)
-        except PubMedFilterLimitError as e:
+            filter_params = parse_dates(filter_params)
+            return query_graph(filter_params)
+        except (PubMedFilterLimitError, PubMedGraphError) as e:
             return {
-                "error": str(e)
+                "error": str(e),
+                "empty_message": f"{e}."
             }
         except PubMedFilterValueError as e:
             return {
                 "error": str(e),
-                "error_filter": e.filter_name
+                "error_filter": e.filter_key,
+                "empty_message": f"{e}."
             }
 
 
@@ -107,10 +113,21 @@ class VisualiseThreeHopNeighbourhoodSnapshot(Resource):
 @ns.route('/analyse/<int:snapshot_id>')
 class AnalyseSnapshot(Resource):
     @staticmethod
-    @jwt_required()
+    # @jwt_required()
     @ns.doc(params={'snapshot_id': {'default': '1'}}, security="api_key")
     def get(snapshot_id: int):
-        return run_analytics(snapshot_id)
+        try:
+            return jsonify(get_analytics(snapshot_id))
+        except (PubMedSnapshotDoesNotExistError, PubMedUpdateSnapshotError) as e:
+            return {
+                "error": str(e),
+                "empty_message": f"{e}."
+            }
+        except PubMedAnalyticsError as e:
+            return {
+                "error": e.code,
+                "message": str(e),
+            }
 
 @ns.route('/list/')
 class VisualiseSnapshot(Resource):

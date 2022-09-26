@@ -8,7 +8,7 @@ function Explore() {
   }, []);
   return <>
     <FiltersDropdown />
-    <Graph />;
+    <Graph />
   </>
 }
 

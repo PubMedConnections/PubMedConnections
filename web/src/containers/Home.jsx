@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { HomeNavigation } from '../components/navigation';
-import { Header, TeamDescription } from '../components/home';
+import { Introduction, TeamDescription } from '../components/home';
 import JsonData from '../json/teamMembers.json';
 import SmoothScroll from 'smooth-scroll';
 
@@ -22,8 +22,8 @@ function Home() {
   return (
     <div>
       <HomeNavigation />
-      <Header />
-      <TeamDescription data={landingPageData.Team} />
+      <Introduction />
+      <TeamDescription data={landingPageData["Team"]} />
     </div>
   );
 }

@@ -2,6 +2,7 @@ name: pubmed-connections
 dependencies:
   - numpy
   - scikit-learn
+  - matplotlib
   - lxml
   - neo4j-python-driver=4.4.0
   - pip

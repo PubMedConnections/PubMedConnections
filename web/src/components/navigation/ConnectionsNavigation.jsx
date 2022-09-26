@@ -21,7 +21,7 @@ const ConnectionsNavigation = (props) => {
     <AppBar
       position='fixed'
       color='secondary'
-      sx={{ height: CONNECTIONS_NAVBAR_HEIGHT, zIndex: 1301 }}
+      sx={{ height: CONNECTIONS_NAVBAR_HEIGHT, zIndex: 1299 }}
     >
       <Container
         maxWidth='xl'
@@ -44,7 +44,7 @@ const ConnectionsNavigation = (props) => {
 
         <Tabs value={selectedTab} sx={{ alignSelf: 'flex-end' }}>
           <Tab
-            sx={{ fontSize: '1.5rem' }}
+            sx={{ fontSize: '1.1em !important' }}
             label='Explore'
             onClick={() => {
               setSelectedTab(0);
@@ -52,7 +52,7 @@ const ConnectionsNavigation = (props) => {
             }}
           />
           <Tab
-            sx={{ fontSize: '1.5rem' }}
+            sx={{ fontSize: '1.1em !important' }}
             label='Snapshots'
             onClick={() => {
               setSelectedTab(1);

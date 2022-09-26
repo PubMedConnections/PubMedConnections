@@ -1,11 +1,10 @@
-FROM neo4j:4.4
+FROM debian:bullseye-slim
+ENV JAVA_HOME=/opt/java/openjdk
+COPY --from=eclipse-temurin:11 $JAVA_HOME $JAVA_HOME
+ENV PATH="${JAVA_HOME}/bin:${PATH}"
 
-# Neo4J
-ENV NEO4JLABS_PLUGINS='["apoc","graph-data-science"]'
-ENV NEO4J_AUTH=none
 
-COPY deployment/neo4j.conf /conf/neo4j.conf
-COPY deployment/apoc.conf /conf/apoc.conf
+# Volumes
 RUN mkdir -p data && mkdir -p logs
 
 
@@ -31,16 +30,16 @@ RUN conda init bash && \
 
 # PubMed Connections
 COPY app /app
-COPY config.py /config.py
+COPY deployment/deployment-config.py /config.py
 COPY LICENSE.txt /LICENSE.txt
 COPY README.md /README.md
 COPY run.py /run.py
 
 
 # Entrypoint
-COPY deployment/docker-entrypoint.sh /usr/local/bin/pmc-entrypoint.sh
+COPY deployment/pmc-entrypoint.sh /usr/local/bin/pmc-entrypoint.sh
 RUN chmod u+x /usr/local/bin/pmc-entrypoint.sh
-SHELL ["conda", "run", "-n", "pubmed-connections", "/bin/bash", "-c"]
-ENTRYPOINT ["/usr/local/bin/pmc-entrypoint.sh"]
+SHELL ["conda", "run", "-n", "pmc", "/bin/bash", "-c"]
 WORKDIR "/"
+ENTRYPOINT ["/usr/local/bin/pmc-entrypoint.sh"]
 CMD ["echo", "If this printed, then something went wrong..."]

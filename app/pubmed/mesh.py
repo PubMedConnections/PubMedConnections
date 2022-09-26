@@ -38,6 +38,7 @@ def get_latest_mesh_desc_file(target_directory: str) -> [str, str]:
     directory = os.path.join(target_directory, "mesh")
 
     # Find the XML file under /data/mesh/
+    directory = glob.escape(directory)
     desc_files = glob.glob(os.path.join(directory, "desc*.xml"))
     latest_file: Optional[str] = None
     latest_year: Optional[int] = None
@@ -48,7 +49,7 @@ def get_latest_mesh_desc_file(target_directory: str) -> [str, str]:
             latest_year = year
 
     if latest_file is None:
-        raise Exception("No MESH heading XML file found in the format desc*.xml")
+        raise Exception(f"No MESH heading XML file found in the format desc*.xml within {directory}")
 
     return directory, latest_file, latest_year
 
