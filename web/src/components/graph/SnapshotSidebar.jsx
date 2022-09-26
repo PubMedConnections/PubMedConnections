@@ -9,9 +9,8 @@ import ListItemText from '@mui/material/ListItemText';
 import Button from '@mui/material/Button';
 import { CONNECTIONS_NAVBAR_HEIGHT } from '../../constants';
 import Filters from "./Filters";
-import {GET, POST, PUT, DELETE} from "../../utils/APIRequests";
+import {GET, PUT, DELETE} from "../../utils/APIRequests";
 import {useDispatch, useSelector} from 'react-redux'
-import {clearAuth} from "../../store/slices/userSlice";
 import {setFilters, resetAllFilters, setLoadResults} from '../../store/slices/filterSlice'
 import {Delete, Save} from "@mui/icons-material";
 import {IconButton, Popover, TextField} from "@mui/material";
@@ -26,7 +25,6 @@ const drawerWidth = 500;
 
 function SnapshotSidebar() {
   const [selectedSnapshot, setSelectedSnapshot] = useState(-1);
-  const user = useSelector((state) => state.user.username);
   const filters = useSelector((state) => state.filters);
   const resultsReturned = useSelector((state) => state.filters.resultsReturned);
 
@@ -39,16 +37,6 @@ function SnapshotSidebar() {
   const [showModal, setShowModal] = useState(false);
 
   const [analyticsData, setAnalyticsData] = useState({});
-
-  function logout()  {
-    POST('auth/logout')
-        .then((resp) => {
-          if (resp.data.success) {
-            dispatch(clearAuth());
-          }
-    });
-  }
-
   function updateSnapshots(id) {
     GET('snapshot/list/')
         .then((resp) => {
