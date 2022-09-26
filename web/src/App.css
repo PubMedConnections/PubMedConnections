@@ -250,6 +250,13 @@ span.MuiTypography-root {
   display: block;
 }
 
+.filter-popover p {
+  margin: 5px;
+  font-style: italic;
+  max-height: 200px;
+  max-width: 300px;
+}
+
 #sidebar-user-details {
   position: absolute;
   bottom: 0;

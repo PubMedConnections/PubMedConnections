@@ -23,91 +23,107 @@ const availableFilters = [
         key: "mesh_heading",
         name: "MeSH Heading",
         form_name: "MeSH",
-        category: filterCategories.Article
+        category: filterCategories.Article,
+        help: "The name (or part of the name) of the Medical Subject Heading"
     },
     {
         key: "author",
         name: "Author Name",
         form_name: "Author Name",
-        category: filterCategories.Author
+        category: filterCategories.Author,
+        help: "The term used to search by the author's name."
     },
     {
         key: "affiliation",
         name: "Author Affiliation",
         form_name: "Affiliation",
-        category: filterCategories.Author
+        category: filterCategories.Author,
+        help: "The university that the article's author was associated with at the time of publication (if this data is available)."
     },
     {
         key: "first_author",
         name: "Is First Author",
         form_name: "Restrict to First Authors",
-        category: filterCategories.Author
+        category: filterCategories.Author,
+        help: "Whether the author search term should search for articles where they are the first listed author."
     },
     {
         key: "last_author",
         name: "Is Last Author",
         form_name: "Restrict to Last Authors",
-        category: filterCategories.Author
+        category: filterCategories.Author,
+        help: "Whether the author search term should search for articles where they are the last listed author."
     },
     {
         key: "published_before",
         name: "Published Before",
         form_name: "Before",
-        category: filterCategories.Article
+        category: filterCategories.Article,
+        help: "The date before which the articles were published."
     },
     {
         key: "published_after",
         name: "Published After",
         form_name: "After",
-        category: filterCategories.Article
+        category: filterCategories.Article,
+        help: "The date after which the articles were published."
     },
     {
         key: "journal",
         name: "Journal Name",
         form_name: "Journal",
-        category: filterCategories.Journal
+        category: filterCategories.Journal,
+        help: "The name of the journal that the article was published in."
     },
     {
         key: "article",
         name: "Article Title",
         form_name: "Article",
-        category: filterCategories.Article
+        category: filterCategories.Article,
+        help: "The title of the article that was published."
     },
     {
         key: "graph_size",
         name: "Max Graph Size",
         form_name: "Max Graph Size",
-        category: filterCategories.Graph
+        category: filterCategories.Graph,
+        help: "The maximum number of allowable nodes that can be returned by the filters. " +
+            "If the filters return too many nodes, then an error will be returned."
     },
     {
         key: "graph_type",
         name: "Graph Type",
         form_name: "Graph Type",
-        category: filterCategories.Graph
+        category: filterCategories.Graph,
+        help: "How the database will be searched and the results will be returned."
     },
     {
         key: "graph_node_size",
         name: "Graph Node Size",
         form_name: "Node Size Source",
-        category: filterCategories.Graph
+        category: filterCategories.Graph,
+        help: "The metric that determines the size of each node when displayed."
     },
     {
         key: "graph_node_colour",
         name: "Graph Node Colour",
         form_name: "Node Colour Source",
-        category: filterCategories.Graph
+        category: filterCategories.Graph,
+        help: "The metric that determines the colour of each node when displayed."
     },
     {
         key: "graph_edge_size",
         name: "Graph Edge Width",
         form_name: "Edge Width Source",
-        category: filterCategories.Graph
+        category: filterCategories.Graph,
+        help: "The metric that determines the width of each edge (a line between two nodes) when displayed."
     },
     {
         key: "graph_minimum_edges",
         name: "Graph Node Minimum Edges",
         form_name: "Minimum Edges",
-        category: filterCategories.Graph
+        category: filterCategories.Graph,
+        help: "The minimum number of edges that each node in the graph should have."
     },
 ];
 
