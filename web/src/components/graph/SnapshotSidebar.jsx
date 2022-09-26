@@ -15,10 +15,9 @@ import {setFilters, resetAllFilters, setLoadResults} from '../../store/slices/fi
 import {Delete, Save} from "@mui/icons-material";
 import {IconButton, Popover, TextField} from "@mui/material";
 import {availableFilters} from './filterInfo'
-import { Link } from 'react-router-dom';
 import Box from '@mui/material/Box';
 import Analytics from '../graph/Analytics'
-import JsonData from '../../json/analytics1.json';
+
 const drawerWidth = 500;
 
 
@@ -36,7 +35,9 @@ function SnapshotSidebar() {
 
   const [showModal, setShowModal] = useState(false);
 
-  const [analyticsData, setAnalyticsData] = useState({});
+  const [analyticsData, setAnalyticsData] = useState(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+
   function updateSnapshots(id) {
     GET('snapshot/list/')
         .then((resp) => {
@@ -81,13 +82,6 @@ function SnapshotSidebar() {
         })
   }
 
-  useEffect(() => {
-      setAnalyticsData(JsonData);
-  }, []);
-
-
-
-
 
   const AnalyticsModal = () => (
     <Box style={{position: 'absolute', zIndex: 10000,  width: "100%", height: "100%", opacity: '1', textAlign: 'center'}}>
@@ -98,8 +92,7 @@ function SnapshotSidebar() {
 
         <div style={{position: "fixed", left: "17.5%", top: "25%", width: "30%", height:"30%"}}>
           <h1>Graph Analytics</h1>
-
-          <p>Snapshot ID: {snapshots[0].id}</p>
+          <p>Snapshot ID: {selectedSnapshot}</p>
         </div>
 
         <Analytics data={analyticsData} />
@@ -158,6 +151,21 @@ function SnapshotSidebar() {
           }
       }
   }, [filters, selectedSnapshot, snapshots])
+
+    useEffect(() => {
+        setAnalyticsData(null);
+        if (selectedSnapshot > -1) {
+            setAnalyticsLoading(true);
+            GET('snapshot/analyse/' + selectedSnapshot)
+                .then((resp) => {
+                    setAnalyticsData(resp.data);
+                    setAnalyticsLoading(false);
+                })
+                .catch((err) => {
+                    console.log(err);
+                })
+        }
+    }, [selectedSnapshot])
 
   return (
       <div>
@@ -244,9 +252,14 @@ function SnapshotSidebar() {
                 sx={{ background: '#c4c4c4', width: '100%', height: '1px' }}
             />
             <div id="user-details" >
-            <Button onClick={() => {setShowModal(true)}} style={{position: 'relative', top: '10px', left: "35%", backgroundColor: "#6372ff", padding: "10px 15px 10px", color: "white"}}>
-                Open Analytics
-            </Button>
+                <Button onClick={() => {
+                    setShowModal(true)
+                }}
+                        disabled={analyticsData == null}
+                        variant={"contained"}
+                        style={{position: 'relative', top: '10px', left: "35%", padding: "10px 15px 10px"}}>
+                    Open Snapshot Analytics
+                </Button>
             </div>
           </div>
         </Drawer>
