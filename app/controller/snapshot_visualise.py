@@ -7,11 +7,11 @@ from datetime import datetime, date
 
 from app.controller.graph_builder import GraphOptions, GraphBuilder, ArticleAuthorNode, ArticleCoAuthorEdge, \
     ConstantNodesValueSource, MatchedNodesValueSource, ConstantEdgesValueSource, CoAuthoredArticlesEdgesValueSource, \
-    NodesValueSource, EdgeCountNodesValueSource
+    NodesValueSource, EdgeCountNodesValueSource, AuthorCitationsNodesValueSource, MeanPublicationDateNodesValueSource
 from app.helpers import _create_query_from_filters
 
-from app.pubmed.filtering import PubMedFilterBuilder, PubMedFilterLimitError, PubMedFilterValueError
-from app.pubmed.model import DBMeSHHeading
+from app.pubmed.filtering import PubMedFilterBuilder, PubMedFilterLimitError, PubMedFilterValueError, \
+    PubMedFilterQuerySettings
 
 
 def parse_date(filter_key: str, date_str: str) -> datetime:
@@ -46,20 +46,35 @@ def _parse_node_value_source_filter(
         return MatchedNodesValueSource()
     elif node_size_type == "edge_count":
         return EdgeCountNodesValueSource()
+    elif node_size_type == "citations":
+        return AuthorCitationsNodesValueSource()
+    elif node_size_type == "mean_date":
+        return MeanPublicationDateNodesValueSource()
     else:
         raise PubMedFilterValueError("graph_node_size", f"Unknown {filter_key} type {node_size_type}")
 
 
+def construct_query_settings(filters: dict[str, Any]) -> PubMedFilterQuerySettings:
+    """
+    Constructs the query settings from those explicitly set within filters.
+    These settings will have to be modified further by the endpoint that is using them.
+    """
+    settings = PubMedFilterQuerySettings()
+    if "graph_size" in filters:
+        settings.node_limit = filters["graph_size"]
+        del filters["graph_size"]
+    else:
+        settings.node_limit = 1000
+
+    return settings
+
+
 def construct_graph_options(filters: dict[str, Any]) -> GraphOptions:
     """
-    Constructs the options used to control the visualisation of graphs
-    using the options set in the filters.
+    Constructs the options used to control the visualisation of graphs using the options set in the filters.
+    This will modify the query settings to include any information required for visualisation of the graph.
     """
     options = GraphOptions()
-    if "graph_size" in filters:
-        options.node_limit = filters["graph_size"]
-        del filters["graph_size"]
-
     options.node_size_source = _parse_node_value_source_filter(
         filters, "graph_node_size", MatchedNodesValueSource()
     )
@@ -80,19 +95,29 @@ def construct_graph_options(filters: dict[str, Any]) -> GraphOptions:
     else:
         options.edge_size_source = CoAuthoredArticlesEdgesValueSource()
 
+    if "graph_minimum_edges" in filters:
+        minimum_edges_text = filters["graph_minimum_edges"].strip()
+        del filters["graph_minimum_edges"]
+        try:
+            minimum_edges = int(minimum_edges_text)
+        except ValueError:
+            raise PubMedFilterValueError(
+                "graph_minimum_edges",
+                "The Graph Node Minimum Edges filter has an invalid value: it should contain an integer value"
+            )
+
+        options.minimum_edges = minimum_edges
+
     return options
 
 
-def construct_graph_filter(filters: dict[str, Any], graph_options: Optional[GraphOptions] = None) -> PubMedFilterBuilder:
+def construct_graph_filter(filters: dict[str, Any]) -> PubMedFilterBuilder:
     """
     Constructs a PubMedFilterBuilder that applies a set of filters to the PubMed graph
     to fetch a set of IDs corresponding to the nodes that match the filters.
     These IDs can then later be used to build graphs for visualisation.
     """
     filter_builder = PubMedFilterBuilder()
-    if graph_options is not None:
-        filter_builder.set_node_limit(graph_options.node_limit)
-
     if "journal" in filters:
         journal_name = filters["journal"]
         del filters["journal"]
@@ -112,6 +137,12 @@ def construct_graph_filter(filters: dict[str, Any], graph_options: Optional[Grap
         del filters["author"]
         if len(author_name.strip()) > 0:
             filter_builder.add_author_name_filter(author_name)
+
+    if "affiliation" in filters:
+        affiliation_name = filters["affiliation"]
+        del filters["affiliation"]
+        if len(affiliation_name.strip()) > 0:
+            filter_builder.add_affiliation_filter(affiliation_name)
 
     if "first_author" in filters:
         restrict_to_first_author = filters["first_author"]
@@ -149,15 +180,39 @@ def construct_graph_filter(filters: dict[str, Any], graph_options: Optional[Grap
     return filter_builder
 
 
-def query_coauthor_graph(filters: dict[str, Any]):
+def query_graph(filters: dict[str, Any]):
+    """
+    Builds a graph from the given filter options.
+    """
+    graph_type = "author_coauthors_open"
+    if "graph_type" in filters:
+        graph_type = filters["graph_type"]
+        del filters["graph_type"]
+
+    if graph_type == "author_coauthors_open":
+        return query_coauthor_graph(filters, True)
+    elif graph_type == "author_coauthors_closed":
+        return query_coauthor_graph(filters, False)
+    else:
+        return {"error": f"Unknown graph type {graph_type}"}
+
+
+def query_coauthor_graph(filters: dict[str, Any], open: bool):
     """
     Builds a co-author graph based upon a set of filters
     that returns the central authors to expand upon.
     """
+    query_settings = construct_query_settings(filters)
+    query_settings.query_authors = True
+
     graph_options = construct_graph_options(filters)
-    graph_filter = construct_graph_filter(filters, graph_options)
+    graph_filter = construct_graph_filter(filters)
+
     with neo4j_conn.new_session() as session:
-        filter_results = graph_filter.build(force_authors=True).run(session)
+        # Query for the authors that match the filters.
+        filter_results = graph_filter.build(query_settings).run(session)
+
+        # Query for the co-author graph.
         co_author_graph_results = session.run(
             """
             CYPHER planner=dp
@@ -167,21 +222,25 @@ def query_coauthor_graph(filters: dict[str, Any]):
             WHERE id(article) in $article_ids
             OPTIONAL MATCH (article) <-[coauthor_rel:AUTHOR_OF]- (coauthor)
             WHERE author <> coauthor
-            RETURN author, author_rel, article, coauthor_rel, coauthor
+            """
+            + (" AND id(coauthor) IN $author_ids" if not open else "") +
+            """
+            RETURN id(author), author, author_rel, article, coauthor_rel, id(coauthor), coauthor
             """,
             author_ids=filter_results.author_ids,
             article_ids=filter_results.article_ids,
-            node_limit=graph_options.node_limit
+            node_limit=query_settings.node_limit
         )
 
+        # Build the Vis.JS graph.
         graph_builder = GraphBuilder()
         for record in co_author_graph_results:
             graph_builder.add_record()
-            author, author_rel, article, coauthor_rel, coauthor = record
+            author_id, author, author_rel, article, coauthor_rel, coauthor_id, coauthor = record
 
             author = PubMedCacheConn.read_author_node(author)
             article = PubMedCacheConn.read_article_node(article)
-            graph_builder.add_node(ArticleAuthorNode(True, author, article))
+            graph_builder.add_node(ArticleAuthorNode(author_id, True, author, article))
             if coauthor is None:
                 continue
 
@@ -189,18 +248,18 @@ def query_coauthor_graph(filters: dict[str, Any]):
             author_rel = PubMedCacheConn.read_article_author_relation(article, author, author_rel)
             coauthor_rel = PubMedCacheConn.read_article_author_relation(article, coauthor, coauthor_rel)
 
-            graph_builder.add_node(ArticleAuthorNode(False, coauthor, article))
+            graph_builder.add_node(ArticleAuthorNode(coauthor_id, False, coauthor, article))
             graph_builder.add_edge(ArticleCoAuthorEdge(
                 author.author_id, author_rel, article, coauthor_rel, coauthor.author_id
             ))
 
-        if graph_builder.get_node_count() >= graph_options.node_limit:
-            raise PubMedFilterLimitError(f"The limit of {graph_options.node_limit} nodes was reached")
+        if graph_builder.get_node_count() >= query_settings.node_limit:
+            raise PubMedFilterLimitError(f"The limit of {query_settings.node_limit} nodes was reached")
 
-    graph = graph_builder.build(ArticleAuthorNode.collapse, ArticleCoAuthorEdge.collapse)
-    graph_json = graph.build_json(graph_options)
-    if len(graph.nodes) == 0:
-        graph_json["empty_message"] = "There are no matching nodes."
+        graph = graph_builder.build(ArticleAuthorNode.collapse, ArticleCoAuthorEdge.collapse)
+        graph_json = graph.build_json(graph_options, session)
+        if len(graph.nodes) == 0:
+            graph_json["empty_message"] = "There are no matching nodes."
 
     return graph_json
 
@@ -226,7 +285,8 @@ def query_by_snapshot_id(snapshot_id):
 
     with neo4j_conn.new_session() as neo4j_session:
         filters = neo4j_session.read_transaction(cypher_snapshot)
-    return query_coauthor_graph(filters)
+
+    return query_graph(filters)
 
 
 def get_author_graph(filters):

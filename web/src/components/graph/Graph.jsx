@@ -1,12 +1,3 @@
-/**
- * Code Inspired from:
- 		* https://stackoverflow.com/questions/40792649/rendering-vis-js-network-into-container-via-react-js
-
- * Data from:
- 		* https://visjs.github.io/vis-network/examples/
-		* https://visjs.github.io/vis-network/examples/static/codepen.03abfb6443c182fdd9fdb252aa1d7baab3900da615e980199e21189c8f7a41e4.html
- */
-
 import React, { useEffect, useRef, useState } from 'react';
 import LinearProgress from '@mui/material/LinearProgress'
 import {useSelector, useDispatch} from 'react-redux'
@@ -14,10 +5,15 @@ import {POST, PUT} from "../../utils/APIRequests";
 import VisJSGraph from 'react-graph-vis';
 import { useSnackbar } from 'notistack';
 import { DisplayError } from '../common/SnackBar';
+import {setLoadResults, setResultsReturned, setResultsLoaded} from '../../store/slices/filterSlice'
 
 const Graph = () => {
   const snackbar = useSnackbar();
+
+  const dispatch = useDispatch();
   const filters = useSelector((state) => state.filters.filters);
+  const loadResults = useSelector((state) => state.filters.loadResults);
+  const resultsLoaded = useSelector((state) => state.filters.resultsLoaded);
 
   const [VISJSNetwork, setNetwork] = useState(null);
 
@@ -52,74 +48,114 @@ const Graph = () => {
               avoidOverlap: 1,
               damping: 0.5,
               theta: 0.4,
-              springConstant: 0.02,
+              springConstant: 0.06,
               springLength: 100,
           },
           stabilization: {
               enabled: true,
-              iterations: 1000,
+              iterations: 200,
               updateInterval: 50
           }
       }
     },
   });
 
-  function loadGraphData() {
-      const delayDebounceLoad = setTimeout(() => {
-          if (VISJSNetwork == null)
-              return;
+  function loadGraphData(override_load) {
+      if (!override_load && !loadResults){ // Must be ordered this way
+          return;
+      }
 
+      if (VISJSNetwork == null) {
+          return;
+      }
+
+      setGraphInfo({
+          options: graphInfo.options,
+          data: {
+              nodes: [],
+              edges: [],
+          }
+      });
+
+      setLoadingProgress(-1);
+
+      function processResponse(resp, errorMessage) {
+          let data = resp.data;
+          if (resp.status !== 200) {
+              const err = errorMessage || resp.statusText
+              DisplayError(snackbar, err);
+              data = {"error": err};
+          }
+
+          if (data.error) {
+              DisplayError(snackbar, data.error);
+              if (!data.empty_message) {
+                  data.empty_message = data.error + ".";
+              }
+          }
+
+          let graphData = {
+              nodes: data.nodes || [],
+              edges: data.edges || [],
+              empty_message: data.empty_message
+          }
           setGraphInfo({
               options: graphInfo.options,
-              data: {
-                  nodes: [],
-                  edges: [],
-              }
+              data: graphData
           });
-          setLoadingProgress(-1);
+          setLoadingProgress(100);
+          dispatch(setResultsReturned(graphData.nodes.length > 0));
+          dispatch(setResultsLoaded(true));
+          dispatch(setLoadResults(false));
 
-          function processResponse(resp, errorMessage) {
-              let data = resp.data;
-              if (resp.status !== 200) {
-                  const err = errorMessage || resp.statusText
-                  DisplayError(snackbar, err);
-                  data = {"error": err};
-              }
+          // Fit the network for a few seconds.
+          const start = performance.now();
+          const lastFitParameters = {
+              "initialised": false
+          };
 
-              if (data.error) {
-                  DisplayError(snackbar, data.error);
-                  if (!data.empty_message) {
-                      data.empty_message = data.error + ".";
+          function fit() {
+              // If the user changed the viewport, stop trying to fit it.
+              if (lastFitParameters["initialised"]) {
+                  const position = VISJSNetwork.getViewPosition();
+                  if (VISJSNetwork.getScale() !== lastFitParameters["scale"] ||
+                      position.x !== lastFitParameters["x"] || position.y !== lastFitParameters["y"]) {
+
+                      // Stop fitting.
+                      return;
                   }
               }
 
-              let graphData = {
-                  nodes: data.nodes || [],
-                  edges: data.edges || [],
-                  empty_message: data.empty_message
+              VISJSNetwork.fit();
+
+              const position = VISJSNetwork.getViewPosition();
+              lastFitParameters["scale"] = VISJSNetwork.getScale();
+              lastFitParameters["x"] = position.x;
+              lastFitParameters["y"] = position.y;
+              lastFitParameters["initialised"] = true;
+
+              if (performance.now() - start < 10000) {
+                   requestAnimationFrame(fit);
               }
-              setGraphInfo({
-                  options: graphInfo.options,
-                  data: graphData
-              });
-              setLoadingProgress(100)
           }
+          setTimeout(() => requestAnimationFrame(fit));
+      }
 
-          POST('snapshot/visualise/', filters)
-              .then(processResponse)
-              .catch((err) => {
-                  processResponse(err.response, err.message)
-              });
-      }, 1500)
-
-      return () => clearTimeout(delayDebounceLoad);
+      POST('snapshot/visualise/', filters)
+          .then(processResponse)
+          .catch((err) => {
+              processResponse(err.response, err.message)
+          });
   }
 
-  useEffect(loadGraphData, [VISJSNetwork, filters]);
+  useEffect(loadGraphData, [loadResults])
 
-  return <div className="full-size">
+  useEffect(() => loadGraphData(true), [VISJSNetwork]) // The first time
+
+  return <div className="full-size" style={{opacity: resultsLoaded || loadResults ? 1 : 0.6}}>
       <VisJSGraph className="full-size" graph={graphInfo.data} options={graphInfo.options}
-          getNetwork={setNetwork} />
+          getNetwork={setNetwork}
+      />
 
       {loadingProgress < 100 &&
           <div id="visjs-loading-cover">
@@ -140,6 +176,7 @@ const Graph = () => {
           <div id="visjs-graph-info">
               {graphInfo.data.nodes.length.toLocaleString()} Nodes,&nbsp;
               {graphInfo.data.edges.length.toLocaleString()} Edges
+              <span className="not-loaded" >{resultsLoaded ? "" : " (Graph not refreshed)"}</span>
           </div>
       }
     </div>;

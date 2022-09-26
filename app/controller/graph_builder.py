@@ -1,12 +1,23 @@
 """
 Tool to construct graphs to pass to the frontend.
 """
+import datetime
+import math
 import textwrap
 import matplotlib.pyplot as plt
 from typing import Callable, cast, Optional, TypeVar
 
-from app.pubmed.filtering import PubMedFilterValueError
+import neo4j
+
 from app.pubmed.model import DBArticle, DBAuthor, DBArticleAuthorRelation
+
+
+class PubMedGraphError(Exception):
+    """
+    An error that is raised when there is an issue with the visualisation of a graph.
+    """
+    def __init__(self, message: str):
+        super().__init__(message)
 
 
 T = TypeVar("T")
@@ -15,7 +26,7 @@ T = TypeVar("T")
 def scale_value_source_results_linear(values: dict[T, float]) -> dict[T, float]:
     """
     Takes value source results that fall into an arbitrary range of values,
-    and scales them linearly into the range [0, 1].
+    and linearly scales them into the range [0, 1].
     """
     if len(values) == 0:
         return {}
@@ -41,6 +52,29 @@ def scale_value_source_results_linear(values: dict[T, float]) -> dict[T, float]:
     return scaled
 
 
+def scale_value_source_results_log(values: dict[T, float]) -> dict[T, float]:
+    """
+    Takes value source results that fall into an arbitrary range of values,
+    and scales them into the range [0, 1]. This is done by shifting all
+    values such that the minimum value falls at 1, and then linearly
+    scaling the log-10 of the shifted values.
+    """
+    if len(values) == 0:
+        return {}
+
+    # Find the limits.
+    shift_for_log_value = None
+    for value in values.values():
+        if shift_for_log_value is None or value < shift_for_log_value:
+            shift_for_log_value = value
+
+    # Take the log of all the values.
+    values = {key: math.log(value + max(0.0, shift_for_log_value) + 1) for key, value in values.items()}
+
+    # Find the limits.
+    return scale_value_source_results_linear(values)
+
+
 class NodesValueSource:
     """
     A source that can assign values in the range [0, 1] to nodes,
@@ -49,7 +83,7 @@ class NodesValueSource:
     def __init__(self):
         pass
 
-    def query(self, graph: 'Graph') -> dict[int, float]:
+    def query(self, graph: 'Graph', session: neo4j.Session) -> dict[int, float]:
         """
         Queries the graph, and potentially the database, to find the values of nodes.
         Returns the values of nodes as a dictionary from the node IDs to their values.
@@ -72,7 +106,7 @@ class ConstantNodesValueSource(NodesValueSource):
         super().__init__()
         self.value = value
 
-    def query(self, graph: 'Graph') -> dict[int, float]:
+    def query(self, graph: 'Graph', session: neo4j.Session) -> dict[int, float]:
         result: dict[int, float] = {}
         for node_id in graph.nodes:
             result[node_id] = self.value
@@ -88,10 +122,11 @@ class MatchedNodesValueSource(NodesValueSource):
         self.matched_value = matched_value
         self.connected_value = connected_value
 
-    def query(self, graph: 'Graph') -> dict[int, float]:
+    def query(self, graph: 'Graph', session: neo4j.Session) -> dict[int, float]:
         result: dict[int, float] = {}
         for node_id, node in graph.nodes.items():
             result[node_id] = self.matched_value if node.is_root_node else self.connected_value
+
         return result
 
 
@@ -104,10 +139,35 @@ class EdgeCountNodesValueSource(NodesValueSource):
         self.matched_value = matched_value
         self.connected_value = connected_value
 
-    def query(self, graph: 'Graph') -> dict[int, float]:
+    def query(self, graph: 'Graph', session: neo4j.Session) -> dict[int, float]:
         result: dict[int, float] = {}
         for node_id in graph.nodes.keys():
             result[node_id] = len(graph.node_edges[node_id])
+
+        return scale_value_source_results_log(result)
+
+
+class MeanPublicationDateNodesValueSource(NodesValueSource):
+    """
+    A source that assigns one value to matched nodes, and another to connected nodes.
+    """
+    def __init__(self):
+        super().__init__()
+
+    def query(self, graph: 'Graph', session: neo4j.Session) -> dict[int, float]:
+        result: dict[int, float] = {}
+        for node_id, author_node in graph.nodes.items():
+            author_node = cast(AuthorNode, author_node)
+
+            # Calculate the mean timestamp of their matching articles.
+            year_sum = 0.0
+            # 366 to account for leap years. We don't need that much accuracy.
+            one_year = datetime.timedelta(days=366)
+            for article in author_node.articles:
+                since_start_of_year = article.date - datetime.date(year=article.date.year, month=1, day=1)
+                year_sum += article.date.year + since_start_of_year / one_year
+
+            result[node_id] = year_sum / len(author_node.articles)
 
         return scale_value_source_results_linear(result)
 
@@ -121,8 +181,31 @@ class AuthorCitationsNodesValueSource(NodesValueSource):
     def __init__(self):
         super().__init__()
 
-    def query(self, graph: 'Graph') -> dict[int, float]:
-        raise NotImplementedError()
+    def query(self, graph: 'Graph', session: neo4j.Session) -> dict[int, float]:
+        author_node_ids = set()
+        for author_node in graph.nodes.values():
+            author_node_ids.add(cast(AuthorNode, author_node).node_id)
+
+        query_results = session.run(
+            """
+            CYPHER planner=dp
+            MATCH (author:Author)
+            WHERE id(author) IN $author_ids
+            MATCH (author) -[author_rel:AUTHOR_OF]-> (article:Article)
+            MATCH (article) <-[citing_rel:CITES]- (citing_article:Article)
+            RETURN id(author), COUNT(citing_rel)
+            """,
+            author_ids=list(author_node_ids)
+        )
+
+        result: dict[int, float] = {key: 0 for key in graph.nodes.keys()}
+        for record in query_results:
+            author_node_id, author_citations = record
+            for key, author_node in graph.nodes.items():
+                if author_node.node_id == author_node_id:
+                    result[key] = author_citations
+
+        return scale_value_source_results_log(result)
 
 
 class EdgesValueSource:
@@ -133,7 +216,7 @@ class EdgesValueSource:
     def __init__(self):
         pass
 
-    def query(self, graph: 'Graph') -> dict[tuple[int, int], float]:
+    def query(self, graph: 'Graph', session: neo4j.Session) -> dict[tuple[int, int], float]:
         """
         Queries the graph, and potentially the database, to find the values of nodes.
         Returns the values of nodes as a dictionary from the node IDs to their values.
@@ -156,7 +239,7 @@ class ConstantEdgesValueSource(EdgesValueSource):
         super().__init__()
         self.value = value
 
-    def query(self, graph: 'Graph') -> dict[tuple[int, int], float]:
+    def query(self, graph: 'Graph', session: neo4j.Session) -> dict[tuple[int, int], float]:
         result: dict[tuple[int, int], float] = {}
         for edge_key in graph.edges:
             result[edge_key] = self.value
@@ -172,12 +255,12 @@ class CoAuthoredArticlesEdgesValueSource(EdgesValueSource):
     def __init__(self):
         super().__init__()
 
-    def query(self, graph: 'Graph') -> dict[tuple[int, int], float]:
+    def query(self, graph: 'Graph', session: neo4j.Session) -> dict[tuple[int, int], float]:
         result: dict[tuple[int, int], float] = {}
         for edge_key, edge in graph.edges.items():
             result[edge_key] = len(cast(CoAuthorEdge, edge).articles)
 
-        return scale_value_source_results_linear(result)
+        return scale_value_source_results_log(result)
 
 
 class GraphOptions:
@@ -185,21 +268,10 @@ class GraphOptions:
     A class for holding the visualisation options for graphs.
     """
     def __init__(self):
-        self._node_limit: int = 1000
         self.node_size_source: NodesValueSource = MatchedNodesValueSource()
         self.node_colour_source: NodesValueSource = MatchedNodesValueSource()
         self.edge_size_source: EdgesValueSource = ConstantEdgesValueSource()
-
-    @property
-    def node_limit(self) -> int:
-        """ The maximum number of nodes to visualise. """
-        return self._node_limit
-
-    @node_limit.setter
-    def node_limit(self, value: int):
-        if value <= 0:
-            raise PubMedFilterValueError("graph_size", f"The requested graph size must be positive, not {value}")
-        self._node_limit = value
+        self.minimum_edges: int = 0
 
 
 class GraphNode:
@@ -248,8 +320,9 @@ class AuthorNode(GraphNode):
     """
     Represents a node in an author graph.
     """
-    def __init__(self, is_root_node: bool, author: DBAuthor, articles: list[DBArticle]):
+    def __init__(self, neo4j_node_id: int, is_root_node: bool, author: DBAuthor, articles: list[DBArticle]):
         super().__init__(author.author_id, is_root_node)
+        self.neo4j_node_id = neo4j_node_id
         self.author: DBAuthor = author
         self.articles: list[DBArticle] = articles
 
@@ -260,6 +333,7 @@ class AuthorNode(GraphNode):
     def get_title(self) -> Optional[str]:
         """ Returns the tooltip text of this node in the graph. """
         title = f"{self.author.full_name}\n"
+        title += "\n"
         title += ("Matching Author" if self.is_root_node else "Co-author") + f" of {len(self.articles)} articles"
         title += f"\n{list_articles_for_description(self.articles)}"
         return title
@@ -269,16 +343,22 @@ class ArticleAuthorNode(GraphNode):
     """
     Represents an intermediate node in building an author graph.
     """
-    def __init__(self, is_root_node: bool, author: DBAuthor, article: DBArticle):
+    def __init__(
+            self, neo4j_node_id: int, is_root_node: bool,
+            author: DBAuthor, article: DBArticle
+    ):
         super().__init__(author.author_id, is_root_node)
+        self.neo4j_node_id = neo4j_node_id
         self.author: DBAuthor = author
         self.article: DBArticle = article
 
     @staticmethod
     def collapse(nodes: list[GraphNode]) -> AuthorNode:
         """ Collapses many article-author nodes into a single author node. """
+        first_node = cast(ArticleAuthorNode, nodes[0])
+        neo4j_node_id: int = first_node.neo4j_node_id
         is_root_node: bool = False
-        author: DBAuthor = cast(ArticleAuthorNode, nodes[0]).author
+        author: DBAuthor = first_node.author
         articles: list[DBArticle] = []
         article_ids: set[int] = set()
         for node in nodes:
@@ -288,7 +368,7 @@ class ArticleAuthorNode(GraphNode):
                 article_ids.add(node.article.pmid)
                 articles.append(node.article)
 
-        return AuthorNode(is_root_node, author, articles)
+        return AuthorNode(neo4j_node_id, is_root_node, author, articles)
 
 
 class GraphEdge:
@@ -379,7 +459,7 @@ class Graph:
         self.nodes = nodes
         self.edges = edges
 
-        self.node_edges: dict[int, list[tuple[int, int]]] = {node_id: [] for node_id in nodes.keys()}
+        self.node_edges: dict[int, list[tuple[int, int]]] = {node_key: [] for node_key in nodes.keys()}
         for edge_key in edges.keys():
             edge_id_1, edge_id_2 = edge_key
             self.node_edges[edge_id_1].append(edge_key)
@@ -388,7 +468,9 @@ class Graph:
         self._nodes_value_source_results: list[tuple[NodesValueSource, dict[int, float]]] = []
         self._edges_value_source_results: list[tuple[EdgesValueSource, dict[tuple[int, int], float]]] = []
 
-    def _query_node_value_source(self, source: NodesValueSource) -> dict[int, float]:
+    def _query_node_value_source(
+            self, source: NodesValueSource, session: neo4j.Session
+    ) -> dict[int, float]:
         """
         Queries the source and saves its results.
         """
@@ -400,11 +482,13 @@ class Graph:
                 return saved_results
 
         # Otherwise, query the values.
-        results = source.query(self)
+        results = source.query(self, session)
         self._nodes_value_source_results.append((source, results))
         return results
 
-    def _query_edge_value_source(self, source: EdgesValueSource) -> dict[tuple[int, int], float]:
+    def _query_edge_value_source(
+            self, source: EdgesValueSource, session: neo4j.Session
+    ) -> dict[tuple[int, int], float]:
         """
         Queries the source and saves its results.
         """
@@ -416,26 +500,29 @@ class Graph:
                 return saved_results
 
         # Otherwise, query the values.
-        results = source.query(self)
+        results = source.query(self, session)
         self._edges_value_source_results.append((source, results))
         return results
 
-    def _build_node_json(self, options: GraphOptions) -> list[dict]:
-        node_size_values: dict[int, float] = self._query_node_value_source(options.node_size_source)
-        node_colour_values: dict[int, float] = self._query_node_value_source(options.node_colour_source)
+    def _build_node_json(self, options: GraphOptions, visible_nodes: set[int], session: neo4j.Session) -> list[dict]:
+        node_size_values: dict[int, float] = self._query_node_value_source(options.node_size_source, session)
+        node_colour_values: dict[int, float] = self._query_node_value_source(options.node_colour_source, session)
 
         cmap = plt.get_cmap("viridis")
 
         nodes: list[dict] = []
-        for node_id, node in self.nodes.items():
+        for node_key, node in self.nodes.items():
+            if node_key not in visible_nodes:
+                continue
+
             node_label = node.get_label()
             node_title = node.get_title()
-            node_size = node_size_values[node_id]
-            r, g, b, _ = cmap(node_colour_values[node_id])
+            node_size = node_size_values[node_key]
+            r, g, b, _ = cmap(node_colour_values[node_key])
             node_colour = f"rgb({round(255*r)}, {round(255*g)}, {round(255*b)})"
 
             node_json = {
-                "id": node_id,
+                "id": node_key,
                 "borderWidth": round(1 + node_size),
                 "borderWidthSelected": round(2 + node_size),
                 "size": round(20 + 20 * node_size),
@@ -450,18 +537,23 @@ class Graph:
 
         return nodes
 
-    def _build_edge_json(self, options: GraphOptions) -> list[dict]:
-        edge_size_values: dict[tuple[int, int], float] = self._query_edge_value_source(options.edge_size_source)
+    def _build_edge_json(self, options: GraphOptions, visible_nodes: set[int], session: neo4j.Session) -> list[dict]:
+        edge_size_values: dict[tuple[int, int], float] = self._query_edge_value_source(
+            options.edge_size_source, session
+        )
 
         edges: list[dict] = []
         for edge_key, edge in self.edges.items():
-            from_id, to_id = edge_key
+            from_node_key, to_node_key = edge_key
+            if from_node_key not in visible_nodes or to_node_key not in visible_nodes:
+                continue
+
             edge_title = edge.get_title()
             edge_size = edge_size_values[edge_key]
 
             edge_json = {
-                "from": from_id,
-                "to": to_id,
+                "from": from_node_key,
+                "to": to_node_key,
                 "value": edge_size
             }
             if edge_title is not None:
@@ -471,11 +563,19 @@ class Graph:
 
         return edges
 
-    def build_json(self, options: GraphOptions):
+    def build_json(self, options: GraphOptions, session: neo4j.Session):
         """ Builds the graph using the given options. """
+        visible_nodes: set[int] = set()
+        for node_key in self.nodes.keys():
+            if len(self.node_edges[node_key]) >= options.minimum_edges:
+                visible_nodes.add(node_key)
+
+        if len(visible_nodes) == 0:
+            raise PubMedGraphError("The graph filter options removed all nodes")
+
         return {
-            "nodes": self._build_node_json(options),
-            "edges": self._build_edge_json(options)
+            "nodes": self._build_node_json(options, visible_nodes, session),
+            "edges": self._build_edge_json(options, visible_nodes, session)
         }
 
 

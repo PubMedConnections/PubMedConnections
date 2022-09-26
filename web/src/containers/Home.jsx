@@ -23,7 +23,7 @@ function Home() {
     <div>
       <HomeNavigation />
       <Introduction />
-      <TeamDescription data={landingPageData.Team} />
+      <TeamDescription data={landingPageData["Team"]} />
     </div>
   );
 }

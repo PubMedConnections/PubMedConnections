@@ -39,33 +39,65 @@ class PubMedFilterResults:
         self.author_ids: Optional[list[int]] = list(author_ids) if author_ids is not None else None
 
 
+class PubMedFilterQuerySettings:
+    """
+    Holds the settings used to build a query.
+    """
+    def __init__(
+            self, node_limit: Optional[int] = None,
+            query_journals: bool = False,
+            query_mesh: bool = False,
+            query_articles: bool = False,
+            query_article_citations: bool = False,
+            query_authors: bool = False):
+
+        self.node_limit: Optional[int] = node_limit
+        self.query_journals: bool = query_journals
+        self.query_mesh: bool = query_mesh
+        self.query_articles: bool = query_articles
+        self.query_article_citations: bool = query_article_citations
+        self.query_authors: bool = query_authors
+
+    def copy(self) -> 'PubMedFilterQuerySettings':
+        """
+        Returns a copy of these settings that may be modified
+        without affecting this object.
+        """
+        return PubMedFilterQuerySettings(
+            self.node_limit, self.query_journals, self.query_mesh,
+            self.query_articles, self.query_article_citations, self.query_authors
+        )
+
+    def is_empty_query(self) -> bool:
+        """ Returns whether these settings would lead to a query that queries nothing. """
+        return not (self.query_journals or
+                    self.query_mesh or
+                    self.query_articles or
+                    self.query_article_citations or
+                    self.query_authors)
+
+
 class PubMedFilterQuery:
     """
     A query that is filtered based upon the properties of
     MeSH headings, articles, and authors.
     """
-    def __init__(
-            self, query: str, variables: dict[str, Any], node_limit: int,
-            query_journals, query_mesh, query_articles, query_authors
-    ):
+    def __init__(self, settings: PubMedFilterQuerySettings, query: str, variables: dict[str, Any]):
+        self.settings = settings
         self.query = query
         self.variables = variables
-        self.node_limit = node_limit
-        self.query_journals = query_journals
-        self.query_mesh = query_mesh
-        self.query_articles = query_articles
-        self.query_authors = query_authors
 
     def run(self, session: neo4j.Session) -> PubMedFilterResults:
         """
         Runs the transaction to fetch the IDs of all matching nodes.
         """
+        settings = self.settings
         results = session.run(self.query, **self.variables)
 
         # Determine the indices of the elements in the results tuple.
         next_tuple_index = 0
 
-        if self.query_journals:
+        if settings.query_journals:
             journal_index = next_tuple_index
             next_tuple_index += 1
             journal_ids = set()
@@ -73,7 +105,7 @@ class PubMedFilterQuery:
             journal_index = -1
             journal_ids = None
 
-        if self.query_mesh:
+        if settings.query_mesh:
             mesh_index = next_tuple_index
             next_tuple_index += 1
             mesh_ids = set()
@@ -81,7 +113,7 @@ class PubMedFilterQuery:
             mesh_index = -1
             mesh_ids = None
 
-        if self.query_articles:
+        if settings.query_articles:
             article_index = next_tuple_index
             next_tuple_index += 1
             article_ids = set()
@@ -89,7 +121,7 @@ class PubMedFilterQuery:
             article_index = -1
             article_ids = None
 
-        if self.query_authors:
+        if settings.query_authors:
             author_index = next_tuple_index
             next_tuple_index += 1
             author_ids = set()
@@ -100,17 +132,17 @@ class PubMedFilterQuery:
         num_records = 0
         for record in results:
             num_records += 1
-            if self.query_journals:
+            if settings.query_journals:
                 journal_ids.add(record[journal_index])
-            if self.query_mesh:
+            if settings.query_mesh:
                 mesh_ids.add(record[mesh_index])
-            if self.query_articles:
+            if settings.query_articles:
                 article_ids.add(record[article_index])
-            if self.query_authors:
+            if settings.query_authors:
                 author_ids.add(record[author_index])
 
-        if self.node_limit is not None and num_records >= self.node_limit:
-            raise PubMedFilterLimitError(f"The limit of {self.node_limit} nodes was reached")
+        if settings.node_limit is not None and num_records >= settings.node_limit:
+            raise PubMedFilterLimitError(f"The limit of {settings.node_limit} nodes was reached")
 
         return PubMedFilterResults(journal_ids, mesh_ids, article_ids, author_ids)
 
@@ -121,11 +153,12 @@ class PubMedFilterBuilder:
     filter MeSH headings, articles, and authors.
     """
     def __init__(self):
-        self._node_limit: Optional[int] = None
         self._journal_filters: list[str] = []
         self._mesh_filters: list[str] = []
         self._article_filters: list[str] = []
+        self._article_citations_filters: list[str] = []
         self._author_filters: list[str] = []
+        self._author_of_rel_filters: list[str] = []
         self._variable_values: dict[str, Any] = {}
 
     def get_parameter_map(self):
@@ -277,6 +310,12 @@ class PubMedFilterBuilder:
         """ Adds a filter by the name of articles. """
         self._article_filters.append(self._create_text_filter("article.title", "article", article_name))
 
+    def add_affiliation_filter(self, affiliation_name: str):
+        """ Adds a filter by the name of articles. """
+        self._author_of_rel_filters.append(
+            self._create_text_filter("author_rel.affiliation", "affiliation", affiliation_name)
+        )
+
     def add_author_name_filter(self, author_name: str):
         """
         Adds a filter by the name of authors.
@@ -289,11 +328,11 @@ class PubMedFilterBuilder:
 
     def add_first_author_filter(self):
         """ Adds a filter to only select first authors of articles. """
-        self._author_filters.append("author_rel.is_first_author")
+        self._author_of_rel_filters.append("author_rel.is_first_author")
 
     def add_last_author_filter(self):
         """ Adds a filter to only select last authors of articles. """
-        self._author_filters.append("author_rel.is_last_author")
+        self._author_of_rel_filters.append("author_rel.is_last_author")
 
     def add_published_after_filter(self, boundary_date: datetime.date):
         """ Adds a filter for all articles published after the given date. """
@@ -303,26 +342,9 @@ class PubMedFilterBuilder:
         """ Adds a filter for all articles published before the given date. """
         self._article_filters.append(f"article.date <= {self._next_filter_var(boundary_date)}")
 
-    def set_node_limit(self, node_limit: Optional[int]):
-        """
-        Sets the maximum number of nodes of each type to find.
-        If this limit is hit, then a PubMedFilterLimitError
-        will be raised.
-        """
-        if node_limit is not None and node_limit <= 0:
-            raise PubMedFilterValueError("graph_size", f"The requested graph size must be positive, not {node_limit}")
-
-        self._node_limit = node_limit
-
-    def get_node_limit(self) -> int:
-        """ Retrieves the currently set node limit. """
-        if self._node_limit is None:
-            raise Exception("There is no node limit")
-        return self._node_limit
-
     def build(
-            self, *, force_journals=False, force_mesh=False, force_articles=False, force_authors=False,
-            node_query=False, relationship_query=False
+            self, settings: PubMedFilterQuerySettings, *,
+            node_query: bool = False, relationship_query: bool = False
     ) -> PubMedFilterQuery:
         """
         Builds this list of filters into a Cypher query.
@@ -338,38 +360,46 @@ class PubMedFilterBuilder:
         contains_journal_filters = len(self._journal_filters) > 0
         contains_mesh_filters = len(self._mesh_filters) > 0
         contains_article_filters = len(self._article_filters) > 0
+        contains_article_citations_filters = len(self._article_citations_filters) > 0
         contains_author_filters = len(self._author_filters) > 0
+        contains_author_of_rel_filters = len(self._author_of_rel_filters) > 0
 
-        # Querying authors by MeSH heading requires querying the articles.
-        query_journals = force_journals or contains_journal_filters
-        query_authors = force_authors or contains_author_filters
-        query_articles = force_articles or contains_article_filters or query_authors
-        query_mesh = force_mesh or contains_mesh_filters
+        # Querying some fields requires querying others.
+        if contains_journal_filters:
+            settings.query_journals = True
+        if contains_author_filters or contains_author_of_rel_filters:
+            settings.query_authors = True
+        if contains_article_citations_filters:
+            settings.query_article_citations = True
+        if contains_article_filters or settings.query_authors or settings.query_article_citations:
+            settings.query_articles = True
+        if contains_mesh_filters:
+            settings.query_mesh = True
 
-        if not query_journals and not query_authors and not query_articles and not query_mesh:
+        if settings.is_empty_query():
             raise ValueError("Not querying for anything. Set some filters, or force query of some results")
 
         # Journal filters.
-        if query_journals:
+        if settings.query_journals:
             query += "MATCH (journal:Journal)\n"
         if contains_journal_filters:
             query += "WHERE\n\t"
             query += "\n\tAND ".join(self._journal_filters) + "\n"
 
         # MeSH filters.
-        if query_mesh:
+        if settings.query_mesh:
             query += "MATCH (mesh_heading:MeshHeading)\n"
         if contains_mesh_filters:
             query += "WHERE\n\t"
             query += "\n\tAND ".join(self._mesh_filters) + "\n"
 
         # Article filters.
-        if query_articles:
+        if settings.query_articles:
             left = ""
             right = ""
-            if query_journals:
+            if settings.query_journals:
                 left = "(journal) <-[article_published_in:PUBLISHED_IN]- "
-            if query_mesh:
+            if settings.query_mesh:
                 right = " -[article_categorised_by:CATEGORISED_BY]-> (mesh_heading)"
 
             query += f"MATCH {left}(article:Article){right}\n"
@@ -377,16 +407,29 @@ class PubMedFilterBuilder:
             query += "WHERE\n\t"
             query += "\n\tAND ".join(self._article_filters) + "\n"
 
+        # Article citation filters.
+        if settings.query_article_citations:
+            query += """
+            CALL {
+                WITH article
+                MATCH (article) <-[article_citation_rel:CITES]- (:Article)
+                RETURN COUNT(article_citation_rel) AS article_citations
+            }
+            """
+        if contains_article_citations_filters:
+            query += "WHERE\n\t"
+            query += "\n\tAND ".join(self._article_citations_filters) + "\n"
+
         # Author filters.
-        if query_authors:
-            if query_articles:
+        if settings.query_authors:
+            if settings.query_articles:
                 query += "MATCH (author:Author) -[author_rel:AUTHOR_OF]-> (article)\n"
             else:
                 query += "MATCH (author:Author)\n"
 
-        if contains_author_filters:
+        if contains_author_filters or contains_author_of_rel_filters:
             query += "WHERE\n\t"
-            query += "\n\tAND ".join(self._author_filters) 
+            query += "\n\tAND ".join(self._author_filters + self._author_of_rel_filters)
             query += "\n"
 
         # Collect and Unwind.
@@ -404,13 +447,13 @@ class PubMedFilterBuilder:
         # Return values.
         return_values = []
         if visualise_query:
-            if query_journals:
+            if settings.query_journals:
                 return_values.append("id(journal) AS journal_id")
-            if query_mesh:
+            if settings.query_mesh:
                 return_values.append("mesh_heading.id AS mesh_id")
-            if query_articles:
+            if settings.query_articles:
                 return_values.append("id(article) AS article_id")
-            if query_authors:
+            if settings.query_authors:
                 return_values.append("id(author) AS author_id")
         if node_query:
             return_values.append("DISTINCT id")
@@ -422,8 +465,8 @@ class PubMedFilterBuilder:
         query += "RETURN\n\t" + ",\n\t".join(return_values) + "\n"
 
         # Limits.
-        if self._node_limit is not None and not relationship_query:
-            query += f"LIMIT {self._next_filter_var(self._node_limit)}\n"
+        if settings.node_limit is not None and not relationship_query:
+            query += f"LIMIT {self._next_filter_var(settings.node_limit)}\n"
 
         if relationship_query:
             query += "}\n\n"
@@ -431,7 +474,4 @@ class PubMedFilterBuilder:
             query += "WHERE author1 = author OR author2 = author\n"
             query += "RETURN id(author1) as source, id(author2) as target, apoc.create.vRelationship(author1, 'COAUTHOR', {count: count(*)}, author2) as rel\n"
 
-        return PubMedFilterQuery(
-            query, self._variable_values, self._node_limit,
-            query_journals, query_mesh, query_articles, query_authors
-        )
+        return PubMedFilterQuery(settings, query, self._variable_values)
