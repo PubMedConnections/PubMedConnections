@@ -110,11 +110,15 @@ const Graph = () => {
 
           // Fit the network for a few seconds.
           const start = performance.now();
+          const settleDurationMS = 20 * 1000;
           const lastFitParameters = {
-              "initialised": false
+              "initialised": false,
+              "fitting": true,
           };
 
           function fit() {
+              const timeSinceStartMS = performance.now() - start;
+
               // If the user changed the viewport, stop trying to fit it.
               if (lastFitParameters["initialised"]) {
                   const position = VISJSNetwork.getViewPosition();
@@ -122,11 +126,19 @@ const Graph = () => {
                       position.x !== lastFitParameters["x"] || position.y !== lastFitParameters["y"]) {
 
                       // Stop fitting.
-                      return;
+                      lastFitParameters["fitting"] = false;
                   }
               }
 
-              VISJSNetwork.fit();
+              let options = graphInfo.options;
+              options = { ...options };
+              options.physics = { ...options.physics };
+              options.physics.timestep = Math.max(0.1, Math.pow(1 - timeSinceStartMS / settleDurationMS, 2));
+
+              VISJSNetwork.setOptions(options)
+              if (lastFitParameters["fitting"]) {
+                  VISJSNetwork.fit();
+              }
 
               const position = VISJSNetwork.getViewPosition();
               lastFitParameters["scale"] = VISJSNetwork.getScale();
@@ -134,8 +146,10 @@ const Graph = () => {
               lastFitParameters["y"] = position.y;
               lastFitParameters["initialised"] = true;
 
-              if (performance.now() - start < 10000) {
+              if (timeSinceStartMS < settleDurationMS) {
                    requestAnimationFrame(fit);
+              } else {
+                  lastFitParameters["fitting"] = false;
               }
           }
           setTimeout(() => requestAnimationFrame(fit));
