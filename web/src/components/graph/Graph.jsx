@@ -110,10 +110,11 @@ const Graph = () => {
 
           // Fit the network for a few seconds.
           const start = performance.now();
-          const settleDurationMS = 20 * 1000;
+          const settleDurationMS = 10 * 1000;
           const lastFitParameters = {
               "initialised": false,
               "fitting": true,
+              "timestep": -1
           };
 
           function fit() {
@@ -130,12 +131,17 @@ const Graph = () => {
                   }
               }
 
-              let options = graphInfo.options;
-              options = { ...options };
-              options.physics = { ...options.physics };
-              options.physics.timestep = Math.max(0.1, Math.pow(1 - timeSinceStartMS / settleDurationMS, 2));
+              let timestep = Math.max(0.1, 1 - 0.9 * timeSinceStartMS / settleDurationMS);
+              timestep = Math.round(10 * timestep) / 10.0;
 
-              VISJSNetwork.setOptions(options)
+              if (lastFitParameters["timestep"] !== timestep) {
+                  let options = graphInfo.options;
+                  options = { ...options };
+                  options.physics = { ...options.physics };
+                  options.physics.timestep = timestep;
+                  VISJSNetwork.setOptions(options);
+                  lastFitParameters["timestep"] = timestep;
+              }
               if (lastFitParameters["fitting"]) {
                   VISJSNetwork.fit();
               }
