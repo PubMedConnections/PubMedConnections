@@ -1,11 +1,15 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import LinearProgress from '@mui/material/LinearProgress'
 import {useSelector, useDispatch} from 'react-redux'
-import {POST, PUT} from "../../utils/APIRequests";
-import VisJSGraph from 'react-graph-vis';
+import {POST} from "../../utils/APIRequests";
 import { useSnackbar } from 'notistack';
 import { DisplayError } from '../common/SnackBar';
-import {setLoadResults, setResultsReturned, setResultsLoaded} from '../../store/slices/filterSlice'
+import {setLoadResults, setResultsReturned, setResultsLoaded} from '../../store/slices/filterSlice';
+import VisJSGraph from "./react-graph-vis";
+
+const graphSettlingPersistentState = {
+    "settleStartTimeMS": -1
+};
 
 const Graph = () => {
   const snackbar = useSnackbar();
@@ -53,8 +57,8 @@ const Graph = () => {
           },
           stabilization: {
               enabled: true,
-              iterations: 200,
-              updateInterval: 50
+              iterations: 1000,
+              updateInterval: 20
           }
       }
     },
@@ -110,6 +114,10 @@ const Graph = () => {
 
           // Fit the network for a few seconds.
           const start = performance.now();
+          graphSettlingPersistentState["settleStartTimeMS"] = start;
+          if (!graphData || !graphData.nodes || graphData.nodes.length === 0)
+              return;
+
           const settleDurationMS = 10 * 1000;
           const lastFitParameters = {
               "initialised": false,
@@ -117,7 +125,11 @@ const Graph = () => {
               "timestep": -1
           };
 
-          function fit() {
+          function settleGraph() {
+              // If the graph has been changed, there will be a new settleGraph loop.
+              if (graphSettlingPersistentState["settleStartTimeMS"] !== start)
+                  return;
+
               const timeSinceStartMS = performance.now() - start;
 
               // If the user changed the viewport, stop trying to fit it.
@@ -153,12 +165,12 @@ const Graph = () => {
               lastFitParameters["initialised"] = true;
 
               if (timeSinceStartMS < settleDurationMS) {
-                   requestAnimationFrame(fit);
+                   requestAnimationFrame(settleGraph);
               } else {
                   lastFitParameters["fitting"] = false;
               }
           }
-          setTimeout(() => requestAnimationFrame(fit));
+          setTimeout(() => requestAnimationFrame(settleGraph));
       }
 
       POST('snapshot/visualise/', filters)
@@ -173,9 +185,12 @@ const Graph = () => {
   useEffect(() => loadGraphData(true), [VISJSNetwork]) // The first time
 
   return <div className="full-size" style={{opacity: resultsLoaded || loadResults ? 1 : 0.6}}>
-      <VisJSGraph className="full-size" graph={graphInfo.data} options={graphInfo.options}
-          getNetwork={setNetwork}
-      />
+      <VisJSGraph
+          identifier="visualised-pubmed-graph"
+          className="full-size"
+          graph={graphInfo.data}
+          options={graphInfo.options}
+          getNetwork={setNetwork} />
 
       {loadingProgress < 100 &&
           <div id="visjs-loading-cover">
