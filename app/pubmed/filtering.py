@@ -379,9 +379,13 @@ class PubMedFilterBuilder:
         if settings.is_empty_query():
             raise ValueError("Not querying for anything. Set some filters, or force query of some results")
 
+        # Journal and MeSH relationships require additional filters for articles and authors.
+        effective_article_author_filters = self._article_filters + self._author_filters + self._author_of_rel_filters
+
         # Journal filters.
         if settings.query_journals:
             query += "MATCH (journal:Journal)\n"
+            effective_article_author_filters.append("exists((article)-[:PUBLISHED_IN]->(journal))")
         if contains_journal_filters:
             query += "WHERE\n\t"
             query += "\n\tAND ".join(self._journal_filters) + "\n"
@@ -389,23 +393,21 @@ class PubMedFilterBuilder:
         # MeSH filters.
         if settings.query_mesh:
             query += "MATCH (mesh_heading:MeshHeading)\n"
+            effective_article_author_filters.append("exists((article)-[:CATEGORISED_BY]->(mesh_heading))")
         if contains_mesh_filters:
             query += "WHERE\n\t"
             query += "\n\tAND ".join(self._mesh_filters) + "\n"
 
-        # Article filters.
-        if settings.query_articles:
-            left = ""
-            right = ""
-            if settings.query_journals:
-                left = "(journal) <-[article_published_in:PUBLISHED_IN]- "
-            if settings.query_mesh:
-                right = " -[article_categorised_by:CATEGORISED_BY]-> (mesh_heading)"
-
-            query += f"MATCH {left}(article:Article){right}\n"
-        if contains_article_filters:
+        # Article and Author filters (combined for speed).
+        if settings.query_articles and settings.query_authors:
+            query += "MATCH (article:Article) <-[author_rel:AUTHOR_OF]- (author:Author)"
+        elif settings.query_articles:
+            query += "MATCH (article:Article)"
+        elif settings.query_articles:
+            query += "MATCH (author:Author)"
+        if len(effective_article_author_filters) > 0:
             query += "WHERE\n\t"
-            query += "\n\tAND ".join(self._article_filters) + "\n"
+            query += "\n\tAND ".join(effective_article_author_filters) + "\n"
 
         # Article citation filters.
         if settings.query_article_citations:
@@ -419,18 +421,6 @@ class PubMedFilterBuilder:
         if contains_article_citations_filters:
             query += "WHERE\n\t"
             query += "\n\tAND ".join(self._article_citations_filters) + "\n"
-
-        # Author filters.
-        if settings.query_authors:
-            if settings.query_articles:
-                query += "MATCH (author:Author) -[author_rel:AUTHOR_OF]-> (article)\n"
-            else:
-                query += "MATCH (author:Author)\n"
-
-        if contains_author_filters or contains_author_of_rel_filters:
-            query += "WHERE\n\t"
-            query += "\n\tAND ".join(self._author_filters + self._author_of_rel_filters)
-            query += "\n"
 
         # Collect and Unwind.
         if node_query:

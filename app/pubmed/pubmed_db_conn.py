@@ -71,7 +71,7 @@ class PubMedCacheConn:
 
         # Create a connection to the database to create its constraints and grab metadata.
         with self.new_session() as session:
-            self._create_constraints(session)
+            self._create_constraints_and_indexes(session)
             self._fetch_metadata(session)
 
         return self
@@ -86,9 +86,9 @@ class PubMedCacheConn:
     def new_session(self) -> neo4j.Session:
         return self.driver.session(database=self.database)
 
-    def _create_constraints(self, session: neo4j.Session):
+    def _create_constraints_and_indexes(self, session: neo4j.Session):
         """
-        This method creates all the constraints required for the database.
+        This method creates all the constraints and indexes required for the database.
         Uniqueness constraints implicitly create an index for the constraint as well.
         """
 
@@ -96,6 +96,10 @@ class PubMedCacheConn:
         session.run(
             "CREATE CONSTRAINT unique_mesh_heading_ids IF NOT EXISTS "
             "FOR (h:MeshHeading) REQUIRE h.id IS UNIQUE"
+        ).consume()
+        session.run(
+            "CREATE INDEX mesh_name IF NOT EXISTS "
+            "FOR (h:MeshHeading) ON (h.name)"
         ).consume()
 
         # Authors.
@@ -113,11 +117,53 @@ class PubMedCacheConn:
             "CREATE CONSTRAINT unique_journal_ids IF NOT EXISTS "
             "FOR (j:Journal) REQUIRE j.id IS UNIQUE"
         ).consume()
+        session.run(
+            "CREATE INDEX journal_title IF NOT EXISTS "
+            "FOR (j:Journal) ON (j.title)"
+        ).consume()
 
         # Articles.
         session.run(
             "CREATE CONSTRAINT unique_article_pmids IF NOT EXISTS "
             "FOR (a:Article) REQUIRE a.pmid IS UNIQUE"
+        ).consume()
+        session.run(
+            "CREATE INDEX article_date IF NOT EXISTS "
+            "FOR (a:Article) ON (a.date)"
+        ).consume()
+        session.run(
+            "CREATE INDEX article_title IF NOT EXISTS "
+            "FOR (a:Article) ON (a.title)"
+        ).consume()
+
+        # AUTHOR_OF
+        session.run(
+            "CREATE INDEX author_of_affiliation IF NOT EXISTS "
+            "FOR ()-[r:AUTHOR_OF]-() ON (r.affiliation)"
+        ).consume()
+
+        # DBMetadata
+        session.run(
+            "CREATE CONSTRAINT unique_dbmetadata_versions IF NOT EXISTS "
+            "FOR (m:DBMetadata) REQUIRE m.version IS UNIQUE"
+        ).consume()
+
+        # DBMetadataDataFile
+        session.run(
+            "CREATE INDEX dbmetadata_datafile_file IF NOT EXISTS "
+            "FOR (m:DBMetadataDataFile) ON (m.file)"
+        ).consume()
+
+        # DBMetadataMeshFile
+        session.run(
+            "CREATE INDEX dbmetadata_meshfile_file IF NOT EXISTS "
+            "FOR (m:DBMetadataMeshFile) ON (m.file)"
+        ).consume()
+
+        # User
+        session.run(
+            "CREATE CONSTRAINT unique_user_usernames IF NOT EXISTS "
+            "FOR (u:User) REQUIRE u.username IS UNIQUE"
         ).consume()
 
         # We don't want to start inserting data until the indices are created.
