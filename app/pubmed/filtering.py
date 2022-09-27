@@ -1,5 +1,5 @@
 import datetime
-from typing import Any, Optional, Iterable
+from typing import Any, Optional, Iterable, cast
 
 import re
 import neo4j
@@ -76,6 +76,21 @@ class PubMedFilterQuerySettings:
                     self.query_article_citations or
                     self.query_authors)
 
+    def __eq__(self, other):
+        """
+        Returns whether this query is equivalent to the other query.
+        """
+        if type(self) != type(other):
+            return False
+
+        other = cast(PubMedFilterQuerySettings, other)
+        return (self.node_limit == other.node_limit and
+                self.query_journals == other.query_journals and
+                self.query_mesh == other.query_mesh and
+                self.query_articles == other.query_articles and
+                self.query_article_citations == other.query_article_citations and
+                self.query_authors == other.query_authors)
+
 
 class PubMedFilterQuery:
     """
@@ -86,6 +101,16 @@ class PubMedFilterQuery:
         self.settings = settings
         self.query = query
         self.variables = variables
+
+    def __eq__(self, other):
+        """
+        Returns whether this query is equivalent to the other query.
+        """
+        if type(self) != type(other):
+            return False
+
+        other = cast(PubMedFilterQuery, other)
+        return self.settings == other.settings and self.query == other.query and self.variables == other.variables
 
     def run(self, session: neo4j.Session) -> PubMedFilterResults:
         """
@@ -465,3 +490,46 @@ class PubMedFilterBuilder:
             query += "RETURN id(author1) as source, id(author2) as target, apoc.create.vRelationship(author1, 'COAUTHOR', {count: count(*)}, author2) as rel\n"
 
         return PubMedFilterQuery(settings, query, self._variable_values)
+
+
+class PubMedFilterCache:
+    """
+    Caches the results of past filter queries to be re-used for future requests.
+    This is especially helpful when only changing the graph properties.
+    """
+    def __init__(self, results_to_hold: int = 10):
+        self.results_to_hold = results_to_hold
+        self.past_results: list[tuple[PubMedFilterQuery, PubMedFilterResults]] = []
+
+    def get(self, query: PubMedFilterQuery) -> Optional[PubMedFilterResults]:
+        """
+        If the results for the given query have been saved, returns them.
+        Otherwise, returns None.
+        """
+        for past_query, results in self.past_results:
+            if past_query == query:
+                return results
+
+        return None
+
+    def add(self, query: PubMedFilterQuery, results: PubMedFilterResults):
+        """
+        Saves the results of the given query so that they can be re-used
+        if the same query is made in the future.
+        """
+        self.past_results.append((query, results))
+        while len(self.past_results) > self.results_to_hold:
+            self.past_results = self.past_results[1:]
+
+    def get_or_run(self, query: PubMedFilterQuery, session: neo4j.Session) -> PubMedFilterResults:
+        """
+        If the results of the query have been cached, then returns the cached results.
+        Otherwise, runs the query and caches the results.
+        """
+        existing_results = self.get(query)
+        if existing_results is not None:
+            return existing_results
+
+        results = query.run(session)
+        self.add(query, results)
+        return results

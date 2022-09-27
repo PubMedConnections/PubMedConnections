@@ -1,6 +1,8 @@
 import sys
 from typing import Any, Optional
 
+import neo4j
+
 from app import neo4j_conn, PubMedCacheConn
 from flask import jsonify
 from datetime import datetime, date
@@ -11,7 +13,7 @@ from app.controller.graph_builder import GraphOptions, GraphBuilder, ArticleAuth
 from app.helpers import _create_query_from_filters
 
 from app.pubmed.filtering import PubMedFilterBuilder, PubMedFilterLimitError, PubMedFilterValueError, \
-    PubMedFilterQuerySettings
+    PubMedFilterQuerySettings, PubMedFilterCache, PubMedFilterQuery, PubMedFilterResults
 
 
 def parse_date(filter_key: str, date_str: str) -> datetime:
@@ -180,6 +182,9 @@ def construct_graph_filter(filters: dict[str, Any]) -> PubMedFilterBuilder:
     return filter_builder
 
 
+filter_query_cache = PubMedFilterCache()
+
+
 def query_graph(filters: dict[str, Any]):
     """
     Builds a graph from the given filter options.
@@ -210,7 +215,7 @@ def query_coauthor_graph(filters: dict[str, Any], open: bool):
 
     with neo4j_conn.new_session() as session:
         # Query for the authors that match the filters.
-        filter_results = graph_filter.build(query_settings).run(session)
+        filter_results = filter_query_cache.get_or_run(graph_filter.build(query_settings), session)
 
         # Query for the co-author graph.
         co_author_graph_results = session.run(
