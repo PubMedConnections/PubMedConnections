@@ -87,7 +87,6 @@ const Graph = () => {
           let data = resp.data;
           if (resp.status !== 200) {
               const err = errorMessage || resp.statusText
-              DisplayError(snackbar, err);
               data = {"error": err};
           }
 
@@ -179,9 +178,11 @@ const Graph = () => {
               processResponse(err.response, err.message)
           });
   }
-
+  
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(loadGraphData, [loadResults])
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => loadGraphData(true), [VISJSNetwork]) // The first time
 
   return <div className="full-size" style={{opacity: resultsLoaded || loadResults ? 1 : 0.6}}>
