@@ -255,7 +255,7 @@ def get_analytics(snapshot_id: int):
 
         print("starting analytics")
 
-        graph_name = "coauthors" + str(snapshot_id)
+        graph_name = "coauthors"
 
         # parse date strings into date time
         snapshot = set_default_date(snapshot)
