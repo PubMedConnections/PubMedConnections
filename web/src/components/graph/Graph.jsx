@@ -38,6 +38,12 @@ const Graph = () => {
           arrows: {to: {enabled: false}},
           scaling: {
               label: true
+          },
+          color: {
+            inherit: false,
+            highlight: '#bbbbbb',
+            color: '#cccccc',
+            hover: '#cccccc'
           }
       },
       interaction: {
