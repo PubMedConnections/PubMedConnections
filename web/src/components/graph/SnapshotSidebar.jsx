@@ -36,7 +36,6 @@ function SnapshotSidebar() {
   const [showModal, setShowModal] = useState(false);
 
   const [analyticsData, setAnalyticsData] = useState(null);
-  const [analyticsLoading, setAnalyticsLoading] = useState(false);
 
   function updateSnapshots(id) {
     GET('snapshot/list/')
@@ -157,11 +156,9 @@ function SnapshotSidebar() {
     useEffect(() => {
         setAnalyticsData(null);
         if (selectedSnapshot > -1) {
-            setAnalyticsLoading(true);
             GET('snapshot/analyse/' + selectedSnapshot)
                 .then((resp) => {
                     setAnalyticsData(resp.data);
-                    setAnalyticsLoading(false);
                 })
                 .catch((err) => {
                     console.log(err);
