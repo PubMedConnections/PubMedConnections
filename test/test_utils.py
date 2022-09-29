@@ -14,7 +14,7 @@ class TestUtils(TestCase):
         self.assertEqual(
             "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Curabitur at velit susc... <Truncated Name>",
             truncate_long_names(
-                "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Curabitur at velit suscipit, efficitur"
+                "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Curabitur at velit suscipit, efficitur "
                 "eroseget, scelerisque sem. Etiam interdum a sem ut eleifend. Etiam tempus",
                 max_name_length=100
             )
@@ -23,7 +23,7 @@ class TestUtils(TestCase):
         self.assertEqual(
             "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Curabitur at velit suscipit... <Truncated Name>",
             truncate_long_names(
-                "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Curabitur at velit suscipit, efficitur"
+                "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Curabitur at velit suscipit, efficitur "
                 "eroseget, scelerisque sem. Etiam interdum a sem ut eleifend. Etiam tempus",
                 max_name_length=120
             )
@@ -32,7 +32,7 @@ class TestUtils(TestCase):
         self.assertEqual(
             "Lorem ipsum dolor sit amet, (...). Curabitur at velit suscipit, efficitur eroseget... <Truncated Name>",
             truncate_long_names(
-                "Lorem ipsum dolor sit amet, (consectetur adipiscing elit). Curabitur at velit suscipit, efficitur"
+                "Lorem ipsum dolor sit amet, (consectetur adipiscing elit). Curabitur at velit suscipit, efficitur "
                 "eroseget, (scelerisque sem). Etiam interdum a sem ut eleifend. Etiam tempus",
                 max_name_length=120
             )
@@ -40,16 +40,25 @@ class TestUtils(TestCase):
         self.assertEqual(
             "Lorem ipsum dolor sit amet, [...]. Curabitur at velit suscipit, {...}... <Truncated Name>",
             truncate_long_names(
-                "Lorem ipsum dolor sit amet, [consectetur adipiscing elit]. Curabitur at velit suscipit, {efficitur"
+                "Lorem ipsum dolor sit amet, [consectetur adipiscing elit]. Curabitur at velit suscipit, {efficitur "
                 "eroseget}, scelerisque sem. Etiam interdum a sem ut eleifend. Etiam tempus",
                 max_name_length=120
             )
         )
         self.assertEqual(
-            "Lorem ipsum dolor sit amet, (...). Curabitur at velit suscipit, efficitureroseget... <Truncated Name>",
+            "Lorem ipsum dolor sit amet, (...). Curabitur at velit suscipit, efficitur eroseget... <Truncated Name>",
             truncate_long_names(
-                "Lorem ipsum dolor sit amet, ([consectetur (adipiscing) elit]). Curabitur at velit suscipit, efficitur"
+                "Lorem ipsum dolor sit amet, ([consectetur (adipiscing) elit]). Curabitur at velit suscipit, efficitur "
                 "eroseget, scelerisque sem. Etiam interdum a sem ut eleifend. Etiam tempus",
+                max_name_length=120
+            )
+        )
+        # Don't remove everything in brackets.
+        self.assertEqual(
+            "[Lorem ipsum dolor sit amet, (...). Curabitur at velit suscipit, efficitureroseget... <Truncated Name>",
+            truncate_long_names(
+                "[Lorem ipsum dolor sit amet, ([consectetur (adipiscing) elit]). Curabitur at velit suscipit, efficitur"
+                "eroseget, scelerisque sem. Etiam interdum a sem ut eleifend. Etiam tempus]",
                 max_name_length=120
             )
         )
