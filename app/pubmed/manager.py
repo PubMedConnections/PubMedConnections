@@ -99,7 +99,7 @@ class PubMedManager:
         example_file_xml = example_file_prefix + example_filename + ".xml"
 
         flush_print("PubMedSync: Writing example file to", example_file_xml)
-        with open(example_file_xml, "w") as f:
+        with open(example_file_xml, "w", encoding='utf8') as f:
             f.write(example_file_contents.decode("utf8"))
 
         return 0
