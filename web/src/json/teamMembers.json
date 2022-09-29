@@ -2,6 +2,11 @@
   "Team": [
     {
       "img": "img/team/default.jpg",
+      "name": "Marc Tennant",
+      "st_num": "Project Owner"
+    },
+    {
+      "img": "img/team/default.jpg",
       "name": "Jai Castle",
       "st_num": "22465418"
     },
