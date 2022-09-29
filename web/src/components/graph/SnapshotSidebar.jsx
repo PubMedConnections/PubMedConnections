@@ -194,7 +194,7 @@ function SnapshotSidebar() {
                           setSelectedSnapshot(snapshot.id);
                           let new_filters = {}
                           Object.keys(snapshot).forEach(f => {
-                            if (f !== "id" && f !== "creation_time") {
+                            if (f !== "id" && f !== "creation_time" && f !== "betweenness_centrality" && f !== "degree_centrality") {
                               new_filters[f] = snapshot[f]
                             }
                           });
