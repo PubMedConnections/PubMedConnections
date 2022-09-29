@@ -20,6 +20,28 @@ def truncate_long_names(name: str, max_name_length: int = 512, *, suffix: str = 
     if len(suffix) >= max_name_length:
         raise ValueError("The suffix is longer than the maximum name length!")
 
+    # First, remove all content between brackets.
+    for brackets in ["()", "[]", "{}"]:
+        left_bracket, right_bracket = brackets
+        result = ""
+        depth = 0
+        for ch in name:
+            if ch == left_bracket:
+                depth += 1
+                if depth == 1:
+                    result += f"{left_bracket}...{right_bracket}"
+            elif ch == right_bracket:
+                depth = max(0, depth - 1)
+            elif depth == 0:
+                result += ch
+
+        # If the whole name is in brackets, we don't want to remove everything.
+        if len(result) >= max_name_length // 3:
+            name = result
+            if len(name) <= max_name_length:
+                return name
+
+    # Remove text from end of the name.
     truncated = name[:(max_name_length - len(suffix))]
 
     def find_break(find: str):

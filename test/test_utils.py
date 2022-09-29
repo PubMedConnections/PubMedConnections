@@ -9,6 +9,51 @@ def _test_run_over_threads_func(a, b, c):
 
 
 class TestUtils(TestCase):
+    def test_truncate_long_names(self):
+        # Normal truncation.
+        self.assertEqual(
+            "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Curabitur at velit susc... <Truncated Name>",
+            truncate_long_names(
+                "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Curabitur at velit suscipit, efficitur"
+                "eroseget, scelerisque sem. Etiam interdum a sem ut eleifend. Etiam tempus",
+                max_name_length=100
+            )
+        )
+        # Truncate at punctuation.
+        self.assertEqual(
+            "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Curabitur at velit suscipit... <Truncated Name>",
+            truncate_long_names(
+                "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Curabitur at velit suscipit, efficitur"
+                "eroseget, scelerisque sem. Etiam interdum a sem ut eleifend. Etiam tempus",
+                max_name_length=120
+            )
+        )
+        # Remove content in brackets.
+        self.assertEqual(
+            "Lorem ipsum dolor sit amet, (...). Curabitur at velit suscipit, efficitur eroseget... <Truncated Name>",
+            truncate_long_names(
+                "Lorem ipsum dolor sit amet, (consectetur adipiscing elit). Curabitur at velit suscipit, efficitur"
+                "eroseget, (scelerisque sem). Etiam interdum a sem ut eleifend. Etiam tempus",
+                max_name_length=120
+            )
+        )
+        self.assertEqual(
+            "Lorem ipsum dolor sit amet, [...]. Curabitur at velit suscipit, {...}... <Truncated Name>",
+            truncate_long_names(
+                "Lorem ipsum dolor sit amet, [consectetur adipiscing elit]. Curabitur at velit suscipit, {efficitur"
+                "eroseget}, scelerisque sem. Etiam interdum a sem ut eleifend. Etiam tempus",
+                max_name_length=120
+            )
+        )
+        self.assertEqual(
+            "Lorem ipsum dolor sit amet, (...). Curabitur at velit suscipit, efficitureroseget... <Truncated Name>",
+            truncate_long_names(
+                "Lorem ipsum dolor sit amet, ([consectetur (adipiscing) elit]). Curabitur at velit suscipit, efficitur"
+                "eroseget, scelerisque sem. Etiam interdum a sem ut eleifend. Etiam tempus",
+                max_name_length=120
+            )
+        )
+
     def test_curry(self):
         def func(*args, **kwargs):
             key_args = [key + "=" + kwargs[key] for key in kwargs]
