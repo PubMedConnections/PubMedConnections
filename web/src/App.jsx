@@ -15,6 +15,7 @@ import {useDispatch} from "react-redux";
 import {GET} from "./utils/APIRequests";
 import {setAuth} from "./store/slices/userSlice";
 import LinearProgress from "@mui/material/LinearProgress";
+import Redirect from "./containers/Redirect";
 
 const MUITheme = createTheme({
   palette: {
@@ -70,6 +71,7 @@ function App() {
             <Route path='explore' element={<Explore />} />
           </Route>
         </Route>
+        <Route path='/redirect/:toLink' element={<Redirect />}/>
       </Routes>)}
     </ThemeProvider>
   );
