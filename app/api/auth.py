@@ -42,7 +42,7 @@ class Login(Resource):
         username = data['username']
         password = data['password']
         if not password or not username:
-            return make_response(jsonify('Username or password cannot be empty!', 400))
+            return make_response(jsonify('Username or password cannot be empty!'), 400)
         if authenticate_user(username, password):
             access_token = create_access_token(identity=username)
             return make_response(jsonify(access_token=access_token), 200)
