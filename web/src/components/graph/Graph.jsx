@@ -41,14 +41,14 @@ const Graph = () => {
           },
           color: {
             inherit: false,
-            highlight: '#bbbbbb',
-            color: '#cccccc',
-            hover: '#cccccc'
+            color: '#ccc',
+            hover: '#777',
+            highlight: '#333'
           }
       },
       interaction: {
         hover: true,
-        tooltipDelay: 100,
+        tooltipDelay: 500,
       },
       physics: {
           minVelocity: 2,
