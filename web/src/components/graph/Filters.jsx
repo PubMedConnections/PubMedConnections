@@ -53,7 +53,7 @@ const Filters = () => {
             <div className="filter-name"><p>{filterDesc.name}</p></div>
             <div className="filter-entry">{element}</div>
             {filterDesc.help &&
-                <div className="filter-delete">
+                <div className="filter-help">
                     <IconButton size={"small"}
                                 onMouseEnter={(event) => handlePopoverOpen(filterDesc.key, event)}
                                 onMouseLeave={() => handlePopoverClose(filterDesc.key)}>
