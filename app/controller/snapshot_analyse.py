@@ -175,12 +175,13 @@ def project_graph_and_run_analytics(
 
             # get the top 5 nodes by betweenness centrality
             top_5_betweenness = []
+            res['score'] = res['score'].astype(int)
             for row in res.head(5).itertuples():
                 top_5_betweenness.append(
                     {
                         "id": row.nodeId,
                         "name": gds.util.asNode(row.nodeId).get('name'),
-                        "centrality": int(row.score)
+                        "centrality": row.score
                     }
                 )
 
@@ -189,7 +190,7 @@ def project_graph_and_run_analytics(
             for score, count in res['score'].value_counts().sort_index().iteritems():
                 betweenness_distributions.append(
                     {
-                        "score": int(score),
+                        "score": score,
                         "count": count
                     }
                 )
