@@ -303,36 +303,75 @@ class DBJournal:
         return "<Journal {}: {}>".format(self.identifier, str(self))
 
 
-class DBArticleAuthorRelation:
+class DBArticleAuthor:
     """
-    Represents the relationship that represents authorship of an article.
-    The authorship is represented by the
+    An intermediate node between an Author and an Article, that may be
+    related to an Affiliation.
     """
     def __init__(self,
-                 article: 'DBArticle',
-                 author: DBAuthor,
-                 affiliation: Optional[str],
                  author_position: int,
                  is_first_author: bool,
                  is_last_author: bool):
 
-        self.article = article
-        self.author = author
-        self.affiliation = truncate_long_names(affiliation) if affiliation is not None else None
         self.author_position = author_position
         self.is_first_author = is_first_author
         self.is_last_author = is_last_author
+        self._article: Optional[DBArticle] = None
+        self._author: Optional[DBAuthor] = None
+        self._affiliation_available: bool = False
+        self._affiliation: Optional[DBAffiliation] = None
+
+    @property
+    def article(self) -> 'DBArticle':
+        if self._article is None:
+            raise ValueError("The article of this ArticleAuthor has not been read from the database")
+        return self._article
+
+    @article.setter
+    def article(self, article: 'DBArticle'):
+        self._article = article
+
+    @property
+    def author(self) -> 'DBAuthor':
+        if self._author is None:
+            raise ValueError("The author of this ArticleAuthor has not been read from the database")
+        return self._author
+
+    @author.setter
+    def author(self, author: 'DBAuthor'):
+        self._author = author
+
+    @property
+    def affiliation(self) -> Optional['DBAffiliation']:
+        if not self._affiliation_available:
+            raise ValueError("The affiliation of this ArticleAuthor has not been read from the database")
+        return self._affiliation
+
+    def set_affiliation(self, affiliation: Optional['DBAffiliation'], from_database: bool):
+        self._affiliation_available = from_database
+        self._affiliation = affiliation
 
     def __str__(self):
-        return f"({str(self.author)}) " \
-               f"-[:AUTHOR_OF {{author_pos={self.author_position}, " \
-               f"affiliation={self.affiliation}, " \
+        return f"(:ArticleAuthor {{author_pos={self.author_position}, " \
                f"first={self.is_first_author}, " \
-               f"last={self.is_last_author} }}]-> " \
-               f"({str(self.article)})"
+               f"last={self.is_last_author} }})"
 
     def __repr__(self):
-        return f"<ArticleAuthorRelation {str(self)}>"
+        return f"<ArticleAuthor {str(self)}>"
+
+
+class DBAffiliation:
+    """
+    Represents an affiliation of author/s of articles.
+    """
+    def __init__(self, name: str):
+        self.name = truncate_long_names(name)
+
+    def __str__(self):
+        return f"{self.name}"
+
+    def __repr__(self):
+        return f"<Affiliation {str(self)}>"
 
 
 class DBArticle:
@@ -349,7 +388,7 @@ class DBArticle:
         self.date: datetime.date = date
         self.title: str = truncate_long_names(title)
         self._journal: Optional[DBJournal] = None
-        self._author_relations: Optional[list[DBArticleAuthorRelation]] = None
+        self._authors: Optional[list[DBArticleAuthor]] = None
         self._reference_pmids: Optional[list[int]] = None
         self._mesh_descriptor_ids: Optional[list[int]] = None
 
@@ -389,19 +428,19 @@ class DBArticle:
     @property
     def authors(self) -> list[DBAuthor]:
         """ Returns all the Authors of this article. """
-        return [relation.author for relation in self.author_relations]
+        return [relation.author for relation in self.article_authors]
 
     @property
-    def author_relations(self) -> list[DBArticleAuthorRelation]:
+    def article_authors(self) -> list[DBArticleAuthor]:
         """ Returns all the ArticleAuthorRelations of this article. """
-        if self._author_relations is None:
+        if self._authors is None:
             raise ValueError("The authors of this article have not been read from the database")
-        return self._author_relations
+        return self._authors
 
-    @author_relations.setter
-    def author_relations(self, author_relations: list[DBAuthor]):
+    @article_authors.setter
+    def article_authors(self, article_authors: list[DBArticleAuthor]):
         """ Sets the Authors of this article. """
-        self._author_relations = author_relations
+        self._authors = article_authors
 
     @property
     def journal(self) -> DBJournal:

@@ -2,13 +2,11 @@
 Allows dumping data into SQLite to speed up iteration
 over the ~33 million records.
 """
-import datetime
-import time
 from typing import Optional
 
 import atomics
 import neo4j
-from app.pubmed.model import DBArticle, DBMetadata, DBMeSHHeading, DBAuthor, DBArticleAuthorRelation
+from app.pubmed.model import DBArticle, DBMetadata, DBMeSHHeading, DBAuthor, DBArticleAuthor, DBAffiliation
 from config import NEO4J_URI, NEO4J_REQUIRES_AUTH
 
 
@@ -111,6 +109,10 @@ class PubMedCacheConn:
             "CREATE CONSTRAINT unique_author_ids IF NOT EXISTS "
             "FOR (a:Author) REQUIRE a.id IS UNIQUE"
         ).consume()
+        session.run(
+            "CREATE INDEX author_names IF NOT EXISTS "
+            "FOR (a:Author) ON (a.name)"
+        ).consume()
 
         # Journals.
         session.run(
@@ -136,10 +138,10 @@ class PubMedCacheConn:
             "FOR (a:Article) ON (a.title)"
         ).consume()
 
-        # AUTHOR_OF
+        # Affiliations.
         session.run(
-            "CREATE INDEX author_of_affiliation IF NOT EXISTS "
-            "FOR ()-[r:AUTHOR_OF]-() ON (r.affiliation)"
+            "CREATE CONSTRAINT unqiue_affiliation_names IF NOT EXISTS "
+            "FOR (a:Affiliation) REQUIRE a.name IS UNIQUE"
         ).consume()
 
         # DBMetadata
@@ -205,6 +207,7 @@ class PubMedCacheConn:
             end_index = len(articles) if batch_no == required_batches - 1 else (batch_no + 1) * articles_per_batch
             batch = articles[start_index:end_index]
             total_articles_inserted += len(batch)
+
             with self.new_session() as session:
                 session.write_transaction(self._insert_article_batch, batch)
 
@@ -218,18 +221,19 @@ class PubMedCacheConn:
         articles_data = []
         for article in articles:
             author_relations = []
-            for author_relation in article.author_relations:
-                author = author_relation.author
+            for article_author in article.article_authors:
+                author = article_author.author
+                affiliation = article_author.affiliation
                 author_relations.append({
                     "author": {
                         "id": self.author_id_counter.next(),
                         "name": author.full_name,
                         "is_collective": author.is_collective
                     },
-                    "affiliation": author_relation.affiliation,
-                    "author_position": author_relation.author_position,
-                    "is_first_author": author_relation.is_first_author,
-                    "is_last_author": author_relation.is_last_author
+                    "affiliation": ([affiliation.name] if affiliation is not None else []),
+                    "author_position": article_author.author_position,
+                    "is_first_author": article_author.is_first_author,
+                    "is_last_author": article_author.is_last_author
                 })
 
             journal = article.journal
@@ -254,7 +258,7 @@ class PubMedCacheConn:
             
             // Loop through all the articles we want to insert.
             UNWIND $articles AS article
-            WITH article, article.journal as journal, article.author_relations as author_relations
+            WITH article, article.journal AS journal, article.author_relations AS author_relations
 
                 // Make sure the journal exists.
                 CALL {
@@ -322,7 +326,9 @@ class PubMedCacheConn:
 
             // Add all of the authors of the article.
             UNWIND author_relations AS author_relation
-            WITH article_node, author_relation, author_relation.author AS author
+            WITH article_node, author_relation, author_relation.author AS author,
+                 author_relation.affiliation AS affiliation_array
+
                 CALL {
                     WITH author
                     MERGE (author_node:Author {name: author.name})
@@ -332,24 +338,28 @@ class PubMedCacheConn:
                             author_node.is_collective = author.is_collective
                     RETURN author_node
                 }
-                CREATE (author_node)-[:AUTHOR_OF {
-                    author_position: author_relation.author_position,
-                    is_first_author: author_relation.is_first_author,
-                    is_last_author: author_relation.is_last_author,
-                    affiliation: author_relation.affiliation
-                }]->(article_node)
+                CALL {
+                    WITH author_node, author_relation, article_node
+                    CREATE (author_node)-[:IS_AUTHOR]->(article_author_node:ArticleAuthor {
+                        author_position: author_relation.author_position,
+                        is_first_author: author_relation.is_first_author,
+                        is_last_author: author_relation.is_last_author
+                    })-[:AUTHOR_OF]->(article_node)
+                    RETURN article_author_node
+                }
+
+            // Add the affiliation of the author.
+            UNWIND affiliation_array AS affiliation
+            WITH article_author_node, affiliation
+                CALL {
+                    WITH affiliation
+                    MERGE (affiliation_node:Affiliation {name: affiliation})
+                    RETURN affiliation_node
+                }
+                CREATE (article_author_node)-[:AFFILIATED_WITH]->(affiliation_node)
             """,
             articles=articles_data
         ).consume()
-
-    @staticmethod
-    def read_author_node(node: neo4j.graph.Node) -> DBAuthor:
-        """ Reads an author node into an Author model object. """
-        return DBAuthor(
-            node["name"],
-            node["is_collective"],
-            author_id=node["id"]
-        )
 
     @staticmethod
     def read_article_node(node: neo4j.graph.Node) -> DBArticle:
@@ -361,17 +371,28 @@ class PubMedCacheConn:
         )
 
     @staticmethod
-    def read_article_author_relation(
-            article: DBArticle, author: DBAuthor, rel: neo4j.graph.Relationship
-    ) -> DBArticleAuthorRelation:
-        """ Reads an article-author relationship into an ArticleAuthorRelation model object. """
-        return DBArticleAuthorRelation(
-            article,
-            author,
-            rel["affiliation"],
-            rel["author_position"],
-            rel["is_first_author"],
-            rel["is_last_author"]
+    def read_author_node(node: neo4j.graph.Node) -> DBAuthor:
+        """ Reads an author node into an Author model object. """
+        return DBAuthor(
+            node["name"],
+            node["is_collective"],
+            author_id=node["id"]
+        )
+
+    @staticmethod
+    def read_article_author(node: neo4j.graph.Node) -> DBArticleAuthor:
+        """ Reads an ArticleAuthor node into a DBArticleAuthor model object. """
+        return DBArticleAuthor(
+            node["author_position"],
+            node["is_first_author"],
+            node["is_last_author"]
+        )
+
+    @staticmethod
+    def read_affiliation(node: neo4j.graph.Node) -> DBAffiliation:
+        """ Reads an Affiliation node into a DBAffiliation model object. """
+        return DBAffiliation(
+            node["name"]
         )
 
     def insert_mesh_heading_batch(self, headings: list[DBMeSHHeading], *, max_batch_size=500):

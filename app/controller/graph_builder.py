@@ -9,7 +9,7 @@ from typing import Callable, cast, Optional, TypeVar
 
 import neo4j
 
-from app.pubmed.model import DBArticle, DBAuthor, DBArticleAuthorRelation
+from app.pubmed.model import DBArticle, DBAuthor, DBArticleAuthor
 
 
 class PubMedGraphError(Exception):
@@ -392,16 +392,16 @@ class CoAuthorEdge(GraphEdge):
     def __init__(
             self,
             author_id: int,
-            author_article_rels: list[DBArticleAuthorRelation],
+            article_authors: list[DBArticleAuthor],
             articles: list[DBArticle],
-            coauthor_article_rels: list[DBArticleAuthorRelation],
+            article_coauthors: list[DBArticleAuthor],
             coauthor_id: int
     ):
         super().__init__(author_id, coauthor_id)
         self.author_id: int = author_id
-        self.author_article_rel: list[DBArticleAuthorRelation] = author_article_rels
+        self.article_authors: list[DBArticleAuthor] = article_authors
         self.articles: list[DBArticle] = articles
-        self.coauthor_article_rel: list[DBArticleAuthorRelation] = coauthor_article_rels
+        self.article_coauthors: list[DBArticleAuthor] = article_coauthors
         self.coauthor_id: int = coauthor_id
 
     def get_title(self) -> Optional[str]:
@@ -417,25 +417,25 @@ class ArticleCoAuthorEdge(GraphEdge):
     """
     def __init__(
             self, author_id: int,
-            author_article_rel: DBArticleAuthorRelation,
+            article_author: DBArticleAuthor,
             article: DBArticle,
-            coauthor_article_rel: DBArticleAuthorRelation,
+            article_coauthor: DBArticleAuthor,
             coauthor_id: int
     ):
         super().__init__(author_id, coauthor_id)
         self.author_id: int = author_id
-        self.author_article_rel: DBArticleAuthorRelation = author_article_rel
+        self.article_author: DBArticleAuthor = article_author
         self.article: DBArticle = article
-        self.coauthor_article_rel: DBArticleAuthorRelation = coauthor_article_rel
+        self.article_coauthor: DBArticleAuthor = article_coauthor
         self.coauthor_id: int = coauthor_id
 
     @staticmethod
     def collapse(edges: list[GraphEdge]) -> CoAuthorEdge:
         """ Collapses many article-author nodes into a single author node. """
         author_id = cast(ArticleCoAuthorEdge, edges[0]).author_id
-        author_article_rels: list[DBArticleAuthorRelation] = []
+        article_authors: list[DBArticleAuthor] = []
         articles: list[DBArticle] = []
-        coauthor_article_rels: list[DBArticleAuthorRelation] = []
+        article_coauthors: list[DBArticleAuthor] = []
         coauthor_id = cast(ArticleCoAuthorEdge, edges[0]).coauthor_id
 
         seen_articles: set[int] = set()
@@ -444,11 +444,11 @@ class ArticleCoAuthorEdge(GraphEdge):
             # The edge can be added from both directions.
             if edge.article.pmid not in seen_articles:
                 seen_articles.add(edge.article.pmid)
-                author_article_rels.append(edge.author_article_rel)
+                article_authors.append(edge.article_author)
                 articles.append(edge.article)
-                coauthor_article_rels.append(edge.coauthor_article_rel)
+                article_coauthors.append(edge.article_coauthor)
 
-        return CoAuthorEdge(author_id, author_article_rels, articles, coauthor_article_rels, coauthor_id)
+        return CoAuthorEdge(author_id, article_authors, articles, article_coauthors, coauthor_id)
 
 
 class Graph:

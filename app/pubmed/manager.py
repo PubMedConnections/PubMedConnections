@@ -202,7 +202,7 @@ class PubMedManager:
 
             # Check if the current version of the database is outdated.
             if existing_meta_year is not None and existing_meta_year != latest_baseline_year:
-                self.report_db_outdated(existing_meta_year)
+                self.report_db_outdated(existing_meta_year, latest_baseline_year)
                 return 1
 
             # Detect if we will need to update the MeSH headings.
@@ -277,9 +277,7 @@ class PubMedManager:
             new_pubmed_files = pubmed_files[start_file_index:]
             flush_print(f"\nPubMedExtract: Extracting data from {len(new_pubmed_files)} PubMed files\n")
 
-            file_queue = read_all_pubmed_files(
-                log_dir, target_directory, new_pubmed_files
-            )
+            file_queue = read_all_pubmed_files(log_dir, new_pubmed_files)
 
             last_report_time = time.time()
             while True:
@@ -400,7 +398,7 @@ class PubMedManager:
 
             for article in file.articles:
                 author_count += len(article.authors)
-                for author in article.authors:
+                for author in article.article_authors:
                     if author.affiliation is not None:
                         author_with_affiliation_count += 1
 

@@ -2,14 +2,13 @@
 Contains functions to extract PubMed data from XML files.
 """
 import datetime
-import sys
 import traceback
 from typing import Optional
 
 from lxml import etree
 
 from app.pubmed.medline_dates import parse_month, parse_medline_date
-from app.pubmed.model import DBAuthor, DBArticle, DBJournal, DBMeSHHeading, DBArticleAuthorRelation
+from app.pubmed.model import DBAuthor, DBArticle, DBJournal, DBMeSHHeading, DBArticleAuthor, DBAffiliation
 from app.pubmed.warning_log import WarningLog
 
 
@@ -54,7 +53,7 @@ def extract_date(date_node: etree.Element) -> datetime.date:
 
 class AuthorAndRelInfo:
     """ Holder for the author information, and its relationship info. """
-    def __init__(self, author: DBAuthor, affiliation: Optional[str]):
+    def __init__(self, author: DBAuthor, affiliation: Optional[DBAffiliation]):
         self.author = author
         self.affiliation = affiliation
 
@@ -70,7 +69,7 @@ def extract_author(author_node: etree.Element) -> AuthorAndRelInfo:
     initials = None
     suffix = None
     collective_name = None
-    affiliation = None
+    affiliation_name: Optional[str] = None
     for node in author_node:
         tag = node.tag
         if tag == "LastName":
@@ -86,13 +85,14 @@ def extract_author(author_node: etree.Element) -> AuthorAndRelInfo:
         elif tag == "AffiliationInfo":
             for child_node in node:
                 if child_node.tag == "Affiliation":
-                    affiliation = child_node.text
+                    affiliation_name = child_node.text
 
     author = DBAuthor.generate(last_name, fore_name, initials, suffix, collective_name)
+    affiliation = (DBAffiliation(affiliation_name) if affiliation_name is not None else None)
     return AuthorAndRelInfo(author, affiliation)
 
 
-def extract_authors(article: DBArticle, author_list_node: etree.Element) -> list[DBArticleAuthorRelation]:
+def extract_authors(article: DBArticle, author_list_node: etree.Element) -> list[DBArticleAuthor]:
     """
     Reads all the authors from an <AuthorList>.
     """
@@ -110,16 +110,19 @@ def extract_authors(article: DBArticle, author_list_node: etree.Element) -> list
                 seen_authors.add(author_info.author.full_name)
                 authors.append((position, author_info))
 
-    author_relations = []
+    article_authors: list[DBArticleAuthor] = []
     for author_position, author_info in authors:
+        # Extract author position information.
         is_first_author = (author_position == 1)
         is_last_author = (author_position == position)
-        author_relations.append(DBArticleAuthorRelation(
-            article, author_info.author, author_info.affiliation,
-            author_position, is_first_author, is_last_author
-        ))
 
-    return author_relations
+        # Create the article author.
+        article_author = DBArticleAuthor(author_position, is_first_author, is_last_author)
+        article_author.author = author_info.author
+        article_author.set_affiliation(author_info.affiliation, True)
+        article_authors.append(article_author)
+
+    return article_authors
 
 
 def canonicalize_issn(issn: str) -> str:
@@ -187,7 +190,7 @@ def extract_journal(journal_node: etree.Element) -> DBJournal:
     return DBJournal.generate(iso_abbrev, issn, title, volume, issue, date)
 
 
-def extract_article(pmid: int, date: datetime.date, article_node: etree.Element):
+def extract_article_node(pmid: int, date: datetime.date, article_node: etree.Element) -> DBArticle:
     """
     Extracts the details of an article from an <Article> node.
     """
@@ -218,9 +221,9 @@ def extract_article(pmid: int, date: datetime.date, article_node: etree.Element)
     article.journal = extract_journal(journal_node)
 
     if author_list_node is not None:
-        article.author_relations = extract_authors(article, author_list_node)
+        article.article_authors = extract_authors(article, author_list_node)
     else:
-        article.author_relations = []
+        article.article_authors = []
 
     return article
 
@@ -286,7 +289,7 @@ def extract_citation(citation_node: etree.Element) -> DBArticle:
         raise Exception("Citation does not contain a <DateCreated>, <DateCompleted>, nor a <DateRevised>")
 
     date = extract_date(date_node)
-    article = extract_article(pmid, date, article_node)
+    article = extract_article_node(pmid, date, article_node)
     article.mesh_descriptor_ids = mesh_descriptor_ids
     return article
 
@@ -423,39 +426,30 @@ def extract_pubmed_article(log: WarningLog, pubmed_article_node: etree.Element) 
     return article
 
 
-def extract_articles(log: WarningLog, tree: etree.ElementTree) -> list[DBArticle]:
+def extract_article(log: WarningLog, pubmed_article_node: etree.Element) -> Optional[DBArticle]:
     """
-    Takes in a parsed PubMed data file object, and extracts
+    Takes in a parsed node from an XML PubMed data file, and extracts
     the data that we are interested in from it.
     """
-    root: etree.Element = tree.getroot()
-    articles = []
-    for index, pubmed_article_node in enumerate(root):
-        if pubmed_article_node.tag != "PubmedArticle":
-            continue
-
+    try:
+        return extract_pubmed_article(log, pubmed_article_node)
+    except Exception as e:
+        traceback.print_exc()
         try:
-            article = extract_pubmed_article(log.group(f"index={index}"), pubmed_article_node)
-            if article is not None:
-                articles.append(article)
+            with open("error.node.txt", "wt") as f:
+                f.write("{}: {}\n\nOccurred while extracting data around:\n{}".format(
+                    type(e).__name__, str(e),
+                    etree.tostring(
+                        pubmed_article_node,
+                        pretty_print=True,
+                        encoding="utf8"
+                    ).decode("utf8")
+                ))
 
-        except Exception as e:
+        except Exception as e2:
             traceback.print_exc()
-            try:
-                with open("error.node.txt", "wt") as f:
-                    f.write("{}: {}\n\nOccurred while extracting data around:\n{}".format(
-                        type(e).__name__, str(e),
-                        etree.tostring(
-                            pubmed_article_node,
-                            pretty_print=True,
-                            encoding="utf8"
-                        ).decode("utf8")
-                    ))
 
-            except Exception as e2:
-                traceback.print_exc()
-
-    return articles
+        return None
 
 
 def extract_mesh_descriptor_id(descriptor_id_str: str) -> int:
