@@ -30,6 +30,7 @@ import {useEffect, useState} from "react";
 const Filters = () => {
     const filters = useSelector((state) => state.filters.filters);
     const dispatch = useDispatch();
+    const resultsLoaded = useSelector((state) => state.filters.resultsLoaded);
 
     const activeFilters = useSelector((state) => state.filters.activeFilters)
 
@@ -337,7 +338,7 @@ const Filters = () => {
             <div id="add-filters">
                     {activeFiltersSelector}
             </div>
-            <div id="filters-load-button">
+            <div id="filters-load-button" style={{opacity: resultsLoaded ? 0.6 : 1}}>
                 <Button
                     onClick={loadResults}
                     endIcon={<Refresh />}
