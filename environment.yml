@@ -1,5 +1,6 @@
 name: pubmed-connections
 dependencies:
+  - python=3.10
   - numpy
   - scikit-learn
   - matplotlib
