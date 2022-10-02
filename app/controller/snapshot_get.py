@@ -45,7 +45,7 @@ def get_snapshot(snapshot_id: Optional[int]) -> list[object]:
         else:
             result = neo4j_session.read_transaction(run_get_all_snapshots_query)
 
-        snapshots = [record.data()['s'] for record in result]
+        snapshots = [record.data()["snapshot"] for record in result]
         for snapshot in snapshots:
             del snapshot['database_version']
         return json.loads(json.dumps(snapshots, default=date_handler))
@@ -58,12 +58,12 @@ def get_user_snapshots(username: str) -> list[object]:
     def run_get_user_snapshots_query(tx):
         return list(tx.run(
             """
-            Match (u:User {username: $username}) -[:USER_SNAPSHOT]-> (s:Snapshot)
-            RETURN s
+            Match (u:User {username: $username}) -[:USER_SNAPSHOT]-> (snapshot:Snapshot)
+            RETURN snapshot
             """,
             {"username": username}
         ))
 
     with neo4j_conn.new_session() as neo4j_session:
         result = neo4j_session.read_transaction(run_get_user_snapshots_query)
-        return json.loads(json.dumps([record.data()['s'] for record in result], default=date_handler))
+        return json.loads(json.dumps([record.data()["snapshot"] for record in result], default=date_handler))

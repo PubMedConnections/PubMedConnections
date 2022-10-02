@@ -260,10 +260,13 @@ def get_analytics(snapshot_id: int):
 
         # Build the queries for projecting the graph for analytics.
         query_params = {
-            "author_ids": graph.authors_with_coauthors_ids,
-            "article_ids": graph.article_ids
+            "author_ids": list(graph.authors_with_coauthors_ids),
+            "article_ids": list(graph.article_ids)
         }
-        node_query = "RETURN $author_ids"
+        node_query = """
+        UNWIND $author_ids AS id
+        RETURN id
+        """
         relationship_query = """
         MATCH (author) -[:IS_AUTHOR]-> (:ArticleAuthor) -[:AUTHOR_OF]-> (article:Article)
                        <-[:AUTHOR_OF]- (:ArticleAuthor) <-[IS_AUTHOR]- (coauthor:Author)

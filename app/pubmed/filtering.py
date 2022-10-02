@@ -571,20 +571,11 @@ class PubMedFilterBuilder:
 
         return query
 
-    def build(
-            self, settings: PubMedFilterQuerySettings, *,
-            node_query: bool = False, relationship_query: bool = False
-    ) -> PubMedFilterQuery:
+    def build(self, settings: PubMedFilterQuerySettings) -> PubMedFilterQuery:
         """
         Builds this list of filters into a Cypher query.
         """
-        visualise_query = not node_query and not relationship_query
-
-        query = ""
-        if visualise_query:
-            query += "CYPHER planner=dp\n"
-        elif relationship_query:
-            query += "CALL {\n"
+        query = "CYPHER planner=dp\n"
 
         contains_journal_filters = len(self._journal_filters) > 0
         contains_mesh_filters = len(self._mesh_filters) > 0
@@ -623,37 +614,12 @@ class PubMedFilterBuilder:
             query += self.build_authors_first_cypher(settings, return_values)
             query += self.build_articles_last_cypher(settings, return_values)
 
-        # Collect and Unwind.
-        if node_query:
-            query += "OPTIONAL MATCH (author:Author) --> (article) <-- (coauthor:Author)\n"
-            query += "WITH COLLECT(id(author)) + COLLECT(id(coauthor)) AS ids\n"
-            query += "UNWIND ids as id\n"
-        
-        if relationship_query:
-            query += "OPTIONAL MATCH (author:Author) --> (article) <-- (coauthor:Author)\n"
-            query += "WITH COLLECT(DISTINCT author) as authors, COLLECT(DISTINCT article) as articles\n"
-            query += "UNWIND authors as author\n"
-            query += "UNWIND articles as article\n"
-
-        # Return values.
-        if node_query:
-            return_values.append("DISTINCT id")
-        if relationship_query:
-            return_values.append("author")
-            return_values.append("article")
-
         # Return.
         query += "RETURN\n\t" + ",\n\t".join(return_values) + "\n"
 
         # Limits.
-        if settings.node_limit is not None and not relationship_query:
+        if settings.node_limit is not None:
             query += f"LIMIT {self._next_filter_var(settings.node_limit)}\n"
-
-        if relationship_query:
-            query += "}\n\n"
-            query += "MATCH (author1:Author)-[:AUTHOR_OF]->(article:Article)<-[:AUTHOR_OF]-(author2:Author)\n"
-            query += "WHERE author1 = author OR author2 = author\n"
-            query += "RETURN id(author1) as source, id(author2) as target, apoc.create.vRelationship(author1, 'COAUTHOR', {count: count(*)}, author2) as rel\n"
 
         return PubMedFilterQuery(settings, query, self._variable_values)
 
