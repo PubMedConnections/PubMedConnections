@@ -100,14 +100,14 @@ def visualise_coauthor_graph(graph_options: GraphOptions, coauthor_graph: CoAuth
     for record in coauthor_graph.records:
         graph_builder.add_record()
 
-        graph_builder.add_node(ArticleAuthorNode(record.author.author_id, True, record.author, record.article))
+        graph_builder.add_node(ArticleAuthorNode(record.author_id, True, record.author, record.article))
         if record.coauthor is None:
             continue
 
-        graph_builder.add_node(ArticleAuthorNode(record.coauthor.author_id, False, record.coauthor, record.article))
+        graph_builder.add_node(ArticleAuthorNode(record.coauthor_id, False, record.coauthor, record.article))
         graph_builder.add_edge(ArticleCoAuthorEdge(
-            record.author.author_id, record.article_author, record.article,
-            record.article_coauthor, record.coauthor.author_id
+            record.author_id, record.article_author, record.article,
+            record.article_coauthor, record.coauthor_id
         ))
 
     graph = graph_builder.build(ArticleAuthorNode.collapse, ArticleCoAuthorEdge.collapse)

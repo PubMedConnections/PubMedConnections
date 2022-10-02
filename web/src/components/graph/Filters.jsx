@@ -262,7 +262,6 @@ const Filters = () => {
                 onChange={updateStateFromEventValueCallbackGenerator(filterDesc.key)}>
                     <MenuItem value={"constant"}>Constant</MenuItem>
                     <MenuItem value={"coauthored_articles"}>Co-Authored Articles</MenuItem>
-                    <MenuItem value={"citations"}>Citations of Co-Authored Articles</MenuItem>
             </Select>
         </FormControl>;
 

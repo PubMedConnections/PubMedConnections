@@ -191,9 +191,9 @@ class AuthorCitationsNodesValueSource(NodesValueSource):
             CYPHER planner=dp
             MATCH (author:Author)
             WHERE id(author) IN $author_ids
-            MATCH (author) -[author_rel:AUTHOR_OF]-> (article:Article)
-            MATCH (article) <-[citing_rel:CITES]- (citing_article:Article)
-            RETURN id(author), COUNT(citing_rel)
+            RETURN id(author), SIZE(
+                (author) -[:IS_AUTHOR] -> (:ArticleAuthor) -[:AUTHOR_OF]-> (:Article) <-[:CITES]- (:Article)
+            ) AS citations
             """,
             author_ids=list(author_node_ids)
         )
@@ -321,7 +321,7 @@ class AuthorNode(GraphNode):
     Represents a node in an author graph.
     """
     def __init__(self, neo4j_node_id: int, is_root_node: bool, author: DBAuthor, articles: list[DBArticle]):
-        super().__init__(author.author_id, is_root_node)
+        super().__init__(neo4j_node_id, is_root_node)
         self.neo4j_node_id = neo4j_node_id
         self.author: DBAuthor = author
         self.articles: list[DBArticle] = articles
@@ -345,9 +345,9 @@ class ArticleAuthorNode(GraphNode):
     """
     def __init__(
             self, neo4j_node_id: int, is_root_node: bool,
-            author: DBAuthor, article: DBArticle
-    ):
-        super().__init__(author.author_id, is_root_node)
+            author: DBAuthor, article: DBArticle):
+
+        super().__init__(neo4j_node_id, is_root_node)
         self.neo4j_node_id = neo4j_node_id
         self.author: DBAuthor = author
         self.article: DBArticle = article
