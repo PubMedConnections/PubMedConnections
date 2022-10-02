@@ -655,10 +655,6 @@ class PubMedFilterBuilder:
             query += "WHERE author1 = author OR author2 = author\n"
             query += "RETURN id(author1) as source, id(author2) as target, apoc.create.vRelationship(author1, 'COAUTHOR', {count: count(*)}, author2) as rel\n"
 
-        print("author_filters_specificity =", author_filters_specificity)
-        print("article_filters_specificity =", article_filters_specificity)
-        print("query =\n", query)
-
         return PubMedFilterQuery(settings, query, self._variable_values)
 
 

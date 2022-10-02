@@ -6,6 +6,8 @@ from typing import Optional
 
 import atomics
 import neo4j
+
+from app.pubmed.filtering import PubMedFilterCache
 from app.pubmed.model import DBArticle, DBMetadata, DBMeSHHeading, DBAuthor, DBArticleAuthor, DBAffiliation
 from config import NEO4J_URI, NEO4J_REQUIRES_AUTH
 
@@ -34,6 +36,7 @@ class PubMedCacheConn:
     def __init__(self, database: Optional[str] = None):
         self.database: Optional[str] = database
         self.driver: Optional[neo4j.Driver] = None
+        self.filter_query_cache = PubMedFilterCache()
 
         # We store metadata about the database within a Metadata node.
         self.metadata: Optional[DBMetadata] = None
@@ -380,7 +383,7 @@ class PubMedCacheConn:
         )
 
     @staticmethod
-    def read_article_author(node: neo4j.graph.Node) -> DBArticleAuthor:
+    def read_article_author_node(node: neo4j.graph.Node) -> DBArticleAuthor:
         """ Reads an ArticleAuthor node into a DBArticleAuthor model object. """
         return DBArticleAuthor(
             node["author_position"],
@@ -389,7 +392,7 @@ class PubMedCacheConn:
         )
 
     @staticmethod
-    def read_affiliation(node: neo4j.graph.Node) -> DBAffiliation:
+    def read_affiliation_node(node: neo4j.graph.Node) -> DBAffiliation:
         """ Reads an Affiliation node into a DBAffiliation model object. """
         return DBAffiliation(
             node["name"]
