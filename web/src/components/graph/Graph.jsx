@@ -1,11 +1,15 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import LinearProgress from '@mui/material/LinearProgress'
 import {useSelector, useDispatch} from 'react-redux'
-import {POST, PUT} from "../../utils/APIRequests";
-import VisJSGraph from 'react-graph-vis';
+import {POST} from "../../utils/APIRequests";
 import { useSnackbar } from 'notistack';
 import { DisplayError } from '../common/SnackBar';
-import {setLoadResults, setResultsReturned, setResultsLoaded} from '../../store/slices/filterSlice'
+import {setLoadResults, setResultsReturned, setResultsLoaded} from '../../store/slices/filterSlice';
+import VisJSGraph from "./react-graph-vis";
+
+const graphSettlingPersistentState = {
+    "settleStartTimeMS": -1
+};
 
 const Graph = () => {
   const snackbar = useSnackbar();
@@ -28,12 +32,21 @@ const Graph = () => {
     options: {
       autoResize: true,
       nodes: {
-        shape: 'dot',
+          shape: 'dot',
+          font: {
+              color: "#000000"
+          }
       },
       edges: {
           arrows: {to: {enabled: false}},
           scaling: {
               label: true
+          },
+          color: {
+            inherit: false,
+            highlight: '#000000',
+            color: '#666666',
+            hover: '#666666'
           }
       },
       interaction: {
@@ -53,8 +66,8 @@ const Graph = () => {
           },
           stabilization: {
               enabled: true,
-              iterations: 200,
-              updateInterval: 50
+              iterations: 1000,
+              updateInterval: 20
           }
       }
     },
@@ -83,7 +96,6 @@ const Graph = () => {
           let data = resp.data;
           if (resp.status !== 200) {
               const err = errorMessage || resp.statusText
-              DisplayError(snackbar, err);
               data = {"error": err};
           }
 
@@ -110,23 +122,56 @@ const Graph = () => {
 
           // Fit the network for a few seconds.
           const start = performance.now();
+          graphSettlingPersistentState["settleStartTimeMS"] = start;
+          if (!graphData || !graphData.nodes || graphData.nodes.length === 0)
+              return;
+
+          const settleDurationMS = 10 * 1000;
           const lastFitParameters = {
-              "initialised": false
+              "initialised": false,
+              "fitting": true,
+              "timestep": -1
           };
 
-          function fit() {
+          function settleGraph() {
+              // If the graph has been changed, there will be a new settleGraph loop.
+              if (graphSettlingPersistentState["settleStartTimeMS"] !== start)
+                  return;
+
+              const timeSinceStartMS = performance.now() - start;
+
               // If the user changed the viewport, stop trying to fit it.
               if (lastFitParameters["initialised"]) {
-                  const position = VISJSNetwork.getViewPosition();
+                  let position;
+                  try {
+                      position = VISJSNetwork.getViewPosition();
+                  } catch (e) {
+                      // The VISJSNetwork may have been destroyed when a new one was loaded
+                      return;
+                  }
+
                   if (VISJSNetwork.getScale() !== lastFitParameters["scale"] ||
                       position.x !== lastFitParameters["x"] || position.y !== lastFitParameters["y"]) {
 
                       // Stop fitting.
-                      return;
+                      lastFitParameters["fitting"] = false;
                   }
               }
 
-              VISJSNetwork.fit();
+              let timestep = Math.max(0.1, 1 - 0.9 * timeSinceStartMS / settleDurationMS);
+              timestep = Math.round(10 * timestep) / 10.0;
+
+              if (lastFitParameters["timestep"] !== timestep) {
+                  let options = graphInfo.options;
+                  options = { ...options };
+                  options.physics = { ...options.physics };
+                  options.physics.timestep = timestep;
+                  VISJSNetwork.setOptions(options);
+                  lastFitParameters["timestep"] = timestep;
+              }
+              if (lastFitParameters["fitting"]) {
+                  VISJSNetwork.fit();
+              }
 
               const position = VISJSNetwork.getViewPosition();
               lastFitParameters["scale"] = VISJSNetwork.getScale();
@@ -134,11 +179,13 @@ const Graph = () => {
               lastFitParameters["y"] = position.y;
               lastFitParameters["initialised"] = true;
 
-              if (performance.now() - start < 10000) {
-                   requestAnimationFrame(fit);
+              if (timeSinceStartMS < settleDurationMS) {
+                   requestAnimationFrame(settleGraph);
+              } else {
+                  lastFitParameters["fitting"] = false;
               }
           }
-          setTimeout(() => requestAnimationFrame(fit));
+          setTimeout(() => requestAnimationFrame(settleGraph));
       }
 
       POST('snapshot/visualise/', filters)
@@ -147,15 +194,20 @@ const Graph = () => {
               processResponse(err.response, err.message)
           });
   }
-
+  
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(loadGraphData, [loadResults])
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => loadGraphData(true), [VISJSNetwork]) // The first time
 
   return <div className="full-size" style={{opacity: resultsLoaded || loadResults ? 1 : 0.6}}>
-      <VisJSGraph className="full-size" graph={graphInfo.data} options={graphInfo.options}
-          getNetwork={setNetwork}
-      />
+      <VisJSGraph
+          identifier="visualised-pubmed-graph"
+          className="full-size"
+          graph={graphInfo.data}
+          options={graphInfo.options}
+          getNetwork={setNetwork} />
 
       {loadingProgress < 100 &&
           <div id="visjs-loading-cover">
@@ -179,6 +231,8 @@ const Graph = () => {
               <span className="not-loaded" >{resultsLoaded ? "" : " (Graph not refreshed)"}</span>
           </div>
       }
+
+      
     </div>;
 };
 

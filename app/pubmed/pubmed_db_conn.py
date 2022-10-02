@@ -2,13 +2,13 @@
 Allows dumping data into SQLite to speed up iteration
 over the ~33 million records.
 """
-import datetime
-import time
 from typing import Optional
 
 import atomics
 import neo4j
-from app.pubmed.model import DBArticle, DBMetadata, DBMeSHHeading, DBAuthor, DBArticleAuthorRelation
+
+from app.pubmed.filtering import PubMedFilterCache
+from app.pubmed.model import DBArticle, DBMetadata, DBMeSHHeading, DBAuthor, DBArticleAuthor, DBAffiliation
 from config import NEO4J_URI, NEO4J_REQUIRES_AUTH
 
 
@@ -36,6 +36,7 @@ class PubMedCacheConn:
     def __init__(self, database: Optional[str] = None):
         self.database: Optional[str] = database
         self.driver: Optional[neo4j.Driver] = None
+        self.filter_query_cache = PubMedFilterCache()
 
         # We store metadata about the database within a Metadata node.
         self.metadata: Optional[DBMetadata] = None
@@ -71,7 +72,7 @@ class PubMedCacheConn:
 
         # Create a connection to the database to create its constraints and grab metadata.
         with self.new_session() as session:
-            self._create_constraints(session)
+            self._create_constraints_and_indexes(session)
             self._fetch_metadata(session)
 
         return self
@@ -86,9 +87,9 @@ class PubMedCacheConn:
     def new_session(self) -> neo4j.Session:
         return self.driver.session(database=self.database)
 
-    def _create_constraints(self, session: neo4j.Session):
+    def _create_constraints_and_indexes(self, session: neo4j.Session):
         """
-        This method creates all the constraints required for the database.
+        This method creates all the constraints and indexes required for the database.
         Uniqueness constraints implicitly create an index for the constraint as well.
         """
 
@@ -96,6 +97,10 @@ class PubMedCacheConn:
         session.run(
             "CREATE CONSTRAINT unique_mesh_heading_ids IF NOT EXISTS "
             "FOR (h:MeshHeading) REQUIRE h.id IS UNIQUE"
+        ).consume()
+        session.run(
+            "CREATE INDEX mesh_name IF NOT EXISTS "
+            "FOR (h:MeshHeading) ON (h.name)"
         ).consume()
 
         # Authors.
@@ -107,17 +112,63 @@ class PubMedCacheConn:
             "CREATE CONSTRAINT unique_author_ids IF NOT EXISTS "
             "FOR (a:Author) REQUIRE a.id IS UNIQUE"
         ).consume()
+        session.run(
+            "CREATE INDEX author_names IF NOT EXISTS "
+            "FOR (a:Author) ON (a.name)"
+        ).consume()
 
         # Journals.
         session.run(
             "CREATE CONSTRAINT unique_journal_ids IF NOT EXISTS "
             "FOR (j:Journal) REQUIRE j.id IS UNIQUE"
         ).consume()
+        session.run(
+            "CREATE INDEX journal_title IF NOT EXISTS "
+            "FOR (j:Journal) ON (j.title)"
+        ).consume()
 
         # Articles.
         session.run(
             "CREATE CONSTRAINT unique_article_pmids IF NOT EXISTS "
             "FOR (a:Article) REQUIRE a.pmid IS UNIQUE"
+        ).consume()
+        session.run(
+            "CREATE INDEX article_date IF NOT EXISTS "
+            "FOR (a:Article) ON (a.date)"
+        ).consume()
+        session.run(
+            "CREATE INDEX article_title IF NOT EXISTS "
+            "FOR (a:Article) ON (a.title)"
+        ).consume()
+
+        # Affiliations.
+        session.run(
+            "CREATE CONSTRAINT unqiue_affiliation_names IF NOT EXISTS "
+            "FOR (a:Affiliation) REQUIRE a.name IS UNIQUE"
+        ).consume()
+
+        # DBMetadata
+        session.run(
+            "CREATE CONSTRAINT unique_dbmetadata_versions IF NOT EXISTS "
+            "FOR (m:DBMetadata) REQUIRE m.version IS UNIQUE"
+        ).consume()
+
+        # DBMetadataDataFile
+        session.run(
+            "CREATE INDEX dbmetadata_datafile_file IF NOT EXISTS "
+            "FOR (m:DBMetadataDataFile) ON (m.file)"
+        ).consume()
+
+        # DBMetadataMeshFile
+        session.run(
+            "CREATE INDEX dbmetadata_meshfile_file IF NOT EXISTS "
+            "FOR (m:DBMetadataMeshFile) ON (m.file)"
+        ).consume()
+
+        # User
+        session.run(
+            "CREATE CONSTRAINT unique_user_usernames IF NOT EXISTS "
+            "FOR (u:User) REQUIRE u.username IS UNIQUE"
         ).consume()
 
         # We don't want to start inserting data until the indices are created.
@@ -159,6 +210,7 @@ class PubMedCacheConn:
             end_index = len(articles) if batch_no == required_batches - 1 else (batch_no + 1) * articles_per_batch
             batch = articles[start_index:end_index]
             total_articles_inserted += len(batch)
+
             with self.new_session() as session:
                 session.write_transaction(self._insert_article_batch, batch)
 
@@ -172,18 +224,19 @@ class PubMedCacheConn:
         articles_data = []
         for article in articles:
             author_relations = []
-            for author_relation in article.author_relations:
-                author = author_relation.author
+            for article_author in article.article_authors:
+                author = article_author.author
+                affiliation = article_author.affiliation
                 author_relations.append({
                     "author": {
                         "id": self.author_id_counter.next(),
                         "name": author.full_name,
                         "is_collective": author.is_collective
                     },
-                    "affiliation": author_relation.affiliation,
-                    "author_position": author_relation.author_position,
-                    "is_first_author": author_relation.is_first_author,
-                    "is_last_author": author_relation.is_last_author
+                    "affiliation": ([affiliation.name] if affiliation is not None else []),
+                    "author_position": article_author.author_position,
+                    "is_first_author": article_author.is_first_author,
+                    "is_last_author": article_author.is_last_author
                 })
 
             journal = article.journal
@@ -208,7 +261,7 @@ class PubMedCacheConn:
             
             // Loop through all the articles we want to insert.
             UNWIND $articles AS article
-            WITH article, article.journal as journal, article.author_relations as author_relations
+            WITH article, article.journal AS journal, article.author_relations AS author_relations
 
                 // Make sure the journal exists.
                 CALL {
@@ -276,7 +329,9 @@ class PubMedCacheConn:
 
             // Add all of the authors of the article.
             UNWIND author_relations AS author_relation
-            WITH article_node, author_relation, author_relation.author AS author
+            WITH article_node, author_relation, author_relation.author AS author,
+                 author_relation.affiliation AS affiliation_array
+
                 CALL {
                     WITH author
                     MERGE (author_node:Author {name: author.name})
@@ -286,24 +341,28 @@ class PubMedCacheConn:
                             author_node.is_collective = author.is_collective
                     RETURN author_node
                 }
-                CREATE (author_node)-[:AUTHOR_OF {
-                    author_position: author_relation.author_position,
-                    is_first_author: author_relation.is_first_author,
-                    is_last_author: author_relation.is_last_author,
-                    affiliation: author_relation.affiliation
-                }]->(article_node)
+                CALL {
+                    WITH author_node, author_relation, article_node
+                    CREATE (author_node)-[:IS_AUTHOR]->(article_author_node:ArticleAuthor {
+                        author_position: author_relation.author_position,
+                        is_first_author: author_relation.is_first_author,
+                        is_last_author: author_relation.is_last_author
+                    })-[:AUTHOR_OF]->(article_node)
+                    RETURN article_author_node
+                }
+
+            // Add the affiliation of the author.
+            UNWIND affiliation_array AS affiliation
+            WITH article_author_node, affiliation
+                CALL {
+                    WITH affiliation
+                    MERGE (affiliation_node:Affiliation {name: affiliation})
+                    RETURN affiliation_node
+                }
+                CREATE (article_author_node)-[:AFFILIATED_WITH]->(affiliation_node)
             """,
             articles=articles_data
         ).consume()
-
-    @staticmethod
-    def read_author_node(node: neo4j.graph.Node) -> DBAuthor:
-        """ Reads an author node into an Author model object. """
-        return DBAuthor(
-            node["name"],
-            node["is_collective"],
-            author_id=node["id"]
-        )
 
     @staticmethod
     def read_article_node(node: neo4j.graph.Node) -> DBArticle:
@@ -315,17 +374,28 @@ class PubMedCacheConn:
         )
 
     @staticmethod
-    def read_article_author_relation(
-            article: DBArticle, author: DBAuthor, rel: neo4j.graph.Relationship
-    ) -> DBArticleAuthorRelation:
-        """ Reads an article-author relationship into an ArticleAuthorRelation model object. """
-        return DBArticleAuthorRelation(
-            article,
-            author,
-            rel["affiliation"],
-            rel["author_position"],
-            rel["is_first_author"],
-            rel["is_last_author"]
+    def read_author_node(node: neo4j.graph.Node) -> DBAuthor:
+        """ Reads an author node into an Author model object. """
+        return DBAuthor(
+            node["name"],
+            node["is_collective"],
+            author_id=node["id"]
+        )
+
+    @staticmethod
+    def read_article_author_node(node: neo4j.graph.Node) -> DBArticleAuthor:
+        """ Reads an ArticleAuthor node into a DBArticleAuthor model object. """
+        return DBArticleAuthor(
+            node["author_position"],
+            node["is_first_author"],
+            node["is_last_author"]
+        )
+
+    @staticmethod
+    def read_affiliation_node(node: neo4j.graph.Node) -> DBAffiliation:
+        """ Reads an Affiliation node into a DBAffiliation model object. """
+        return DBAffiliation(
+            node["name"]
         )
 
     def insert_mesh_heading_batch(self, headings: list[DBMeSHHeading], *, max_batch_size=500):

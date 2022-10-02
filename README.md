@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="/app/static/logo-with-name.png" alt="PubMed Connections Logo" height="200" width="525" />
+  <img src="/app/static/logo-with-name.png" alt="PubMed Connections Logo" height="160" width="420" />
 </p>
 
 

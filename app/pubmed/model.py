@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Optional, cast
 from enum import Enum
 
+from app.utils import truncate_long_names
 
 LATEST_PUBMED_DB_VERSION = 2
 
@@ -204,43 +205,19 @@ class DBAuthor:
                  *,
                  author_id: int = None):
 
-        if len(full_name) > 1024:
-            raise Exception("Name is too long! {}".format(full_name))
-
         self.author_id = author_id
-        self.full_name = full_name
+        self.full_name = truncate_long_names(full_name)
         self.is_collective = is_collective
 
     @staticmethod
     def generate(
             last_name: str, fore_name: str, initials: str,
-            suffix: str, collective_name: str,
-            *, max_name_length: int = 512
+            suffix: str, collective_name: str
     ) -> 'DBAuthor':
 
         if collective_name is not None:
             # Some consortium names are ridiculous...
-            if len(collective_name) > max_name_length:
-                truncated_suffix = "... <Truncated Name>"
-                truncated = collective_name[:(max_name_length - len(truncated_suffix))]
-
-                def find_break(find: str):
-                    try:
-                        return truncated.rindex(find)
-                    except ValueError:
-                        return -1
-
-                # Attempt to truncate at punctuation if possible.
-                nice_break_index = max(find_break(", "), find_break(": "), find_break("; "))
-                if nice_break_index < 0:
-                    nice_break_index = max(find_break(","), find_break(":"), find_break(";"))
-                if nice_break_index < 0:
-                    nice_break_index = find_break(" ")
-                if nice_break_index >= max_name_length // 2:
-                    truncated = truncated[:nice_break_index]
-
-                collective_name = truncated + truncated_suffix
-
+            collective_name = truncate_long_names(collective_name)
             return DBAuthor(collective_name, True)
 
         last = " {}".format(last_name) if last_name is not None else ""
@@ -257,9 +234,7 @@ class DBAuthor:
             raise ValueError("No name pieces supplied")
 
         # I don't think there are any author names that hit this, but just in case...
-        if len(full_name) > max_name_length:
-            full_name = full_name[:(max_name_length - 3)] + "..."
-
+        full_name = truncate_long_names(full_name)
         return DBAuthor(full_name, False)
 
     def __str__(self):
@@ -288,7 +263,7 @@ class DBJournal:
             date: datetime.date):
 
         self.identifier = identifier
-        self.title = title
+        self.title = truncate_long_names(title)
         self.volume = volume if volume != DBJournal.SPECIAL_MISSING_VOLUME_TEXT else None
         self.issue = issue if issue != DBJournal.SPECIAL_MISSING_ISSUE_TEXT else None
         self.date = date
@@ -328,36 +303,75 @@ class DBJournal:
         return "<Journal {}: {}>".format(self.identifier, str(self))
 
 
-class DBArticleAuthorRelation:
+class DBArticleAuthor:
     """
-    Represents the relationship that represents authorship of an article.
-    The authorship is represented by the
+    An intermediate node between an Author and an Article, that may be
+    related to an Affiliation.
     """
     def __init__(self,
-                 article: 'DBArticle',
-                 author: DBAuthor,
-                 affiliation: Optional[str],
                  author_position: int,
                  is_first_author: bool,
                  is_last_author: bool):
 
-        self.article = article
-        self.author = author
-        self.affiliation = affiliation
         self.author_position = author_position
         self.is_first_author = is_first_author
         self.is_last_author = is_last_author
+        self._article: Optional[DBArticle] = None
+        self._author: Optional[DBAuthor] = None
+        self._affiliation_available: bool = False
+        self._affiliation: Optional[DBAffiliation] = None
+
+    @property
+    def article(self) -> 'DBArticle':
+        if self._article is None:
+            raise ValueError("The article of this ArticleAuthor has not been read from the database")
+        return self._article
+
+    @article.setter
+    def article(self, article: 'DBArticle'):
+        self._article = article
+
+    @property
+    def author(self) -> 'DBAuthor':
+        if self._author is None:
+            raise ValueError("The author of this ArticleAuthor has not been read from the database")
+        return self._author
+
+    @author.setter
+    def author(self, author: 'DBAuthor'):
+        self._author = author
+
+    @property
+    def affiliation(self) -> Optional['DBAffiliation']:
+        if not self._affiliation_available:
+            raise ValueError("The affiliation of this ArticleAuthor has not been read from the database")
+        return self._affiliation
+
+    def set_affiliation(self, affiliation: Optional['DBAffiliation'], from_database: bool):
+        self._affiliation_available = from_database
+        self._affiliation = affiliation
 
     def __str__(self):
-        return f"({str(self.author)}) " \
-               f"-[:AUTHOR_OF {{author_pos={self.author_position}, " \
-               f"affiliation={self.affiliation}, " \
+        return f"(:ArticleAuthor {{author_pos={self.author_position}, " \
                f"first={self.is_first_author}, " \
-               f"last={self.is_last_author} }}]-> " \
-               f"({str(self.article)})"
+               f"last={self.is_last_author} }})"
 
     def __repr__(self):
-        return f"<ArticleAuthorRelation {str(self)}>"
+        return f"<ArticleAuthor {str(self)}>"
+
+
+class DBAffiliation:
+    """
+    Represents an affiliation of author/s of articles.
+    """
+    def __init__(self, name: str):
+        self.name = truncate_long_names(name)
+
+    def __str__(self):
+        return f"{self.name}"
+
+    def __repr__(self):
+        return f"<Affiliation {str(self)}>"
 
 
 class DBArticle:
@@ -372,9 +386,9 @@ class DBArticle:
 
         self.pmid: int = pmid
         self.date: datetime.date = date
-        self.title: str = title
+        self.title: str = truncate_long_names(title)
         self._journal: Optional[DBJournal] = None
-        self._author_relations: Optional[list[DBArticleAuthorRelation]] = None
+        self._authors: Optional[list[DBArticleAuthor]] = None
         self._reference_pmids: Optional[list[int]] = None
         self._mesh_descriptor_ids: Optional[list[int]] = None
 
@@ -414,19 +428,19 @@ class DBArticle:
     @property
     def authors(self) -> list[DBAuthor]:
         """ Returns all the Authors of this article. """
-        return [relation.author for relation in self.author_relations]
+        return [relation.author for relation in self.article_authors]
 
     @property
-    def author_relations(self) -> list[DBArticleAuthorRelation]:
+    def article_authors(self) -> list[DBArticleAuthor]:
         """ Returns all the ArticleAuthorRelations of this article. """
-        if self._author_relations is None:
+        if self._authors is None:
             raise ValueError("The authors of this article have not been read from the database")
-        return self._author_relations
+        return self._authors
 
-    @author_relations.setter
-    def author_relations(self, author_relations: list[DBAuthor]):
+    @article_authors.setter
+    def article_authors(self, article_authors: list[DBArticleAuthor]):
         """ Sets the Authors of this article. """
-        self._author_relations = author_relations
+        self._authors = article_authors
 
     @property
     def journal(self) -> DBJournal:

@@ -1,4 +1,4 @@
-import {Add, Delete, Refresh} from '@mui/icons-material'
+import {Add, Delete, HelpOutline, Refresh} from '@mui/icons-material'
 import {
     Button,
     TextField,
@@ -10,7 +10,8 @@ import {
     Slider,
     FormControl,
     InputLabel,
-    FormControlLabel
+    FormControlLabel,
+    Popover
 } from '@mui/material'
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
@@ -23,14 +24,24 @@ import {
     setLoadResults,
     setResultsLoaded
 } from '../../store/slices/filterSlice'
-import {availableFilters, availableFiltersMap, filterCategories} from './filterInfo';
-import {useEffect} from "react";
+import {availableFilters, availableFiltersMap} from './filterInfo';
+import {useEffect, useState} from "react";
 
 const Filters = () => {
     const filters = useSelector((state) => state.filters.filters);
     const dispatch = useDispatch();
 
     const activeFilters = useSelector((state) => state.filters.activeFilters)
+
+    const [anchorElements, setAnchorElements] = useState({})
+
+    const handlePopoverOpen = (filter, event) => {
+        setAnchorElements({...anchorElements, [filter]: event.currentTarget});
+    };
+
+    const handlePopoverClose = (filter) => {
+        setAnchorElements({...anchorElements, [filter]: null});
+    };
 
     function makeFilterEntry(filterDesc, element) {
         return <div className="filter-row" key={filterDesc.key}>
@@ -41,6 +52,37 @@ const Filters = () => {
             </div>
             <div className="filter-name"><p>{filterDesc.name}</p></div>
             <div className="filter-entry">{element}</div>
+            {filterDesc.help &&
+                <div className="filter-delete">
+                    <IconButton size={"small"}
+                                onMouseEnter={(event) => handlePopoverOpen(filterDesc.key, event)}
+                                onMouseLeave={() => handlePopoverClose(filterDesc.key)}>
+                        <HelpOutline />
+                    </IconButton>
+                    <Popover
+                        className={"filter-popover"}
+                        sx={{
+                            pointerEvents: 'none',
+                        }}
+                        open={Boolean(anchorElements[filterDesc.key])}
+                        anchorEl={anchorElements[filterDesc.key]}
+                        anchorOrigin={{
+                            vertical: 'bottom',
+                            horizontal: 'left',
+                        }}
+                        transformOrigin={{
+                            vertical: 'top',
+                            horizontal: 'left',
+                        }}
+                        onClose={() => handlePopoverClose(filterDesc.key)}
+                        disableRestoreFocus
+                    >
+                        <p>
+                            {filterDesc.help}
+                        </p>
+                    </Popover>
+                </div>
+            }
             <div className="filter-delete">
                 <IconButton aria-label="delete" onClick={() => deleteFilter(filterDesc.key)}>
                     <Delete />
@@ -56,7 +98,9 @@ const Filters = () => {
     }
 
     function updateStateDateCallbackGenerator(filterKey) {
-        return updateStateCallbackGenerator(filterKey, (newValue) => newValue.format("YYYY-MM-DD"));
+        return updateStateCallbackGenerator(filterKey, (newValue) => {
+            return newValue !== null ? newValue.format("YYYY-MM-DD") : null;
+        });
     }
 
     function updateStateFromEventValueCallbackGenerator(filterKey) {
@@ -218,7 +262,6 @@ const Filters = () => {
                 onChange={updateStateFromEventValueCallbackGenerator(filterDesc.key)}>
                     <MenuItem value={"constant"}>Constant</MenuItem>
                     <MenuItem value={"coauthored_articles"}>Co-Authored Articles</MenuItem>
-                    <MenuItem value={"citations"}>Citations of Co-Authored Articles</MenuItem>
             </Select>
         </FormControl>;
 

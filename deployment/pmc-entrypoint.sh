@@ -3,4 +3,4 @@ set -e
 
 # Start PubMed Connections.
 source activate pubmed-connections
-python3 -m run update
+python3 -m run test

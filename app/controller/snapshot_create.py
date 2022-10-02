@@ -1,23 +1,22 @@
 from datetime import datetime
 
 from app import neo4j_conn
-from app.controller.snapshot_visualise import parse_dates
-from app.controller.snapshot_analyse import AnalyticsThreading
-from app.helpers import remove_empty_filters
+from app.controller.graph_queries import parse_dates
 
 
-def create_by_filters(filters, current_user):
-    filters = remove_empty_filters(filters)
+def create_snapshot(filters, current_user):
+    """
+    Creates a snapshot with the given set of filters, associated with the current user.
+    """
     filters = parse_dates(filters)
-
     filters['creation_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    """
-    cypher for creating snapshot
-    """
-    def cypher(tx):
+    def run_create_snapshot_query(tx):
+        """
+        cypher for creating snapshot
+        """
         result = tx.run(
-            '''
+            """
             MATCH (m:DBMetadata)
             WITH max(m.version) AS max_version
             MATCH (d:DBMetadata)
@@ -30,19 +29,17 @@ def create_by_filters(filters, current_user):
             SET s += $filters
             SET s.id = ID(s)
             RETURN ID(s) AS snapshot_id
-            ''',
-            {'filters': filters,
-             'username': current_user
+            """,
+            {
+                "filters": filters,
+                "username": current_user
              }
         )
         if result is None:
-            return 'Failed to create snapshot!'
-        record = result.single()
+            raise Exception("Failed to create snapshot!")
 
-        return record['snapshot_id']
+        record = result.single()
+        return record["snapshot_id"]
 
     with neo4j_conn.new_session() as neo4j_session:
-        snapshot_id = neo4j_session.write_transaction(cypher)
-
-    return snapshot_id
-
+        return neo4j_session.write_transaction(run_create_snapshot_query)

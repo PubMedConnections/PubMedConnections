@@ -26,11 +26,10 @@ const resetState = {
 
 const initialState = {
     filters: {
-        mesh_heading: "Brain Stem Neoplasms",
-        author: "J ",
-        graph_node_size: "edge_count"
+        article: "Dentistry",
+        affiliation: "University of Western Australia"
     },
-    activeFilters: ["mesh_heading", "author", "graph_node_size"],
+    activeFilters: ["article", "affiliation"],
     resultsReturned: false,
     loadResults: true,
     resultsLoaded: false,

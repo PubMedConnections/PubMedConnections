@@ -2,10 +2,11 @@ from flask import request, jsonify
 from flask_restx import Namespace, Resource, fields
 
 from app.controller.graph_builder import PubMedGraphError
-from app.controller.snapshot_visualise import query_by_snapshot_id, parse_dates, get_author_graph, query_graph
-from app.controller.snapshot_create import create_by_filters
+from app.controller.graph_queries import parse_dates
+from app.controller.snapshot_visualise import query_by_snapshot_id, get_author_graph, visualise_graph
+from app.controller.snapshot_create import create_snapshot
 from app.controller.snapshot_get import get_snapshot, get_user_snapshots
-from app.controller.snapshot_delete import delete_by_snapshot_id
+from app.controller.snapshot_delete import delete_snapshot_by_id
 from app.controller.snapshot_analyse import get_analytics
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.pubmed.filtering import PubMedFilterLimitError, PubMedFilterValueError
@@ -44,7 +45,7 @@ class CreateSnapshot(Resource):
     def put():
         filter_params = request.json
         current_user = get_jwt_identity()
-        snapshot = create_by_filters(filter_params, current_user)
+        snapshot = create_snapshot(filter_params, current_user)
         return {"id": snapshot, "success": type(snapshot) == int}
 
 
@@ -54,7 +55,7 @@ class GetSnapshot(Resource):
     @jwt_required()
     @ns.doc(params={'snapshot_id': {'default': '147020'}}, security='api_key')
     def get():
-        snapshot_id = request.args.get('snapshot_id', default=-1, type=int)
+        snapshot_id = request.args.get('snapshot_id', default=None, type=int)
         return get_snapshot(snapshot_id)
 
 
@@ -64,7 +65,7 @@ class DeleteSnapshot(Resource):
     @jwt_required()
     @ns.doc(params={'snapshot_id': {'default': '1'}}, security='api_key')
     def delete(snapshot_id: int):
-        return {'id': delete_by_snapshot_id(snapshot_id), 'success': True}
+        return {'id': delete_snapshot_by_id(snapshot_id), 'success': True}
 
 
 @ns.route('/visualise/')
@@ -84,7 +85,7 @@ class VisualiseSnapshot(Resource):
         filter_params = request.json
         try:
             filter_params = parse_dates(filter_params)
-            return query_graph(filter_params)
+            return visualise_graph(filter_params)
         except (PubMedFilterLimitError, PubMedGraphError) as e:
             return {
                 "error": str(e),
@@ -113,7 +114,7 @@ class VisualiseThreeHopNeighbourhoodSnapshot(Resource):
 @ns.route('/analyse/<int:snapshot_id>')
 class AnalyseSnapshot(Resource):
     @staticmethod
-    # @jwt_required()
+    @jwt_required()
     @ns.doc(params={'snapshot_id': {'default': '1'}}, security="api_key")
     def get(snapshot_id: int):
         try:

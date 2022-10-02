@@ -1,5 +1,5 @@
 import datetime
-from typing import Any, Optional, Iterable
+from typing import Any, Optional, Iterable, cast
 
 import re
 import neo4j
@@ -28,13 +28,9 @@ class PubMedFilterResults:
     """
     def __init__(
             self,
-            journal_ids: Optional[Iterable[int]] = None,
-            mesh_ids: Optional[Iterable[int]] = None,
             article_ids: Optional[Iterable[int]] = None,
-            author_ids: Optional[Iterable[int]] = None
-    ):
-        self.journal_ids: Optional[list[int]] = list(journal_ids) if journal_ids is not None else None
-        self.mesh_ids: Optional[list[int]] = list(mesh_ids) if mesh_ids is not None else None
+            author_ids: Optional[Iterable[int]] = None):
+
         self.article_ids: Optional[list[int]] = list(article_ids) if article_ids is not None else None
         self.author_ids: Optional[list[int]] = list(author_ids) if author_ids is not None else None
 
@@ -48,15 +44,15 @@ class PubMedFilterQuerySettings:
             query_journals: bool = False,
             query_mesh: bool = False,
             query_articles: bool = False,
-            query_article_citations: bool = False,
-            query_authors: bool = False):
+            query_authors: bool = False,
+            query_affiliation: bool = False):
 
         self.node_limit: Optional[int] = node_limit
         self.query_journals: bool = query_journals
         self.query_mesh: bool = query_mesh
         self.query_articles: bool = query_articles
-        self.query_article_citations: bool = query_article_citations
         self.query_authors: bool = query_authors
+        self.query_affiliation: bool = query_affiliation
 
     def copy(self) -> 'PubMedFilterQuerySettings':
         """
@@ -65,7 +61,7 @@ class PubMedFilterQuerySettings:
         """
         return PubMedFilterQuerySettings(
             self.node_limit, self.query_journals, self.query_mesh,
-            self.query_articles, self.query_article_citations, self.query_authors
+            self.query_articles, self.query_authors, self.query_affiliation
         )
 
     def is_empty_query(self) -> bool:
@@ -73,8 +69,23 @@ class PubMedFilterQuerySettings:
         return not (self.query_journals or
                     self.query_mesh or
                     self.query_articles or
-                    self.query_article_citations or
-                    self.query_authors)
+                    self.query_authors or
+                    self.query_affiliation)
+
+    def __eq__(self, other):
+        """
+        Returns whether this query is equivalent to the other query.
+        """
+        if type(self) != type(other):
+            return False
+
+        other = cast(PubMedFilterQuerySettings, other)
+        return (self.node_limit == other.node_limit and
+                self.query_journals == other.query_journals and
+                self.query_mesh == other.query_mesh and
+                self.query_articles == other.query_articles and
+                self.query_authors == other.query_authors and
+                self.query_affiliation == other.query_affiliation)
 
 
 class PubMedFilterQuery:
@@ -87,6 +98,16 @@ class PubMedFilterQuery:
         self.query = query
         self.variables = variables
 
+    def __eq__(self, other):
+        """
+        Returns whether this query is equivalent to the other query.
+        """
+        if type(self) != type(other):
+            return False
+
+        other = cast(PubMedFilterQuery, other)
+        return self.settings == other.settings and self.query == other.query and self.variables == other.variables
+
     def run(self, session: neo4j.Session) -> PubMedFilterResults:
         """
         Runs the transaction to fetch the IDs of all matching nodes.
@@ -94,57 +115,62 @@ class PubMedFilterQuery:
         settings = self.settings
         results = session.run(self.query, **self.variables)
 
-        # Determine the indices of the elements in the results tuple.
-        next_tuple_index = 0
-
-        if settings.query_journals:
-            journal_index = next_tuple_index
-            next_tuple_index += 1
-            journal_ids = set()
-        else:
-            journal_index = -1
-            journal_ids = None
-
-        if settings.query_mesh:
-            mesh_index = next_tuple_index
-            next_tuple_index += 1
-            mesh_ids = set()
-        else:
-            mesh_index = -1
-            mesh_ids = None
-
-        if settings.query_articles:
-            article_index = next_tuple_index
-            next_tuple_index += 1
-            article_ids = set()
-        else:
-            article_index = -1
-            article_ids = None
-
-        if settings.query_authors:
-            author_index = next_tuple_index
-            next_tuple_index += 1
-            author_ids = set()
-        else:
-            author_index = -1
-            author_ids = None
+        author_ids = (set() if settings.query_authors else None)
+        article_ids = (set() if settings.query_articles else None)
 
         num_records = 0
         for record in results:
             num_records += 1
-            if settings.query_journals:
-                journal_ids.add(record[journal_index])
-            if settings.query_mesh:
-                mesh_ids.add(record[mesh_index])
             if settings.query_articles:
-                article_ids.add(record[article_index])
+                article_ids.update(record["article_ids"])
             if settings.query_authors:
-                author_ids.add(record[author_index])
+                author_ids.add(record["author_id"])
 
         if settings.node_limit is not None and num_records >= settings.node_limit:
             raise PubMedFilterLimitError(f"The limit of {settings.node_limit} nodes was reached")
 
-        return PubMedFilterResults(journal_ids, mesh_ids, article_ids, author_ids)
+        return PubMedFilterResults(article_ids, author_ids)
+
+
+class PubMedFilterComponent:
+    """
+    A single filter of a query.
+    """
+    def __init__(self, cypher_condition: str, specificity: float):
+        """
+        Parameters:
+            cypher_condition: The Cypher condition to be used in a WHERE clause for filtering.
+            specificity: A value representing how specific a filter is. The higher the
+                specificity, the fewer nodes that would be expected to pass this filter.
+        """
+        self.cypher_condition: str = cypher_condition
+        self.specificity: float = max(1.0, specificity)
+
+    @staticmethod
+    def calculate_specificity(filters: list['PubMedFilterComponent']) -> float:
+        """
+        Calculates a total specificity for all the given filters.
+        """
+        specificity = 1
+        for filter in filters:
+            specificity *= filter.specificity
+
+        return specificity
+
+    @staticmethod
+    def create_where_clause(filters: list['PubMedFilterComponent']) -> str:
+        """
+        Creates a WHERE clause to apply all the given filters.
+        Return the Cypher WHERE clause to include in a query.
+        """
+        query = "WHERE\n\t"
+        for index, filter in enumerate(filters):
+            if index > 0:
+                query += "\tAND "
+            query += f"{filter.cypher_condition}\n"
+
+        return query
+
 
 
 class PubMedFilterBuilder:
@@ -153,12 +179,12 @@ class PubMedFilterBuilder:
     filter MeSH headings, articles, and authors.
     """
     def __init__(self):
-        self._journal_filters: list[str] = []
-        self._mesh_filters: list[str] = []
-        self._article_filters: list[str] = []
-        self._article_citations_filters: list[str] = []
-        self._author_filters: list[str] = []
-        self._author_of_rel_filters: list[str] = []
+        self._journal_filters: list[PubMedFilterComponent] = []
+        self._mesh_filters: list[PubMedFilterComponent] = []
+        self._article_filters: list[PubMedFilterComponent] = []
+        self._article_author_filters: list[PubMedFilterComponent] = []
+        self._author_filters: list[PubMedFilterComponent] = []
+        self._affiliation_filters: list[PubMedFilterComponent] = []
         self._variable_values: dict[str, Any] = {}
 
     def get_parameter_map(self):
@@ -183,11 +209,13 @@ class PubMedFilterBuilder:
             filter_key: str,
             filter_value: str,
             *,
+            specificity_max_length: int = 18,
+            specificity_mul: float = 1,
             escape_chars: str = "\\",
             quote_chars: str = "'\"",
             separator_chars: str = ";",
             wildcard_chars: str = "*"
-    ) -> str:
+    ) -> PubMedFilterComponent:
         """
         Creates a filter to approximately match text in a field.
         Supports exact matching, matching multiple authors, and the use of wildcards.
@@ -267,6 +295,7 @@ class PubMedFilterBuilder:
 
         # Construct the conditions from the pieces.
         conditions = []
+        specificity = 5**10
         for exact_piece in exact_pieces:
             conditions.append(f"{field} = {self._next_filter_var(exact_piece)}")
 
@@ -276,35 +305,31 @@ class PubMedFilterBuilder:
             inexact_piece[-1] = inexact_piece[-1].rstrip()
 
             # No wildcards if the length is 1.
+            term_chars = 0
             if len(inexact_piece) == 1:
                 term = inexact_piece[0].lower()
+                term_chars = len(term)
                 conditions.append(f"toLower({field}) CONTAINS {self._next_filter_var(term)}")
             else:
+                for term in inexact_piece:
+                    term_chars += len(term)
+
                 regex = ".*".join(re.escape(term.lower()) for term in inexact_piece)
                 conditions.append(f"toLower({field}) =~ {self._next_filter_var(regex)}")
 
-        return "(" + " OR ".join(conditions) + ")"
-    
-    def _create_exact_text_filter(self, field: str, filter_key: str, filter_value: str, use_variables: bool = True) -> str:
-        """
-        Creates a filter to exactly match text in a field.
-        """
-        return f"{field} = {self._next_filter_var(filter_value)}"
+            # Attempt to quantify how specific this filter is.
+            specificity = min(specificity, 5**(min(9.0, 9.0 * term_chars / specificity_max_length)))
+
+        return PubMedFilterComponent("(" + " OR ".join(conditions) + ")", specificity * specificity_mul)
 
     def add_journal_name_filter(self, journal_name: str):
         """ Adds a filter for the name of the journal that articles are published in. """
         self._journal_filters.append(self._create_text_filter("journal.title", "journal", journal_name))
 
-    def add_mesh_descriptor_id_filter(self, mesh_desc_ids: list[int]):
-        """ Adds a filter by an article's Mesh Heading categorisations. """
-        if len(mesh_desc_ids) == 0:
-            raise PubMedFilterValueError("mesh", "There are no matching MeSH headings")
-
-        self._mesh_filters.append(f"mesh_heading.id IN {self._next_filter_var(mesh_desc_ids)}")
-
     def add_mesh_name_filter(self, mesh_name: str):
         """ Adds a filter by the name of MeSH headings. """
-        self._mesh_filters.append(self._create_text_filter("mesh_heading.name", "mesh_heading", mesh_name))
+        self._mesh_filters.append(
+            self._create_text_filter("mesh_heading.name", "mesh_heading", mesh_name, specificity_max_length=9))
 
     def add_article_name_filter(self, article_name: str):
         """ Adds a filter by the name of articles. """
@@ -312,8 +337,8 @@ class PubMedFilterBuilder:
 
     def add_affiliation_filter(self, affiliation_name: str):
         """ Adds a filter by the name of articles. """
-        self._author_of_rel_filters.append(
-            self._create_text_filter("author_rel.affiliation", "affiliation", affiliation_name)
+        self._affiliation_filters.append(
+            self._create_text_filter("affiliation.name", "affiliation", affiliation_name)
         )
 
     def add_author_name_filter(self, author_name: str):
@@ -322,156 +347,321 @@ class PubMedFilterBuilder:
         """
         self._author_filters.append(self._create_text_filter(
             "author.name", "author", author_name,
+            specificity_max_length=9,
+            specificity_mul=10,
             separator_chars=",;",
             wildcard_chars=".*"
         ))
 
     def add_first_author_filter(self):
         """ Adds a filter to only select first authors of articles. """
-        self._author_of_rel_filters.append("author_rel.is_first_author")
+        self._article_author_filters.append(PubMedFilterComponent("article_author.is_first_author", 8.0))
 
     def add_last_author_filter(self):
         """ Adds a filter to only select last authors of articles. """
-        self._author_of_rel_filters.append("author_rel.is_last_author")
+        self._article_author_filters.append(PubMedFilterComponent("article_author.is_last_author", 8.0))
 
     def add_published_after_filter(self, boundary_date: datetime.date):
         """ Adds a filter for all articles published after the given date. """
-        self._article_filters.append(f"article.date >= {self._next_filter_var(boundary_date)}")
+        self._article_filters.append(PubMedFilterComponent(
+            f"article.date >= {self._next_filter_var(boundary_date)}", 3.0
+        ))
 
     def add_published_before_filter(self, boundary_date: datetime.date):
         """ Adds a filter for all articles published before the given date. """
-        self._article_filters.append(f"article.date <= {self._next_filter_var(boundary_date)}")
+        self._article_filters.append(PubMedFilterComponent(
+            f"article.date <= {self._next_filter_var(boundary_date)}", 3.0
+        ))
 
-    def build(
-            self, settings: PubMedFilterQuerySettings, *,
-            node_query: bool = False, relationship_query: bool = False
-    ) -> PubMedFilterQuery:
+    def build_articles_first_cypher(self, settings: PubMedFilterQuerySettings, return_values: list[str]) -> str:
+        """
+        Builds a query matching all journals, articles, and MeSH headings
+        that pass the filters of this builder.
+        """
+        query = ""
+        articles_match_left = ""
+        articles_match_right = ""
+        articles_match_filters = self._article_filters
+
+        # Journal matching.
+        if settings.query_journals:
+            if settings.query_articles:
+                articles_match_left = "(journal:Journal) <-[:PUBLISHED_IN]- "
+                articles_match_filters += self._journal_filters
+            else:
+                query += "MATCH (journal:Journal)\n"
+                if len(self._journal_filters) > 0:
+                    query += PubMedFilterComponent.create_where_clause(self._journal_filters)
+
+        # MeSH Headings.
+        if settings.query_mesh:
+            if settings.query_articles:
+                articles_match_right = "-[:CATEGORISED_BY]-> (mesh_heading:MeshHeading)"
+                articles_match_filters += self._mesh_filters
+            else:
+                query += "MATCH (mesh_heading:MeshHeading)\n"
+                if len(self._mesh_filters) > 0:
+                    query += PubMedFilterComponent.create_where_clause(self._mesh_filters)
+
+        # Articles.
+        if settings.query_articles:
+            query += f"MATCH {articles_match_left}(article:Article){articles_match_right}\n"
+            if len(articles_match_filters) > 0:
+                query += PubMedFilterComponent.create_where_clause(articles_match_filters)
+            query += "WITH DISTINCT article\n"
+            return_values.append("COLLECT(id(article)) AS article_ids")
+
+        return query
+
+    def build_articles_last_cypher(self, settings: PubMedFilterQuerySettings, return_values: list[str]) -> str:
+        """
+        Builds a query matching all journals, articles, and MeSH headings
+        that pass the filters of this builder.
+        """
+        query = ""
+        articles_match_left = ""
+        articles_match_right = ""
+        articles_match_filters = self._article_filters
+
+        # Journal matching.
+        if settings.query_journals:
+            if settings.query_articles:
+                articles_match_left = "(journal:Journal) <-[:PUBLISHED_IN]- "
+                articles_match_filters += self._journal_filters
+            else:
+                query += "MATCH (journal:Journal)\n"
+                if len(self._journal_filters) > 0:
+                    query += PubMedFilterComponent.create_where_clause(self._journal_filters)
+
+        # Author.
+        if settings.query_articles and settings.query_authors:
+            articles_match_right = " <-[:AUTHOR_OF]- (article_author)"
+
+        # MeSH Headings.
+        matched_mesh = False
+        if settings.query_mesh and articles_match_left == "":
+            matched_mesh = True
+            articles_match_left = "(mesh_heading:MeshHeading) <-[:CATEGORISED_BY]- "
+            articles_match_filters += self._mesh_filters
+        if settings.query_mesh and articles_match_right == "":
+            matched_mesh = True
+            articles_match_right = " -[:CATEGORISED_BY]-> (mesh_heading:MeshHeading)"
+            articles_match_filters += self._mesh_filters
+
+        # Articles.
+        if settings.query_articles:
+            query += f"MATCH {articles_match_left}(article:Article){articles_match_right}\n"
+            if len(articles_match_filters) > 0:
+                query += PubMedFilterComponent.create_where_clause(articles_match_filters)
+            query += "WITH DISTINCT article"
+            if settings.query_authors:
+                query += ", author"
+            query += "\n"
+            return_values.append("COLLECT(id(article)) AS article_ids")
+
+        # MeSH filters.
+        if settings.query_mesh and not matched_mesh:
+            query += "MATCH (mesh_heading:MeshHeading)  <-[:CATEGORISED_BY]- (article)\n"
+            if len(self._mesh_filters) > 0:
+                query += PubMedFilterComponent.create_where_clause(self._mesh_filters)
+
+            # We use the collect to reduce the cardinality of the query.
+            # Otherwise, any querying after this would occur for every
+            # matching MeSH heading as well.
+            query += "WITH COLLECT(DISTINCT mesh_heading) AS mesh_headings"
+            if settings.query_articles:
+                query += ", article"
+            if settings.query_authors:
+                query += ", author"
+            query += "\n"
+
+        return query
+
+    def build_authors_first_cypher(self, settings: PubMedFilterQuerySettings, return_values: list[str]) -> str:
+        """
+        Builds a query matching all authors that pass the filters of this builder.
+        """
+        query = ""
+        authors_match_left = ""
+        authors_match_right = ""
+        authors_match_filters = self._article_author_filters
+
+        # Affiliation.
+        if settings.query_affiliation:
+            if settings.query_authors:
+                authors_match_left = "(affiliation:Affiliation) <-[:AFFILIATED_WITH]- "
+                authors_match_filters += self._affiliation_filters
+            else:
+                query += "MATCH (affiliation:Affiliation)\n"
+                if len(self._affiliation_filters) > 0:
+                    query += PubMedFilterComponent.create_where_clause(self._affiliation_filters)
+
+        # Author.
+        if settings.query_authors:
+            authors_match_right = " <-[:IS_AUTHOR]- (author:Author)"
+            authors_match_filters += self._author_filters
+
+        # Article Author.
+        if settings.query_authors:
+            query += f"MATCH {authors_match_left}(article_author:ArticleAuthor){authors_match_right}\n"
+            if len(authors_match_filters) > 0:
+                query += PubMedFilterComponent.create_where_clause(authors_match_filters)
+
+            if settings.query_articles:
+                query += "WITH DISTINCT article_author, author"
+            else:
+                query += "WITH DISTINCT author"
+            query += "\n"
+
+            return_values.append("id(author) AS author_id")
+
+        return query
+
+    def build_authors_last_cypher(self, settings: PubMedFilterQuerySettings, return_values: list[str]) -> str:
+        """
+        Builds a query matching all authors that pass the filters of this builder.
+        """
+        query = ""
+        authors_match_left = ""
+        authors_match_right = ""
+        authors_match_filters = self._article_author_filters
+
+        # Affiliation.
+        if settings.query_affiliation:
+            if settings.query_authors:
+                authors_match_left = "(affiliation:Affiliation) <-[:AFFILIATED_WITH]- "
+                authors_match_filters += self._affiliation_filters
+            else:
+                query += "MATCH (affiliation:Affiliation)\n"
+                if len(self._affiliation_filters) > 0:
+                    query += PubMedFilterComponent.create_where_clause(self._affiliation_filters)
+
+        # Article.
+        if settings.query_articles and settings.query_authors:
+            authors_match_right = " -[:AUTHOR_OF]-> (article)"
+
+        # Author.
+        matched_author = False
+        if settings.query_authors and authors_match_left == "":
+            matched_author = True
+            authors_match_left = "(author:Author) -[:IS_AUTHOR]-> "
+            authors_match_filters += self._author_filters
+        if settings.query_authors and authors_match_right == "":
+            matched_author = True
+            authors_match_right = " <-[:IS_AUTHOR]- (author:Author)"
+            authors_match_filters += self._author_filters
+
+        # Articles.
+        if settings.query_authors:
+            query += f"MATCH {authors_match_left}(article_author:ArticleAuthor){authors_match_right}\n"
+            if len(authors_match_filters) > 0:
+                query += PubMedFilterComponent.create_where_clause(authors_match_filters)
+
+            if matched_author:
+                query += "WITH DISTINCT author, article\n"
+            else:
+                query += "WITH DISTINCT article_author, article\n"
+            return_values.append("id(author) AS author_id")
+
+        # Author.
+        if settings.query_authors and not matched_author:
+            query += "MATCH (article_author) <-[:IS_AUTHOR]- (author:Author)\n"
+            if len(self._author_filters) > 0:
+                query += PubMedFilterComponent.create_where_clause(self._author_filters)
+
+        return query
+
+    def build(self, settings: PubMedFilterQuerySettings) -> PubMedFilterQuery:
         """
         Builds this list of filters into a Cypher query.
         """
-        visualise_query = not node_query and not relationship_query
-
-        query = ""
-        if visualise_query:
-            query += "CYPHER planner=dp\n"
-        elif relationship_query:
-            query += "CALL {\n"
+        query = "CYPHER planner=dp\n"
 
         contains_journal_filters = len(self._journal_filters) > 0
         contains_mesh_filters = len(self._mesh_filters) > 0
         contains_article_filters = len(self._article_filters) > 0
-        contains_article_citations_filters = len(self._article_citations_filters) > 0
+        contains_article_author_filters = len(self._article_author_filters) > 0
         contains_author_filters = len(self._author_filters) > 0
-        contains_author_of_rel_filters = len(self._author_of_rel_filters) > 0
+        contains_affiliation_filters = len(self._affiliation_filters) > 0
 
         # Querying some fields requires querying others.
         if contains_journal_filters:
             settings.query_journals = True
-        if contains_author_filters or contains_author_of_rel_filters:
-            settings.query_authors = True
-        if contains_article_citations_filters:
-            settings.query_article_citations = True
-        if contains_article_filters or settings.query_authors or settings.query_article_citations:
-            settings.query_articles = True
         if contains_mesh_filters:
             settings.query_mesh = True
+        if contains_affiliation_filters:
+            settings.query_affiliation = True
+        if contains_author_filters or contains_article_author_filters or settings.query_affiliation:
+            settings.query_authors = True
+        if contains_article_filters or settings.query_authors or (settings.query_mesh and settings.query_journals):
+            settings.query_articles = True
 
         if settings.is_empty_query():
             raise ValueError("Not querying for anything. Set some filters, or force query of some results")
 
-        # Journal filters.
-        if settings.query_journals:
-            query += "MATCH (journal:Journal)\n"
-        if contains_journal_filters:
-            query += "WHERE\n\t"
-            query += "\n\tAND ".join(self._journal_filters) + "\n"
+        article_filters = self._article_filters + self._journal_filters + self._mesh_filters
+        article_filters_specificity = PubMedFilterComponent.calculate_specificity(article_filters)
 
-        # MeSH filters.
-        if settings.query_mesh:
-            query += "MATCH (mesh_heading:MeshHeading)\n"
-        if contains_mesh_filters:
-            query += "WHERE\n\t"
-            query += "\n\tAND ".join(self._mesh_filters) + "\n"
+        author_filters = self._author_filters + self._article_author_filters + self._affiliation_filters
+        author_filters_specificity = PubMedFilterComponent.calculate_specificity(author_filters) / 2.0
 
-        # Article filters.
-        if settings.query_articles:
-            left = ""
-            right = ""
-            if settings.query_journals:
-                left = "(journal) <-[article_published_in:PUBLISHED_IN]- "
-            if settings.query_mesh:
-                right = " -[article_categorised_by:CATEGORISED_BY]-> (mesh_heading)"
-
-            query += f"MATCH {left}(article:Article){right}\n"
-        if contains_article_filters:
-            query += "WHERE\n\t"
-            query += "\n\tAND ".join(self._article_filters) + "\n"
-
-        # Article citation filters.
-        if settings.query_article_citations:
-            query += """
-            CALL {
-                WITH article
-                MATCH (article) <-[article_citation_rel:CITES]- (:Article)
-                RETURN COUNT(article_citation_rel) AS article_citations
-            }
-            """
-        if contains_article_citations_filters:
-            query += "WHERE\n\t"
-            query += "\n\tAND ".join(self._article_citations_filters) + "\n"
-
-        # Author filters.
-        if settings.query_authors:
-            if settings.query_articles:
-                query += "MATCH (author:Author) -[author_rel:AUTHOR_OF]-> (article)\n"
-            else:
-                query += "MATCH (author:Author)\n"
-
-        if contains_author_filters or contains_author_of_rel_filters:
-            query += "WHERE\n\t"
-            query += "\n\tAND ".join(self._author_filters + self._author_of_rel_filters)
-            query += "\n"
-
-        # Collect and Unwind.
-        if node_query:
-            query += "OPTIONAL MATCH (author:Author) --> (article) <-- (coauthor:Author)\n"
-            query += "WITH COLLECT(id(author)) + COLLECT(id(coauthor)) AS ids\n"
-            query += "UNWIND ids as id\n"
-        
-        if relationship_query:
-            query += "OPTIONAL MATCH (author:Author) --> (article) <-- (coauthor:Author)\n"
-            query += "WITH COLLECT(DISTINCT author) as authors, COLLECT(DISTINCT article) as articles\n"
-            query += "UNWIND authors as author\n"
-            query += "UNWIND articles as article\n"
-
-        # Return values.
+        # Build the queries.
         return_values = []
-        if visualise_query:
-            if settings.query_journals:
-                return_values.append("id(journal) AS journal_id")
-            if settings.query_mesh:
-                return_values.append("mesh_heading.id AS mesh_id")
-            if settings.query_articles:
-                return_values.append("id(article) AS article_id")
-            if settings.query_authors:
-                return_values.append("id(author) AS author_id")
-        if node_query:
-            return_values.append("DISTINCT id")
-        if relationship_query:
-            return_values.append("author")
-            return_values.append("article")
+        if article_filters_specificity > author_filters_specificity:
+            query += self.build_articles_first_cypher(settings, return_values)
+            query += self.build_authors_last_cypher(settings, return_values)
+        else:
+            query += self.build_authors_first_cypher(settings, return_values)
+            query += self.build_articles_last_cypher(settings, return_values)
 
         # Return.
         query += "RETURN\n\t" + ",\n\t".join(return_values) + "\n"
 
         # Limits.
-        if settings.node_limit is not None and not relationship_query:
+        if settings.node_limit is not None:
             query += f"LIMIT {self._next_filter_var(settings.node_limit)}\n"
 
-        if relationship_query:
-            query += "}\n\n"
-            query += "MATCH (author1:Author)-[:AUTHOR_OF]->(article:Article)<-[:AUTHOR_OF]-(author2:Author)\n"
-            query += "WHERE author1 = author OR author2 = author\n"
-            query += "RETURN id(author1) as source, id(author2) as target, apoc.create.vRelationship(author1, 'COAUTHOR', {count: count(*)}, author2) as rel\n"
-
         return PubMedFilterQuery(settings, query, self._variable_values)
+
+
+class PubMedFilterCache:
+    """
+    Caches the results of past filter queries to be re-used for future requests.
+    This is especially helpful when only changing the graph properties.
+    """
+    def __init__(self, results_to_hold: int = 10):
+        self.results_to_hold = results_to_hold
+        self.past_results: list[tuple[PubMedFilterQuery, PubMedFilterResults]] = []
+
+    def get(self, query: PubMedFilterQuery) -> Optional[PubMedFilterResults]:
+        """
+        If the results for the given query have been saved, returns them.
+        Otherwise, returns None.
+        """
+        for past_query, results in self.past_results:
+            if past_query == query:
+                return results
+
+        return None
+
+    def add(self, query: PubMedFilterQuery, results: PubMedFilterResults):
+        """
+        Saves the results of the given query so that they can be re-used
+        if the same query is made in the future.
+        """
+        self.past_results.append((query, results))
+        while len(self.past_results) > self.results_to_hold:
+            self.past_results = self.past_results[1:]
+
+    def get_or_run(self, query: PubMedFilterQuery, session: neo4j.Session) -> PubMedFilterResults:
+        """
+        If the results of the query have been cached, then returns the cached results.
+        Otherwise, runs the query and caches the results.
+        """
+        existing_results = self.get(query)
+        if existing_results is not None:
+            return existing_results
+
+        results = query.run(session)
+        self.add(query, results)
+        return results

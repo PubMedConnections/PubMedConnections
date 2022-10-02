@@ -5,10 +5,11 @@ from graphdatascience import GraphDataScience
 
 import json
 import threading
+
+from app.controller.graph_queries import query_graph, CoAuthorGraph
 from app.controller.snapshot_get import get_snapshot
-from app.helpers import set_default_date, remove_snapshot_metadata
+from app.helpers import remove_snapshot_metadata
 from app import neo4j_conn
-from app.controller.snapshot_visualise import construct_graph_filter, construct_query_settings
 from app.PubMedErrors import PubMedSnapshotDoesNotExistError, PubMedUpdateSnapshotError, PubMedAnalyticsError
 
 
@@ -23,8 +24,6 @@ class AnalyticsThreading(object):
 # force timeing out of analytics
 # testing
 # GDS working with docker
-
-# prevent creating a snapshot if no nodes returned or node limit is reached
 
 update_degree_centrality_query = \
     """
@@ -109,23 +108,22 @@ def project_graph_and_run_analytics(
     """
     Projects the graph which the analytics are to be computed on, then computes these analytics.
     """
-    
     gds = GraphDataScience(neo4j_conn.driver)
-
-    # print(node_query)
-    # print(relationship_query)
-
-    analytics_response = {}
 
     with neo4j_conn.new_session() as session:
         # try project graph into memory
         try:
+            # make sure graph has not already been projected
+            if gds.graph.exists(graph_name)["exists"]:
+                G = gds.graph.get(graph_name)
+                G.drop()
+
             G, _ = gds.graph.project.cypher(
                 graph_name,
                 node_query,
                 relationship_query,
                 parameters=parameter_map,
-                validateRelationships=False
+                validateRelationships=True
             )
 
             # compute degree centrality
@@ -175,12 +173,13 @@ def project_graph_and_run_analytics(
 
             # get the top 5 nodes by betweenness centrality
             top_5_betweenness = []
+            res['score'] = res['score'].astype(int)
             for row in res.head(5).itertuples():
                 top_5_betweenness.append(
                     {
                         "id": row.nodeId,
                         "name": gds.util.asNode(row.nodeId).get('name'),
-                        "centrality": int(row.score)
+                        "centrality": row.score
                     }
                 )
 
@@ -189,7 +188,7 @@ def project_graph_and_run_analytics(
             for score, count in res['score'].value_counts().sort_index().iteritems():
                 betweenness_distributions.append(
                     {
-                        "score": int(score),
+                        "score": score,
                         "count": count
                     }
                 )
@@ -208,8 +207,6 @@ def project_graph_and_run_analytics(
                 betweenness_centrality_record
             )
 
-            print("analytics completed")
-
             analytics_response = {
                 "degree": {
                     "top_5": top_5_degree,
@@ -222,6 +219,7 @@ def project_graph_and_run_analytics(
             }
 
         except ClientError as err:
+            print(err)
             raise PubMedAnalyticsError(err.code, err.message)
         
         finally:
@@ -240,41 +238,51 @@ def get_analytics(snapshot_id: int):
     compute them.
     """
 
+    # Fetch the snapshot settings from the database.
     snapshot = get_snapshot(snapshot_id)
-
     if len(snapshot) == 0:
         raise PubMedSnapshotDoesNotExistError(f"There is no snapshot with the id: {snapshot_id}")
     
     snapshot = snapshot[0]
 
+    # Fetch any existing analytics results for this snapshot.
     analytics_results = retrieve_analytics(snapshot_id)
 
-    if analytics_results == {} or \
-            'degree' not in analytics_results or \
-            'betweenness' not in analytics_results:
-
-        print("starting analytics")
-
+    # If we haven't queried the analytics for this snapshot yet, then do it now.
+    if analytics_results == {} or "degree" not in analytics_results or "betweenness" not in analytics_results:
         graph_name = "coauthors" + str(snapshot_id)
+        snapshot_filters = remove_snapshot_metadata(snapshot)
 
-        # parse date strings into date time
-        snapshot = set_default_date(snapshot)
+        # Query the graph to perform the analytics on.
+        graph = query_graph(snapshot_filters)
+        if not isinstance(graph, CoAuthorGraph):
+            raise Exception("Only co-author graphs are supported for analytics")
 
-        snapshot = remove_snapshot_metadata(snapshot)
-
-        # construct filter object from snapshot
-        query_settings = construct_query_settings(snapshot)
-        query_settings.query_authors = True
-        snapshot_filter = construct_graph_filter(snapshot)
-
-        # query author nodes
-        node_query = snapshot_filter.build(query_settings, node_query=True).query
-
-        # create co-author relationships between these authors
-        relationship_query = snapshot_filter.build(query_settings, relationship_query=True).query
+        # Build the queries for projecting the graph for analytics.
+        query_params = {
+            "author_ids": list(graph.authors_with_coauthors_ids),
+            "article_ids": list(graph.article_ids)
+        }
+        node_query = """
+        UNWIND $author_ids AS id
+        RETURN id
+        """
+        relationship_query = """
+        MATCH (author) -[:IS_AUTHOR]-> (:ArticleAuthor) -[:AUTHOR_OF]-> (article:Article)
+                       <-[:AUTHOR_OF]- (:ArticleAuthor) <-[IS_AUTHOR]- (coauthor:Author)
+        WHERE
+            id(author) IN $author_ids
+            AND id(coauthor) IN $author_ids
+            AND author <> coauthor
+            AND id(article) in $article_ids
+        RETURN
+            id(author) AS source,
+            id(coauthor) AS target,
+            apoc.create.vRelationship(author, 'COAUTHOR', {count: COUNT(DISTINCT article)}, coauthor) as rel
+        """
 
         analytics_results = project_graph_and_run_analytics(
-            graph_name, node_query, relationship_query, snapshot_filter.get_parameter_map(), snapshot_id
+            graph_name, node_query, relationship_query, query_params, snapshot_id
         )
 
     return analytics_results

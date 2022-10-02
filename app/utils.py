@@ -9,6 +9,59 @@ from multiprocessing.pool import ThreadPool
 from typing import TypeVar
 
 
+def truncate_long_names(name: str, max_name_length: int = 512, *, suffix: str = "... <Truncated Name>") -> str:
+    """
+    Some names in the PubMed dataset are ridiculously long.
+    This often happens for labs that list all of their members
+    in their names...
+    """
+    if len(name) <= max_name_length:
+        return name
+    if len(suffix) >= max_name_length:
+        raise ValueError("The suffix is longer than the maximum name length!")
+
+    # First, remove all content between brackets.
+    for brackets in ["()", "[]", "{}"]:
+        left_bracket, right_bracket = brackets
+        result = ""
+        depth = 0
+        for ch in name:
+            if ch == left_bracket:
+                depth += 1
+                if depth == 1:
+                    result += f"{left_bracket}...{right_bracket}"
+            elif ch == right_bracket:
+                depth = max(0, depth - 1)
+            elif depth == 0:
+                result += ch
+
+        # If the whole name is in brackets, we don't want to remove everything.
+        if len(result) >= max_name_length // 3:
+            name = result
+            if len(name) <= max_name_length:
+                return name
+
+    # Remove text from end of the name.
+    truncated = name[:(max_name_length - len(suffix))]
+
+    def find_break(find: str):
+        try:
+            return truncated.rindex(find)
+        except ValueError:
+            return -1
+
+    # Attempt to truncate at punctuation if possible.
+    nice_break_index = max(find_break(", "), find_break(": "), find_break("; "))
+    if nice_break_index < 0:
+        nice_break_index = max(find_break(","), find_break(":"), find_break(";"))
+    if nice_break_index < 0:
+        nice_break_index = find_break(" ")
+    if nice_break_index >= max_name_length // 2:
+        truncated = truncated[:nice_break_index]
+
+    return truncated + suffix
+
+
 def calc_md5_hash_of_file(file_and_dir: str, *, block_size=2**20) -> str:
     """
     Calculates the MD5 hash for the contents of the given file encoded in hexadecimal.

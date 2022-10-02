@@ -4,7 +4,7 @@ import React, {} from 'react';
 
 const PrivateRoutes = () => {
   const userLoggedIn = useSelector((store) => store.user.success);
-  return userLoggedIn ? <Outlet /> : <Navigate to='/login' />;
+  return userLoggedIn ? <Outlet /> : <Navigate to='/login' replace/>;
 };
 
 export default PrivateRoutes;
