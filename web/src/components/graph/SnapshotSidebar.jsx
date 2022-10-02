@@ -15,8 +15,12 @@ import {setFilters, resetAllFilters, setLoadResults} from '../../store/slices/fi
 import {Delete, Save} from "@mui/icons-material";
 import {IconButton, Popover, TextField} from "@mui/material";
 import {availableFilters} from './filterInfo'
+import Box from '@mui/material/Box';
+import Analytics from '../graph/Analytics'
 
 const drawerWidth = 500;
+
+
 
 function SnapshotSidebar() {
   const [selectedSnapshot, setSelectedSnapshot] = useState(-1);
@@ -28,6 +32,10 @@ function SnapshotSidebar() {
   const [snapshots, setSnapshots] = useState([]);
   const [snapshotName, setSnapshotName] = useState("");
   const [namingAnchor, setNamingAnchor] = useState(null);
+
+  const [showModal, setShowModal] = useState(false);
+
+  const [analyticsData, setAnalyticsData] = useState(null);
 
   function updateSnapshots(id) {
     GET('snapshot/list/')
@@ -72,6 +80,26 @@ function SnapshotSidebar() {
           window.alert("Could not save snapshot.", err);
         })
   }
+
+
+  const AnalyticsModal = () => {
+      const snapshot = snapshots.find(s => s.id === selectedSnapshot);
+      return (
+    <Box style={{position: 'absolute', zIndex: 10000,  width: "100%", height: "100%", opacity: '1', textAlign: 'center'}}>
+      <div style={{position: 'absolute', zIndex: 10000, backgroundColor: "black",  width: "100%", height: "100%", opacity: '0.4', textAlign: 'center'}} onClick={() => setShowModal(false)}></div>
+
+
+      <div style={{position: "absolute", left: "15%", top: "15%", width: '70%', height: "70%", backgroundColor: "white", zIndex: 100000}}>
+
+        <div style={{position: "fixed", left: "17.5%", top: "25%", width: "30%", height:"30%"}}>
+            <h1>{snapshot.snapshot_name}</h1>
+            <p>Snapshot ID: {selectedSnapshot} <i>({snapshot.creation_time})</i></p>
+        </div>
+
+        <Analytics data={analyticsData} />
+      </div>
+    </Box>
+  )}
 
   function toggleSnapshotNaming(event) {
       setNamingAnchor(event.target)
@@ -125,8 +153,22 @@ function SnapshotSidebar() {
       }
   }, [filters, selectedSnapshot, snapshots])
 
+    useEffect(() => {
+        setAnalyticsData(null);
+        if (selectedSnapshot > -1) {
+            GET('snapshot/analyse/' + selectedSnapshot)
+                .then((resp) => {
+                    setAnalyticsData(resp.data);
+                })
+                .catch((err) => {
+                    console.log(err);
+                })
+        }
+    }, [selectedSnapshot])
+
   return (
       <div>
+        {showModal ? <AnalyticsModal /> : null}
         <Drawer
             sx={{
               width: drawerWidth,
@@ -152,7 +194,7 @@ function SnapshotSidebar() {
                           setSelectedSnapshot(snapshot.id);
                           let new_filters = {}
                           Object.keys(snapshot).forEach(f => {
-                            if (f !== "id" && f !== "creation_time") {
+                            if (f !== "id" && f !== "creation_time" && f !== "betweenness_centrality" && f !== "degree_centrality") {
                               new_filters[f] = snapshot[f]
                             }
                           });
@@ -208,10 +250,20 @@ function SnapshotSidebar() {
                 variant='fullWidth'
                 sx={{ background: '#c4c4c4', width: '100%', height: '1px' }}
             />
-            <div id="user-details">
+            <div id="user-details" >
+                <Button onClick={() => {
+                    setShowModal(true)
+                }}
+                        disabled={analyticsData == null}
+                        variant={"contained"}
+                        style={{position: 'relative', top: '10px', left: "35%", padding: "10px 15px 10px"}}>
+                    Open Snapshot Analytics
+                </Button>
             </div>
           </div>
         </Drawer>
+
+
         <Button variant={"contained"}
                 endIcon={namingOpen ? null : <Save />}
                 id="save-snapshot-button"
@@ -248,6 +300,7 @@ function SnapshotSidebar() {
               </div>
           </Popover>
       </div>
+
   );
 }
 

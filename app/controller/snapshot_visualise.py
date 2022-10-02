@@ -176,6 +176,9 @@ def construct_graph_filter(filters: dict[str, Any]) -> PubMedFilterBuilder:
         boundary_date = date(year=filter_date.year, month=filter_date.month, day=filter_date.day)
         filter_builder.add_published_before_filter(boundary_date)
 
+    if 'snapshot_name' in filters:
+        del filters['snapshot_name']
+
     if len(filters) != 0:
         print("Unknown filters present: " + str(filters), file=sys.stderr)
 

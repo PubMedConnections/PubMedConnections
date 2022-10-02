@@ -221,6 +221,8 @@ const Graph = () => {
               <span className="not-loaded" >{resultsLoaded ? "" : " (Graph not refreshed)"}</span>
           </div>
       }
+
+      
     </div>;
 };
 

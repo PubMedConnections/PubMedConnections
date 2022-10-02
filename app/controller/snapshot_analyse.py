@@ -24,8 +24,6 @@ class AnalyticsThreading(object):
 # testing
 # GDS working with docker
 
-# prevent creating a snapshot if no nodes returned or node limit is reached
-
 update_degree_centrality_query = \
     """
     MATCH (m:DBMetadata)
@@ -112,14 +110,16 @@ def project_graph_and_run_analytics(
     
     gds = GraphDataScience(neo4j_conn.driver)
 
-    # print(node_query)
-    # print(relationship_query)
-
     analytics_response = {}
 
     with neo4j_conn.new_session() as session:
         # try project graph into memory
         try:
+            # make sure graph has not already been projected
+            if gds.graph.exists(graph_name)["exists"]:
+                G = gds.graph.get(graph_name)
+                G.drop()
+
             G, _ = gds.graph.project.cypher(
                 graph_name,
                 node_query,
@@ -175,12 +175,13 @@ def project_graph_and_run_analytics(
 
             # get the top 5 nodes by betweenness centrality
             top_5_betweenness = []
+            res['score'] = res['score'].astype(int)
             for row in res.head(5).itertuples():
                 top_5_betweenness.append(
                     {
                         "id": row.nodeId,
                         "name": gds.util.asNode(row.nodeId).get('name'),
-                        "centrality": int(row.score)
+                        "centrality": row.score
                     }
                 )
 
@@ -189,7 +190,7 @@ def project_graph_and_run_analytics(
             for score, count in res['score'].value_counts().sort_index().iteritems():
                 betweenness_distributions.append(
                     {
-                        "score": int(score),
+                        "score": score,
                         "count": count
                     }
                 )
@@ -208,8 +209,6 @@ def project_graph_and_run_analytics(
                 betweenness_centrality_record
             )
 
-            print("analytics completed")
-
             analytics_response = {
                 "degree": {
                     "top_5": top_5_degree,
@@ -222,6 +221,7 @@ def project_graph_and_run_analytics(
             }
 
         except ClientError as err:
+            print(err)
             raise PubMedAnalyticsError(err.code, err.message)
         
         finally:
@@ -252,8 +252,6 @@ def get_analytics(snapshot_id: int):
     if analytics_results == {} or \
             'degree' not in analytics_results or \
             'betweenness' not in analytics_results:
-
-        print("starting analytics")
 
         graph_name = "coauthors" + str(snapshot_id)
 
