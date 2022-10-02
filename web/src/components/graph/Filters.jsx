@@ -98,7 +98,9 @@ const Filters = () => {
     }
 
     function updateStateDateCallbackGenerator(filterKey) {
-        return updateStateCallbackGenerator(filterKey, (newValue) => newValue.format("YYYY-MM-DD"));
+        return updateStateCallbackGenerator(filterKey, (newValue) => {
+            return newValue !== null ? newValue.format("YYYY-MM-DD") : null;
+        });
     }
 
     function updateStateFromEventValueCallbackGenerator(filterKey) {

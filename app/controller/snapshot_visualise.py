@@ -226,14 +226,14 @@ def query_coauthor_graph(filters: dict[str, Any], open: bool):
             CYPHER planner=dp
             MATCH (author:Author)
             WHERE id(author) IN $author_ids
-            MATCH (author) -[author_rel:AUTHOR_OF]-> (article:Article)
+            MATCH (author) -[:IS_AUTHOR]-> (article_author:ArticleAuthor) -[:AUTHOR_OF]-> (article:Article)
             WHERE id(article) in $article_ids
-            OPTIONAL MATCH (article) <-[coauthor_rel:AUTHOR_OF]- (coauthor)
+            OPTIONAL MATCH (article) <-[:AUTHOR_OF]- (article_coauthor:ArticleAuthor) <-[IS_AUTHOR]- (coauthor:Author)
             WHERE author <> coauthor
             """
             + (" AND id(coauthor) IN $author_ids" if not open else "") +
             """
-            RETURN id(author), author, author_rel, article, coauthor_rel, id(coauthor), coauthor
+            RETURN id(author), author, article_author, article, article_coauthor, id(coauthor), coauthor
             """,
             author_ids=filter_results.author_ids,
             article_ids=filter_results.article_ids,
@@ -244,7 +244,7 @@ def query_coauthor_graph(filters: dict[str, Any], open: bool):
         graph_builder = GraphBuilder()
         for record in co_author_graph_results:
             graph_builder.add_record()
-            author_id, author, author_rel, article, coauthor_rel, coauthor_id, coauthor = record
+            author_id, author, article_author, article, article_coauthor, coauthor_id, coauthor = record
 
             author = PubMedCacheConn.read_author_node(author)
             article = PubMedCacheConn.read_article_node(article)
@@ -253,12 +253,12 @@ def query_coauthor_graph(filters: dict[str, Any], open: bool):
                 continue
 
             coauthor = PubMedCacheConn.read_author_node(coauthor)
-            author_rel = PubMedCacheConn.read_article_author_relation(article, author, author_rel)
-            coauthor_rel = PubMedCacheConn.read_article_author_relation(article, coauthor, coauthor_rel)
+            article_author = PubMedCacheConn.read_article_author(article_author)
+            article_coauthor = PubMedCacheConn.read_article_author(article_coauthor)
 
             graph_builder.add_node(ArticleAuthorNode(coauthor_id, False, coauthor, article))
             graph_builder.add_edge(ArticleCoAuthorEdge(
-                author.author_id, author_rel, article, coauthor_rel, coauthor.author_id
+                author.author_id, article_author, article, article_coauthor, coauthor.author_id
             ))
 
         if graph_builder.get_node_count() >= query_settings.node_limit:
