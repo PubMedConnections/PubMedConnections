@@ -132,7 +132,7 @@ class BuildPacket:
     but each stage can be run for a new packet after it has been completed
     for the current packet. This allows pipelining the data insertion.
     """
-    NUM_STAGES: Final[int] = 6
+    NUM_STAGES: Final[int] = 7
 
     def __init__(
             self,
@@ -149,6 +149,8 @@ class BuildPacket:
 
         self.affiliations: dict[str, DBAffiliation] = affiliations
         self._affiliation_ids: Optional[dict[str, int]] = None
+
+        self._orphaned_article_author_ids: Optional[list[int]] = None
 
         self.articles: list[DBArticle] = articles
         self._article_ids: Optional[list[int]] = None
@@ -184,6 +186,8 @@ class BuildPacket:
             self._stage_5_connect_article_authors(debug=debug)
         elif stage == 6:
             self._stage_6_affiliate_authors(debug=debug)
+        elif stage == 7:
+            self._stage_7_delete_orphaned_article_authors(debug=debug)
         else:
             raise Exception(f"Unknown stage {stage}")
 
@@ -347,9 +351,9 @@ class BuildPacket:
         for article in self.articles:
             pmids.append(article.pmid)
 
-        def run_article_deletion_query(tx: neo4j.Transaction):
+        def run_article_deletion_query(tx: neo4j.Transaction) -> list[int]:
             """ Deletes the articles from the pmids list. """
-            tx.run(
+            results = tx.run(
                 """
                 CYPHER planner=dp
                 MATCH (article_node:Article)
@@ -357,17 +361,23 @@ class BuildPacket:
                 CALL {
                     WITH article_node
                     MATCH (article_author_node:ArticleAuthor) -[:AUTHOR_OF]-> (article_node)
-                    DETACH DELETE article_author_node
+                    RETURN COLLECT(id(article_author_node)) AS orphan_article_author_ids
                 }
                 DETACH DELETE article_node
+                RETURN orphan_article_author_ids
                 """,
                 pmids=pmids
-            ).consume()
+            )
+            orphaned_article_author_ids: list[int] = []
+            for record in results:
+                orphaned_article_author_ids.extend(record[0])
+
+            return orphaned_article_author_ids
 
         # Delete the old articles.
         with neo4j_conn.new_session() as session:
             start_time = time.time()
-            session.write_transaction(run_article_deletion_query)
+            self._orphaned_article_author_ids = session.write_transaction(run_article_deletion_query)
             if debug:
                 print(f".. Stage 4a: Deleting old articles took {time.time() - start_time:.2f} seconds")
 
@@ -610,6 +620,33 @@ class BuildPacket:
                 print(
                     f".. Stage 6 (batch {batch_no + 1} / {total_batches}): "
                     f"Affiliating authors took {time.time() - start_time:.2f} seconds")
+
+    def _stage_7_delete_orphaned_article_authors(self, *, debug: bool = False):
+        """
+        Removes old article authors from deleted articles.
+        """
+        # Get the list of article author IDs for deletion.
+        orphaned_article_author_ids: list[int] = self._orphaned_article_author_ids
+
+        def run_article_author_deletion_query(tx: neo4j.Transaction):
+            """ Deletes the article authors. """
+            tx.run(
+                """
+                CYPHER planner=dp
+                UNWIND $orphaned_article_author_ids AS article_author_id
+                MATCH (article_author_node:ArticleAuthor)
+                WHERE id(article_author_node) = article_author_id
+                DETACH DELETE article_author_node
+                """,
+                orphaned_article_author_ids=orphaned_article_author_ids
+            ).consume()
+
+        # Delete the old article authors.
+        with neo4j_conn.new_session() as session:
+            start_time = time.time()
+            session.write_transaction(run_article_author_deletion_query)
+            if debug:
+                print(f".. Stage 7: Deleting old article authors took {time.time() - start_time:.2f} seconds")
 
     @staticmethod
     def prepare(articles: list[DBArticle]) -> 'BuildPacket':
