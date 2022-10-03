@@ -7,7 +7,7 @@ from app.controller.snapshot_visualise import query_by_snapshot_id, get_author_g
 from app.controller.snapshot_create import create_snapshot
 from app.controller.snapshot_get import get_snapshot, get_user_snapshots
 from app.controller.snapshot_delete import delete_snapshot_by_id
-from app.controller.snapshot_analyse import get_analytics, _retrieve_analytics, AnalyticsThreading
+from app.controller.snapshot_analyse import retrieve_analytics, AnalyticsThreading
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.pubmed.filtering import PubMedFilterLimitError, PubMedFilterValueError
 from app.PubMedErrors import PubMedSnapshotDoesNotExistError, PubMedUpdateSnapshotError, PubMedAnalyticsError
@@ -118,7 +118,7 @@ class AnalyseSnapshot(Resource):
     @jwt_required()
     @ns.doc(params={'snapshot_id': {'default': '1'}}, security="api_key")
     def get(snapshot_id: int):
-        return jsonify(_retrieve_analytics(snapshot_id))
+        return jsonify(retrieve_analytics(snapshot_id))
         # try:
         #     return jsonify(get_analytics(snapshot_id))
         # except (PubMedSnapshotDoesNotExistError, PubMedUpdateSnapshotError) as e:
