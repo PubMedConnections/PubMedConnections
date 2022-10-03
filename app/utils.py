@@ -79,6 +79,23 @@ def calc_md5_hash_of_file(file_and_dir: str, *, block_size=2**20) -> str:
 T = TypeVar('T')
 
 
+def split_into_batches(items: list[T], max_batch_size: int = 10_000) -> list[list[T]]:
+    """
+    Splits one long list into several shorter lists with a maximum
+    size of max_batch_size entries.
+    """
+    batches: list[list[T]] = []
+
+    required_batches = (len(items) + max_batch_size - 1) // max_batch_size
+    items_per_batch = (len(items) + required_batches - 1) // required_batches
+    for batch_no in range(required_batches):
+        start_index = batch_no * items_per_batch
+        end_index = (len(items) if batch_no == required_batches - 1 else (batch_no + 1) * items_per_batch)
+        batches.append(items[start_index:end_index])
+
+    return batches
+
+
 def or_else(value: T, default_value: T) -> T:
     """
     Returns value if it is not None, or else returns default_value.

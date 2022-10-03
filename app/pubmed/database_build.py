@@ -10,6 +10,7 @@ import neo4j
 
 from app import neo4j_conn
 from app.pubmed.model import DBArticle, DBJournal, DBAuthor, DBAffiliation
+from app.utils import split_into_batches
 
 
 class BuildPacket:
@@ -20,7 +21,7 @@ class BuildPacket:
     but each stage can be run for a new packet after it has been completed
     for the current packet. This allows pipelining the data insertion.
     """
-    NUM_STAGES: Final[int] = 4
+    NUM_STAGES: Final[int] = 6
 
     def __init__(
             self,
@@ -68,14 +69,19 @@ class BuildPacket:
         elif stage == 4:
             self._stage_4a_remove_old_articles(debug=debug)
             self._stage_4b_insert_articles(debug=debug)
-            self._stage_4c_affiliate_authors(debug=debug)
+        elif stage == 5:
+            self._stage_5_connect_article_authors(debug=debug)
+        elif stage == 6:
+            self._stage_6_affiliate_authors(debug=debug)
         else:
             raise Exception(f"Unknown stage {stage}")
 
         self._update_stage(stage)
 
     def _stage_1_journals(self, *, debug: bool = False):
-        """ Inserts the journals into the database. """
+        """
+        Inserts the journals into the database.
+        """
         # Prepare the journal data for insertion.
         journal_data: list[dict] = []
         for journal in self.journals.values():
@@ -111,7 +117,9 @@ class BuildPacket:
                 print(f".. Stage 1: Inserting journals took {time.time() - start_time:.2f} seconds")
 
     def _stage_2_authors(self, *, debug: bool = False):
-        """ Inserts the authors (not ArticleAuthors) into the database. """
+        """
+        Inserts the authors (not ArticleAuthors) into the database.
+        """
         # Prepare the author data for insertion.
         author_data: list[dict] = []
         for author in self.authors.values():
@@ -150,7 +158,9 @@ class BuildPacket:
                 print(f".. Stage 2: Inserting authors took {time.time() - start_time:.2f} seconds")
 
     def _stage_3_affiliations(self, *, debug: bool = False):
-        """ Inserts the affiliations into the database. """
+        """
+        Inserts the affiliations into the database.
+        """
         # Prepare the affiliation data for insertion.
         affiliation_data: list[dict] = []
         for affiliation in self.affiliations.values():
@@ -183,7 +193,9 @@ class BuildPacket:
                 print(f".. Stage 3: Inserting affiliations took {time.time() - start_time:.2f} seconds")
 
     def _stage_4a_remove_old_articles(self, *, debug: bool = False):
-        """ Removes old articles so that we can create their new versions. """
+        """
+        Removes old articles so that we can create their new versions.
+        """
         # Prepare the list of PubMed IDs for deletion.
         pmids: list[int] = []
         for article in self.articles:
@@ -229,13 +241,6 @@ class BuildPacket:
                     "is_last_author": article_author.is_last_author
                 })
 
-            # Articles with no authors breaks the query
-            # that we perform for inserting the articles.
-            # Therefore, we ignore them, with the assumption
-            # that articles with no authors must be incomplete.
-            if len(article_author_data) == 0:
-                continue
-
             article_data.append({
                 "pmid": article.pmid,
                 "date": article.date,
@@ -249,22 +254,24 @@ class BuildPacket:
             })
 
         # We batch the articles as otherwise we can hit maximum memory issues with Neo4J...
-        required_batches = (len(article_data) + max_batch_size - 1) // max_batch_size
-        articles_per_batch = (len(article_data) + required_batches - 1) // required_batches
-        total_articles_inserted = 0
-        for batch_no in range(required_batches):
-            start_index = batch_no * articles_per_batch
-            end_index = len(article_data) if batch_no == required_batches - 1 else (batch_no + 1) * articles_per_batch
-            batch = article_data[start_index:end_index]
-            total_articles_inserted += len(batch)
-            self._stage_4b_insert_articles_batch(batch_no, required_batches, batch, debug=debug)
+        article_batches = split_into_batches(article_data, max_batch_size=max_batch_size)
+        article_ids, article_author_ids = [], []
+        for batch_no, batch in enumerate(article_batches):
+            batch_article_ids, batch_article_author_ids = self._stage_4b_insert_articles_batch(
+                batch_no, len(article_batches), batch, debug=debug
+            )
+            article_ids.extend(batch_article_ids)
+            article_author_ids.extend(batch_article_author_ids)
+
+        self._article_ids = article_ids
+        self._article_author_ids = article_author_ids
 
     def _stage_4b_insert_articles_batch(
-            self, batch_no: int, total_batches: int, article_data: list[dict], *, debug: bool = False):
+            self, batch_no: int, total_batches: int, article_data: list[dict], *, debug: bool = False
+    ) -> tuple[list[int], list[list[int]]]:
         """
         Inserts one batch of articles.
         """
-
         def run_article_creation_query(tx: neo4j.Transaction) -> tuple[list[int], list[list[int]]]:
             """
             Creates the articles and their article authors in the database,
@@ -276,7 +283,6 @@ class BuildPacket:
                 UNWIND $article_data AS article
                 MATCH (journal_node:Journal)
                 WHERE id(journal_node) = article.journal_id
-
                 // Create the article itself.
                 CALL {
                     WITH article, journal_node
@@ -290,7 +296,6 @@ class BuildPacket:
                     }]-> (journal_node)
                     RETURN article_node
                 }
-
                 // Add the references from this article to other articles.
                 CALL {
                     WITH article_node, article
@@ -299,7 +304,6 @@ class BuildPacket:
                     WHERE ref_node.pmid = ref_pmid
                     CREATE (article_node)-[:CITES]->(ref_node)
                 }
-
                 // Add the mesh headings of the article.
                 CALL {
                     WITH article_node, article
@@ -308,17 +312,13 @@ class BuildPacket:
                     WHERE mesh_node.id = mesh_id
                     CREATE (article_node)-[:CATEGORISED_BY]->(mesh_node)
                 }
-
                 // Add the ArticleAuthors.
                 UNWIND article.article_authors AS article_author
-                MATCH (author_node:Author)
-                WHERE id(author_node) = article_author.author_id
-                CREATE (author_node)-[:IS_AUTHOR]->(article_author_node:ArticleAuthor {
+                CREATE (article_author_node:ArticleAuthor {
                     author_position: article_author.author_position,
                     is_first_author: article_author.is_first_author,
                     is_last_author: article_author.is_last_author
                 })-[:AUTHOR_OF]->(article_node)
-
                 RETURN id(article_node), id(article_author_node)
                 """,
                 article_data=article_data
@@ -350,14 +350,71 @@ class BuildPacket:
         # Create the articles.
         with neo4j_conn.new_session() as session:
             start_time = time.time()
-            self._article_ids, self._article_author_ids = session.write_transaction(run_article_creation_query)
+            article_ids, article_author_ids = session.write_transaction(run_article_creation_query)
             if debug:
                 print(
                     f".. Stage 4b (batch {batch_no + 1} / {total_batches}): "
                     f"Creating articles took {time.time() - start_time:.2f} seconds")
 
-    def _stage_4c_affiliate_authors(self, *, debug: bool = False):
-        """ Creates the affiliation relationships between ArticleAuthors and Affiliations. """
+            return article_ids, article_author_ids
+
+    def _stage_5_connect_article_authors(self, *, debug: bool = False, max_batch_size: int = 50_000):
+        """
+        Creates the ArticleAuthors for the articles in the packet.
+        """
+        # Prepare the article author data to insert.
+        article_author_data: list[dict] = []
+        for article, article_author_ids in zip(self.articles, self._article_author_ids):
+            for article_author, article_author_id in zip(article.article_authors, article_author_ids):
+                author_id = self._author_ids[article_author.author.full_name]
+                article_author_data.append({
+                    "author_id": author_id,
+                    "article_author_id": article_author_id
+                })
+
+        # We batch the articles as otherwise we can hit maximum memory issues with Neo4J...
+        article_author_batches = split_into_batches(article_author_data, max_batch_size)
+        for batch_no, batch in enumerate(article_author_batches):
+            self._stage_5_connect_article_authors_batch(
+                batch_no, len(article_author_batches), batch, debug=debug
+            )
+
+    def _stage_5_connect_article_authors_batch(
+            self, batch_no: int, total_batches: int, article_author_data: list[dict], *, debug: bool = False):
+        """
+        Creates the IS_AUTHOR relationships between ArticleAuthors and Authors.
+        """
+        def run_article_author_connect_query(tx: neo4j.Transaction):
+            """
+            Creates the article authors in the database, and returns
+            a list of their node IDs for each article.
+            """
+            tx.run(
+                """
+                CYPHER planner=dp
+                UNWIND $article_author_data AS article_author
+                MATCH (article_author_node:ArticleAuthor)
+                WHERE id(article_author_node) = article_author.article_author_id
+                MATCH (author_node:Author)
+                WHERE id(author_node) = article_author.author_id
+                CREATE (author_node)-[:IS_AUTHOR]->(article_author_node)
+                """,
+                article_author_data=article_author_data
+            ).consume()
+
+        # Create the article authors.
+        with neo4j_conn.new_session() as session:
+            start_time = time.time()
+            session.write_transaction(run_article_author_connect_query)
+            if debug:
+                print(
+                    f".. Stage 5 (batch {batch_no + 1} / {total_batches}): "
+                    f"Connecting article authors to authors took {time.time() - start_time:.2f} seconds")
+
+    def _stage_6_affiliate_authors(self, *, debug: bool = False, max_batch_size: int = 50_000):
+        """
+        Creates the affiliation relationships between ArticleAuthors and Affiliations.
+        """
         # Prepare the list of PubMed IDs for deletion.
         affiliation_data: list[dict] = []
         for article, article_author_ids in zip(self.articles, self._article_author_ids):
@@ -371,6 +428,18 @@ class BuildPacket:
                     "affiliation_id": affiliation_id
                 })
 
+        # We batch the articles as otherwise we can hit maximum memory issues with Neo4J...
+        affiliation_batches = split_into_batches(affiliation_data, max_batch_size)
+        for batch_no, batch in enumerate(affiliation_batches):
+            self._stage_6_affiliate_authors_batch(
+                batch_no, len(affiliation_batches), batch, debug=debug
+            )
+
+    def _stage_6_affiliate_authors_batch(
+            self, batch_no: int, total_batches: int, affiliation_data: list[dict], *, debug: bool = False):
+        """
+        Inserts one batch of article authors.
+        """
         def run_affiliate_authors_query(tx: neo4j.Transaction):
             """ Creates the affiliation relationships between authors and affiliations. """
             tx.run(
@@ -391,7 +460,9 @@ class BuildPacket:
             start_time = time.time()
             session.write_transaction(run_affiliate_authors_query)
             if debug:
-                print(f".. Stage 4c: Affiliating authors took {time.time() - start_time:.2f} seconds")
+                print(
+                    f".. Stage 6 (batch {batch_no + 1} / {total_batches}): "
+                    f"Affiliating authors took {time.time() - start_time:.2f} seconds")
 
     @staticmethod
     def prepare(articles: list[DBArticle]) -> 'BuildPacket':
@@ -401,6 +472,10 @@ class BuildPacket:
         seen_pmids: set[int] = set()
         deduplicated_articles: list[DBArticle] = []
         for article in articles:
+            # Articles with no authors breaks the insertion of article authors.
+            if len(article.article_authors) == 0:
+                continue
+
             if article.pmid in seen_pmids:
                 # Remove the old article with the same PMID.
                 deduplicated_articles = [a for a in deduplicated_articles if a.pmid != article.pmid]
@@ -439,7 +514,7 @@ class BuildPipelineStage:
     """
     def __init__(
             self, stage: int, input_queue: Queue[Optional[tuple[int, BuildPacket]]],
-            *, output_queue_size=2, debug: bool = False):
+            *, output_queue_size=1, debug: bool = False):
 
         self.stage: int = stage
         self.debug: bool = debug
@@ -499,7 +574,7 @@ class BuildPipeline:
     Starts and manages feeding packets of articles through
     a pipeline to insert them into the database.
     """
-    def __init__(self, *, queue_size=2, debug: bool = False):
+    def __init__(self, *, queue_size=1, debug: bool = False):
         self._input_queue: Queue[Optional[tuple[int, BuildPacket]]] = Queue(queue_size)
         self.stages: list[BuildPipelineStage] = []
 
