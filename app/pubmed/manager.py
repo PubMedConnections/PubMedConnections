@@ -281,6 +281,10 @@ class PubMedManager:
         pipeline = BuildPipeline()
         pipeline.start()
 
+        analytics_state = {
+            "last_pull_time": time.time()
+        }
+
         def update_analytics_from_processed(block: bool):
             """ Update the metadata for the files that have finished being processed. """
             while True:
@@ -295,13 +299,15 @@ class PubMedManager:
                 file_meta = meta_pubmed[file_index]
                 file_meta.processed = True
 
-                duration = time.time() - start
+                # This isn't perfect, but it should be accurate enough.
+                duration = time.time() - analytics_state["last_pull_time"]
+                analytics_state["last_pull_time"] = time.time()
+
                 analytics.update(duration, pubmed_file_sizes[file_index])
                 analytics.update_remaining(pubmed_file_sizes[file_index + 1:])
 
         last_report_time = time.time()
         while True:
-            start = time.time()
             file = file_queue.get()
             file_index = file.index + start_file_index
             if file.articles is None:

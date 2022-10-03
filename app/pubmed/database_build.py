@@ -1,7 +1,6 @@
 """
 Controls the insertion of PubMed data into a Neo4J database.
 """
-import sys
 import time
 from queue import Queue
 from threading import Thread
@@ -56,26 +55,26 @@ class BuildPacket:
         self._expect_stage(new_stage - 1)
         self._stage = new_stage
 
-    def run_stage(self, stage: int):
+    def run_stage(self, stage: int, *, debug: bool = False):
         """ Runs the given stage for this build packet. """
         self._expect_stage(stage - 1)
 
         if stage == 1:
-            self._stage_1_journals()
+            self._stage_1_journals(debug=debug)
         elif stage == 2:
-            self._stage_2_authors()
+            self._stage_2_authors(debug=debug)
         elif stage == 3:
-            self._stage_3_affiliations()
+            self._stage_3_affiliations(debug=debug)
         elif stage == 4:
-            self._stage_4a_remove_old_articles()
-            self._stage_4b_insert_articles()
-            self._stage_4c_affiliate_authors()
+            self._stage_4a_remove_old_articles(debug=debug)
+            self._stage_4b_insert_articles(debug=debug)
+            self._stage_4c_affiliate_authors(debug=debug)
         else:
             raise Exception(f"Unknown stage {stage}")
 
         self._update_stage(stage)
 
-    def _stage_1_journals(self):
+    def _stage_1_journals(self, *, debug: bool = False):
         """ Inserts the journals into the database. """
         # Prepare the journal data for insertion.
         journal_data: list[dict] = []
@@ -106,9 +105,12 @@ class BuildPacket:
 
         # Insert the journals and save their IDs.
         with neo4j_conn.new_session() as session:
+            start_time = time.time()
             self._journal_ids = session.write_transaction(run_journal_insertion_query)
+            if debug:
+                print(f".. Stage 1: Inserting journals took {time.time() - start_time:.2f} seconds")
 
-    def _stage_2_authors(self):
+    def _stage_2_authors(self, *, debug: bool = False):
         """ Inserts the authors (not ArticleAuthors) into the database. """
         # Prepare the author data for insertion.
         author_data: list[dict] = []
@@ -142,9 +144,12 @@ class BuildPacket:
 
         # Insert the authors and save their IDs.
         with neo4j_conn.new_session() as session:
+            start_time = time.time()
             self._author_ids = session.write_transaction(run_author_insertion_query)
+            if debug:
+                print(f".. Stage 2: Inserting authors took {time.time() - start_time:.2f} seconds")
 
-    def _stage_3_affiliations(self):
+    def _stage_3_affiliations(self, *, debug: bool = False):
         """ Inserts the affiliations into the database. """
         # Prepare the affiliation data for insertion.
         affiliation_data: list[dict] = []
@@ -172,9 +177,12 @@ class BuildPacket:
 
         # Insert the affiliations and save their IDs.
         with neo4j_conn.new_session() as session:
+            start_time = time.time()
             self._affiliation_ids = session.write_transaction(run_affiliation_insertion_query)
+            if debug:
+                print(f".. Stage 3: Inserting affiliations took {time.time() - start_time:.2f} seconds")
 
-    def _stage_4a_remove_old_articles(self):
+    def _stage_4a_remove_old_articles(self, *, debug: bool = False):
         """ Removes old articles so that we can create their new versions. """
         # Prepare the list of PubMed IDs for deletion.
         pmids: list[int] = []
@@ -200,9 +208,12 @@ class BuildPacket:
 
         # Delete the old articles.
         with neo4j_conn.new_session() as session:
+            start_time = time.time()
             session.write_transaction(run_article_deletion_query)
+            if debug:
+                print(f".. Stage 4a: Deleting old articles took {time.time() - start_time:.2f} seconds")
 
-    def _stage_4b_insert_articles(self):
+    def _stage_4b_insert_articles(self, *, debug: bool = False, max_batch_size: int = 10_000):
         """ Inserts the articles of this packet. """
         # Prepare the article data to insert.
         article_data: list[dict] = []
@@ -236,6 +247,23 @@ class BuildPacket:
                 "refs": article.reference_pmids,
                 "mesh_desc_ids": article.mesh_descriptor_ids
             })
+
+        # We batch the articles as otherwise we can hit maximum memory issues with Neo4J...
+        required_batches = (len(article_data) + max_batch_size - 1) // max_batch_size
+        articles_per_batch = (len(article_data) + required_batches - 1) // required_batches
+        total_articles_inserted = 0
+        for batch_no in range(required_batches):
+            start_index = batch_no * articles_per_batch
+            end_index = len(article_data) if batch_no == required_batches - 1 else (batch_no + 1) * articles_per_batch
+            batch = article_data[start_index:end_index]
+            total_articles_inserted += len(batch)
+            self._stage_4b_insert_articles_batch(batch_no, required_batches, batch, debug=debug)
+
+    def _stage_4b_insert_articles_batch(
+            self, batch_no: int, total_batches: int, article_data: list[dict], *, debug: bool = False):
+        """
+        Inserts one batch of articles.
+        """
 
         def run_article_creation_query(tx: neo4j.Transaction) -> tuple[list[int], list[list[int]]]:
             """
@@ -321,9 +349,14 @@ class BuildPacket:
 
         # Create the articles.
         with neo4j_conn.new_session() as session:
+            start_time = time.time()
             self._article_ids, self._article_author_ids = session.write_transaction(run_article_creation_query)
+            if debug:
+                print(
+                    f".. Stage 4b (batch {batch_no + 1} / {total_batches}): "
+                    f"Creating articles took {time.time() - start_time:.2f} seconds")
 
-    def _stage_4c_affiliate_authors(self):
+    def _stage_4c_affiliate_authors(self, *, debug: bool = False):
         """ Creates the affiliation relationships between ArticleAuthors and Affiliations. """
         # Prepare the list of PubMed IDs for deletion.
         affiliation_data: list[dict] = []
@@ -355,7 +388,10 @@ class BuildPacket:
 
         # Affiliate authors.
         with neo4j_conn.new_session() as session:
+            start_time = time.time()
             session.write_transaction(run_affiliate_authors_query)
+            if debug:
+                print(f".. Stage 4c: Affiliating authors took {time.time() - start_time:.2f} seconds")
 
     @staticmethod
     def prepare(articles: list[DBArticle]) -> 'BuildPacket':
@@ -401,8 +437,12 @@ class BuildPipelineStage:
     """
     Performs a single stage in a build pipeline.
     """
-    def __init__(self, stage: int, input_queue: Queue[Optional[tuple[int, BuildPacket]]], *, output_queue_size=4):
+    def __init__(
+            self, stage: int, input_queue: Queue[Optional[tuple[int, BuildPacket]]],
+            *, output_queue_size=2, debug: bool = False):
+
         self.stage: int = stage
+        self.debug: bool = debug
         self.input_queue: Queue[Optional[tuple[int, BuildPacket]]] = input_queue
         self.output_queue: Queue[Optional[tuple[int, BuildPacket]]] = Queue(output_queue_size)
         self.thread: Optional[Thread] = None
@@ -425,7 +465,12 @@ class BuildPipelineStage:
             if id_and_packet is not None:
                 process_start = time.time()
                 packet_id, packet = id_and_packet
-                packet.run_stage(self.stage)
+                if self.debug:
+                    print(f"Stage {self.stage}: Receive {packet_id}")
+
+                packet.run_stage(self.stage, debug=self.debug)
+                if self.debug:
+                    print(f"Stage {self.stage}: Complete {packet_id}")
                 process_duration = time.time() - process_start
 
                 wait_start = time.time()
@@ -438,7 +483,7 @@ class BuildPipelineStage:
                 self.output_queue.put(None)
                 break
 
-    def get_utilisation(self, *, window: int = 30) -> float:
+    def get_utilisation(self, *, window: int = 10) -> float:
         """ Gets the percentage of time that this pipeline stage is working. """
         metric_sum = 0
         metric_count = 0
@@ -454,7 +499,7 @@ class BuildPipeline:
     Starts and manages feeding packets of articles through
     a pipeline to insert them into the database.
     """
-    def __init__(self, *, queue_size=4):
+    def __init__(self, *, queue_size=2, debug: bool = False):
         self._input_queue: Queue[Optional[tuple[int, BuildPacket]]] = Queue(queue_size)
         self.stages: list[BuildPipelineStage] = []
 
@@ -462,7 +507,11 @@ class BuildPipeline:
         next_input_queue = self._input_queue
         for stage in range(1, BuildPacket.NUM_STAGES + 1):
             output_queue_size = (0 if stage == BuildPacket.NUM_STAGES else queue_size)
-            pipeline_stage = BuildPipelineStage(stage, next_input_queue, output_queue_size=output_queue_size)
+            pipeline_stage = BuildPipelineStage(
+                stage, next_input_queue,
+                output_queue_size=output_queue_size,
+                debug=debug
+            )
             next_input_queue = pipeline_stage.output_queue
             self.stages.append(pipeline_stage)
 
