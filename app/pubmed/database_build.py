@@ -4,13 +4,124 @@ Controls the insertion of PubMed data into a Neo4J database.
 import time
 from queue import Queue
 from threading import Thread
-from typing import Optional, Final
+from typing import Optional, Final, Any
 
 import neo4j
 
 from app import neo4j_conn
 from app.pubmed.model import DBArticle, DBJournal, DBAuthor, DBAffiliation
 from app.utils import split_into_batches
+
+
+class BuildCache:
+    """
+    Stores information that can be re-used during the database
+    building to avoid having to query it twice.
+    """
+    def __init__(self):
+        self._mesh_ids: Optional[dict[int, int]] = None
+
+        self.max_journals_size = 2_000_000
+        self._journal_ids: dict[str, int] = {}
+        self._journal_id_last_access_times: dict[str, float] = {}
+
+        self.max_authors_size = 10_000_000
+        self._author_ids: dict[str, int] = {}
+        self._author_id_last_access_times: dict[str, float] = {}
+
+        self.max_affiliations_size = 2_000_000
+        self._affiliation_ids: dict[str, int] = {}
+        self._affiliation_id_last_access_times: dict[str, float] = {}
+
+    def fetch_mesh_ids(self):
+        """
+        Fetches the IDs of all MeSH headings so that we
+        don't have to query them during build.
+        """
+        if self._mesh_ids is not None:
+            return
+
+        with neo4j_conn.new_session() as session:
+            results = session.run(
+                """
+                MATCH (n:MeshHeading)
+                RETURN id(n), n.id
+                """
+            )
+            mesh_ids: dict[int, int] = {}
+            for record in results:
+                mesh_node_id, mesh_id = record
+                mesh_ids[mesh_id] = mesh_node_id
+
+            self._mesh_ids = mesh_ids
+
+    def get_mesh_ids(self) -> dict[int, int]:
+        """
+        Returns a map between MeSH IDs and their Neo4J node IDs.
+        """
+        if self._mesh_ids is None:
+            raise Exception("MeSH IDs have not yet been fetched")
+
+        return self._mesh_ids
+
+    def _add(
+            self,
+            ids: dict[Any, int],
+            dest_ids: dict[Any, int],
+            dest_last_access_times: dict[Any, float],
+            max_size: int):
+        """
+        Adds a new set of IDs to the cache, and removes old entries if the cache is full.
+        """
+        current_access_time = time.time()
+        for key, value in ids.items():
+            dest_ids[key] = value
+            dest_last_access_times[key] = current_access_time
+
+        while len(dest_ids) > max_size:
+            oldest_keys: list[Any] = []
+            oldest_access_time: Optional[float] = None
+            for key, access_time in dest_last_access_times.items():
+                if oldest_access_time is None or access_time < oldest_access_time:
+                    oldest_keys.clear()
+                    oldest_keys.append(key)
+                    oldest_access_time = access_time
+                elif access_time == oldest_access_time:
+                    oldest_keys.append(key)
+
+            if len(oldest_keys) == 0:
+                raise Exception("Unexpected error occurred")
+
+            oldest_keys = oldest_keys[:len(dest_ids) - max_size]
+            for key in oldest_keys:
+                del dest_ids[key]
+                del dest_last_access_times[key]
+
+    def _get(self, key: Any, dest_ids: dict[Any, int], dest_last_access_times: dict[Any, float]) -> Optional[int]:
+        if key not in dest_ids:
+            return None
+
+        dest_last_access_times[key] = time.time()
+        return dest_ids[key]
+
+    def add_journal_ids(self, journal_ids: dict[str, int]):
+        self._add(journal_ids, self._journal_ids, self._journal_id_last_access_times, self.max_journals_size)
+
+    def add_author_ids(self, author_ids: dict[str, int]):
+        self._add(author_ids, self._author_ids, self._author_id_last_access_times, self.max_authors_size)
+
+    def add_affiliation_ids(self, affiliation_ids: dict[str, int]):
+        self._add(
+            affiliation_ids, self._affiliation_ids, self._affiliation_id_last_access_times, self.max_affiliations_size)
+
+    def get_journal_id(self, key: str) -> Optional[int]:
+        return self._get(key, self._journal_ids, self._journal_id_last_access_times)
+
+    def get_author_id(self, key: str) -> Optional[int]:
+        return self._get(key, self._author_ids, self._author_id_last_access_times)
+
+    def get_affiliation_id(self, key: str) -> Optional[int]:
+        return self._get(key, self._affiliation_ids, self._affiliation_id_last_access_times)
 
 
 class BuildPacket:
@@ -56,19 +167,19 @@ class BuildPacket:
         self._expect_stage(new_stage - 1)
         self._stage = new_stage
 
-    def run_stage(self, stage: int, *, debug: bool = False):
+    def run_stage(self, stage: int, cache: BuildCache, *, debug: bool = False):
         """ Runs the given stage for this build packet. """
         self._expect_stage(stage - 1)
 
         if stage == 1:
-            self._stage_1_journals(debug=debug)
+            self._stage_1_journals(cache, debug=debug)
         elif stage == 2:
-            self._stage_2_authors(debug=debug)
+            self._stage_2_authors(cache, debug=debug)
         elif stage == 3:
-            self._stage_3_affiliations(debug=debug)
+            self._stage_3_affiliations(cache, debug=debug)
         elif stage == 4:
             self._stage_4a_remove_old_articles(debug=debug)
-            self._stage_4b_insert_articles(debug=debug)
+            self._stage_4b_insert_articles(cache, debug=debug)
         elif stage == 5:
             self._stage_5_connect_article_authors(debug=debug)
         elif stage == 6:
@@ -78,13 +189,19 @@ class BuildPacket:
 
         self._update_stage(stage)
 
-    def _stage_1_journals(self, *, debug: bool = False):
+    def _stage_1_journals(self, cache: BuildCache, *, debug: bool = False):
         """
         Inserts the journals into the database.
         """
         # Prepare the journal data for insertion.
+        journal_ids: dict[str, int] = {}
         journal_data: list[dict] = []
         for journal in self.journals.values():
+            known_id = cache.get_journal_id(journal.identifier)
+            if known_id is not None:
+                journal_ids[journal.identifier] = known_id
+                continue
+
             journal_data.append({
                 "id": journal.identifier,
                 "title": journal.title
@@ -112,17 +229,29 @@ class BuildPacket:
         # Insert the journals and save their IDs.
         with neo4j_conn.new_session() as session:
             start_time = time.time()
-            self._journal_ids = session.write_transaction(run_journal_insertion_query)
+
+            if len(journal_data) > 0:
+                queried_journal_ids = session.write_transaction(run_journal_insertion_query)
+                cache.add_journal_ids(queried_journal_ids)
+                journal_ids.update(queried_journal_ids)
+
+            self._journal_ids = journal_ids
             if debug:
                 print(f".. Stage 1: Inserting journals took {time.time() - start_time:.2f} seconds")
 
-    def _stage_2_authors(self, *, debug: bool = False):
+    def _stage_2_authors(self, cache: BuildCache, *, debug: bool = False):
         """
         Inserts the authors (not ArticleAuthors) into the database.
         """
         # Prepare the author data for insertion.
+        author_ids: dict[str, int] = {}
         author_data: list[dict] = []
         for author in self.authors.values():
+            known_id = cache.get_author_id(author.full_name)
+            if known_id is not None:
+                author_ids[author.full_name] = known_id
+                continue
+
             author_data.append({
                 "name": author.full_name,
                 "id": author.author_id,
@@ -153,17 +282,29 @@ class BuildPacket:
         # Insert the authors and save their IDs.
         with neo4j_conn.new_session() as session:
             start_time = time.time()
-            self._author_ids = session.write_transaction(run_author_insertion_query)
+
+            if len(author_data) > 0:
+                queried_author_ids = session.write_transaction(run_author_insertion_query)
+                cache.add_author_ids(queried_author_ids)
+                author_ids.update(queried_author_ids)
+
+            self._author_ids = author_ids
             if debug:
                 print(f".. Stage 2: Inserting authors took {time.time() - start_time:.2f} seconds")
 
-    def _stage_3_affiliations(self, *, debug: bool = False):
+    def _stage_3_affiliations(self, cache: BuildCache, *, debug: bool = False):
         """
         Inserts the affiliations into the database.
         """
         # Prepare the affiliation data for insertion.
+        affiliation_ids: dict[str, int] = {}
         affiliation_data: list[dict] = []
         for affiliation in self.affiliations.values():
+            known_id = cache.get_affiliation_id(affiliation.name)
+            if known_id is not None:
+                affiliation_ids[affiliation.name] = known_id
+                continue
+
             affiliation_data.append({
                 "name": affiliation.name,
             })
@@ -188,7 +329,12 @@ class BuildPacket:
         # Insert the affiliations and save their IDs.
         with neo4j_conn.new_session() as session:
             start_time = time.time()
-            self._affiliation_ids = session.write_transaction(run_affiliation_insertion_query)
+            if len(affiliation_data) > 0:
+                queried_affiliation_ids = session.write_transaction(run_affiliation_insertion_query)
+                cache.add_affiliation_ids(queried_affiliation_ids)
+                affiliation_ids.update(queried_affiliation_ids)
+
+            self._affiliation_ids = affiliation_ids
             if debug:
                 print(f".. Stage 3: Inserting affiliations took {time.time() - start_time:.2f} seconds")
 
@@ -225,10 +371,11 @@ class BuildPacket:
             if debug:
                 print(f".. Stage 4a: Deleting old articles took {time.time() - start_time:.2f} seconds")
 
-    def _stage_4b_insert_articles(self, *, debug: bool = False, max_batch_size: int = 10_000):
+    def _stage_4b_insert_articles(self, cache: BuildCache, *, debug: bool = False, max_batch_size: int = 10_000):
         """ Inserts the articles of this packet. """
         # Prepare the article data to insert.
         article_data: list[dict] = []
+        mesh_ids: dict[int, int] = cache.get_mesh_ids()
         for article in self.articles:
             journal = article.journal
             article_author_data: list[dict] = []
@@ -250,7 +397,7 @@ class BuildPacket:
                 "journal_vol": journal.volume,
                 "journal_issue": journal.issue,
                 "refs": article.reference_pmids,
-                "mesh_desc_ids": article.mesh_descriptor_ids
+                "mesh_ids": [mesh_ids[desc_id] for desc_id in article.mesh_descriptor_ids]
             })
 
         # We batch the articles as otherwise we can hit maximum memory issues with Neo4J...
@@ -307,9 +454,9 @@ class BuildPacket:
                 // Add the mesh headings of the article.
                 CALL {
                     WITH article_node, article
-                    UNWIND article.mesh_desc_ids as mesh_id
+                    UNWIND article.mesh_ids as mesh_id
                     MATCH (mesh_node:MeshHeading)
-                    WHERE mesh_node.id = mesh_id
+                    WHERE id(mesh_node) = mesh_id
                     CREATE (article_node)-[:CATEGORISED_BY]->(mesh_node)
                 }
                 // Add the ArticleAuthors.
@@ -513,10 +660,12 @@ class BuildPipelineStage:
     Performs a single stage in a build pipeline.
     """
     def __init__(
-            self, stage: int, input_queue: Queue[Optional[tuple[int, BuildPacket]]],
+            self, stage: int, cache: BuildCache,
+            input_queue: Queue[Optional[tuple[int, BuildPacket]]],
             *, output_queue_size=1, debug: bool = False):
 
         self.stage: int = stage
+        self.cache: BuildCache = cache
         self.debug: bool = debug
         self.input_queue: Queue[Optional[tuple[int, BuildPacket]]] = input_queue
         self.output_queue: Queue[Optional[tuple[int, BuildPacket]]] = Queue(output_queue_size)
@@ -527,6 +676,7 @@ class BuildPipelineStage:
         def do_run():
             self.run()
 
+        self.cache.fetch_mesh_ids()
         self.thread = Thread(target=do_run)
         self.thread.daemon = True
         self.thread.start()
@@ -543,7 +693,7 @@ class BuildPipelineStage:
                 if self.debug:
                     print(f"Stage {self.stage}: Receive {packet_id}")
 
-                packet.run_stage(self.stage, debug=self.debug)
+                packet.run_stage(self.stage, self.cache, debug=self.debug)
                 if self.debug:
                     print(f"Stage {self.stage}: Complete {packet_id}")
                 process_duration = time.time() - process_start
@@ -577,13 +727,14 @@ class BuildPipeline:
     def __init__(self, *, queue_size=1, debug: bool = False):
         self._input_queue: Queue[Optional[tuple[int, BuildPacket]]] = Queue(queue_size)
         self.stages: list[BuildPipelineStage] = []
+        self.cache: BuildCache = BuildCache()
 
         # Create the pipeline stages.
         next_input_queue = self._input_queue
         for stage in range(1, BuildPacket.NUM_STAGES + 1):
             output_queue_size = (0 if stage == BuildPacket.NUM_STAGES else queue_size)
             pipeline_stage = BuildPipelineStage(
-                stage, next_input_queue,
+                stage, self.cache, next_input_queue,
                 output_queue_size=output_queue_size,
                 debug=debug
             )
@@ -593,6 +744,7 @@ class BuildPipeline:
         self.output_queue = self.stages[-1].output_queue
 
     def start(self):
+        self.cache.fetch_mesh_ids()
         for stage in self.stages:
             stage.start()
 
