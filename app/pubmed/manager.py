@@ -9,8 +9,11 @@ import os
 import sys
 import pathlib
 import time
+from queue import Empty
 from typing import Optional
 
+from app import neo4j_conn
+from app.pubmed.database_build import BuildPipeline
 from app.pubmed.mesh import process_mesh_headings, get_latest_mesh_desc_file
 from app.pubmed.model import DBMetadataMeshFile, DBMetadataDataFile, DatabaseStatus, DBMetadata, \
     LATEST_PUBMED_DB_VERSION
@@ -186,132 +189,154 @@ class PubMedManager:
             DatabaseStatus.UPDATING, meta_mesh, meta_pubmed
         )
 
-        # Open a connection to the database!
-        with PubMedCacheConn(database=self.db_name) as conn:
+        # Get the current metadata.
+        existing_meta = neo4j_conn.fetch_db_metadata()
+        existing_meta_mesh = None if existing_meta is None else existing_meta.mesh_file
+        existing_meta_pubmed = [] if existing_meta is None else existing_meta.data_files
+        existing_meta_year = None if existing_meta is None else existing_meta.year
 
-            # Get the current metadata.
-            existing_meta = conn.fetch_db_metadata()
-            existing_meta_mesh = None if existing_meta is None else existing_meta.mesh_file
-            existing_meta_pubmed = [] if existing_meta is None else existing_meta.data_files
-            existing_meta_year = None if existing_meta is None else existing_meta.year
+        # Check if the current version of the database is incompatible.
+        if existing_meta is not None and existing_meta.is_incompatible():
+            self.report_db_incompatible(existing_meta.pubmed_db_version)
+            return 1
 
-            # Check if the current version of the database is incompatible.
-            if existing_meta is not None and existing_meta.is_incompatible():
-                self.report_db_incompatible(existing_meta.pubmed_db_version)
-                return 1
+        # Check if the current version of the database is outdated.
+        if existing_meta_year is not None and existing_meta_year != latest_baseline_year:
+            self.report_db_outdated(existing_meta_year, latest_baseline_year)
+            return 1
 
-            # Check if the current version of the database is outdated.
-            if existing_meta_year is not None and existing_meta_year != latest_baseline_year:
-                self.report_db_outdated(existing_meta_year, latest_baseline_year)
-                return 1
+        # Detect if we will need to update the MeSH headings.
+        requires_mesh_processing = (existing_meta_mesh is None or not existing_meta_mesh.is_same_file(meta_mesh))
+        if not requires_mesh_processing:
+            meta_mesh = existing_meta_mesh
+            meta.mesh_file = existing_meta_mesh
 
-            # Detect if we will need to update the MeSH headings.
-            requires_mesh_processing = (existing_meta_mesh is None or not existing_meta_mesh.is_same_file(meta_mesh))
-            if not requires_mesh_processing:
-                meta_mesh = existing_meta_mesh
-                meta.mesh_file = existing_meta_mesh
+        # Skip the files that have already been processed and haven't changed.
+        flush_print("\nPubMedExtract: Detecting the data files that have changed...")
+        start_file_index = 0
+        for index, meta_pubmed_file in enumerate(meta_pubmed):
+            matching_meta_pubmed_file = None
 
-            # Skip the files that have already been processed and haven't changed.
-            flush_print("\nPubMedExtract: Detecting the data files that have changed...")
-            start_file_index = 0
-            for index, meta_pubmed_file in enumerate(meta_pubmed):
-                matching_meta_pubmed_file = None
+            on_disk_md5_hash = calc_md5_hash_of_file(meta_pubmed_file.file) if do_md5_file_change_check else None
+            for existing_meta_pubmed_file in existing_meta_pubmed:
+                if not existing_meta_pubmed_file.processed:
+                    continue
+                if not existing_meta_pubmed_file.is_same_file_path(meta_pubmed_file):
+                    continue
+                if do_md5_file_change_check and on_disk_md5_hash != existing_meta_pubmed_file.md5_hash:
+                    continue
 
-                on_disk_md5_hash = calc_md5_hash_of_file(meta_pubmed_file.file) if do_md5_file_change_check else None
-                for existing_meta_pubmed_file in existing_meta_pubmed:
-                    if not existing_meta_pubmed_file.processed:
-                        continue
-                    if not existing_meta_pubmed_file.is_same_file_path(meta_pubmed_file):
-                        continue
-                    if do_md5_file_change_check and on_disk_md5_hash != existing_meta_pubmed_file.md5_hash:
-                        continue
+                # Found that we already processed this file!
+                matching_meta_pubmed_file = existing_meta_pubmed_file
+                break
 
-                    # Found that we already processed this file!
-                    matching_meta_pubmed_file = existing_meta_pubmed_file
-                    break
+            if matching_meta_pubmed_file is None:
+                break
 
-                if matching_meta_pubmed_file is None:
-                    break
+            # Copy the existing metadata.
+            meta_pubmed[index] = matching_meta_pubmed_file
 
-                # Copy the existing metadata.
-                meta_pubmed[index] = existing_meta_pubmed_file
+            # Mark that we don't want to process this file.
+            start_file_index = index + 1
 
-                # Mark that we don't want to process this file.
-                start_file_index = index + 1
+        # Start the update of the database.
+        analytics = DownloadAnalytics(
+            pubmed_file_sizes,
+            no_threads=1,
+            prediction_size_bias=0.6,
+            history_for_prediction=150,
+            start_file_index=start_file_index
+        )
 
-            # Start the update of the database.
-            analytics = DownloadAnalytics(
-                pubmed_file_sizes,
-                no_threads=1,
-                prediction_size_bias=0.6,
-                history_for_prediction=150,
-                start_file_index=start_file_index
+        # Print out the state going into the processing.
+        previous_work_detection_report = []
+        if not requires_mesh_processing:
+            previous_work_detection_report.append(
+                f"PubMedExtract: Detected that the MeSH descriptor file for {meta_mesh.year} "
+                f"has already been processed. It will not be processed again."
             )
+        if start_file_index > 0:
+            previous_work_detection_report.append(
+                f"PubMedExtract: Detected that {start_file_index} PubMed files "
+                f"have already been processed. They will not be processed again."
+            )
+        if len(previous_work_detection_report) > 0:
+            flush_print("\n" + "\n".join(previous_work_detection_report))
 
-            # Print out the state going into the processing.
-            previous_work_detection_report = []
-            if not requires_mesh_processing:
-                previous_work_detection_report.append(
-                    f"PubMedExtract: Detected that the MeSH descriptor file for {meta_mesh.year} "
-                    f"has already been processed. It will not be processed again."
-                )
-            if start_file_index > 0:
-                previous_work_detection_report.append(
-                    f"PubMedExtract: Detected that {start_file_index} PubMed files "
-                    f"have already been processed. They will not be processed again."
-                )
-            if len(previous_work_detection_report) > 0:
-                flush_print("\n" + "\n".join(previous_work_detection_report))
+        # Mark that the database is being updated.
+        neo4j_conn.push_new_db_metadata(meta)
 
-            # Mark that the database is being updated.
-            conn.push_new_db_metadata(meta)
+        # First, we need to make sure the MESH headings are up-to-date.
+        if requires_mesh_processing:
+            process_mesh_headings(mesh_directory, mesh_heading_file, neo4j_conn)
+            meta_mesh.processed = True
+            # Mark that the MeSH headings have been updated in the database.
+            neo4j_conn.push_new_db_metadata(meta)
 
-            # First, we need to make sure the MESH headings are up-to-date.
-            if requires_mesh_processing:
-                process_mesh_headings(mesh_directory, mesh_heading_file, conn)
-                meta_mesh.processed = True
-                # Mark that the MeSH headings have been updated in the database.
-                conn.push_new_db_metadata(meta)
+        # Then, we get started on the data files...
+        new_pubmed_files = pubmed_files[start_file_index:]
+        flush_print(f"\nPubMedExtract: Extracting data from {len(new_pubmed_files)} PubMed files\n")
 
-            # Then, we get started on the data files...
-            new_pubmed_files = pubmed_files[start_file_index:]
-            flush_print(f"\nPubMedExtract: Extracting data from {len(new_pubmed_files)} PubMed files\n")
+        file_queue = read_all_pubmed_files(log_dir, new_pubmed_files)
+        pipeline = BuildPipeline()
+        pipeline.start()
 
-            file_queue = read_all_pubmed_files(log_dir, new_pubmed_files)
-
-            last_report_time = time.time()
+        def update_analytics_from_processed(block: bool):
+            """ Update the metadata for the files that have finished being processed. """
             while True:
-                start = time.time()
-                file = file_queue.get()
-                file_index = file.index + start_file_index
-                if file.articles is None:
-                    break  # Marks that there are no more files.
-
                 try:
-                    conn.insert_article_batch(file.articles)
-                except Exception as e:
-                    flush_print(f"Error occurred in file {analytics.num_processed + 1}:", file=sys.stderr)
-                    raise e
+                    pipeline_result = pipeline.output_queue.get(block)
+                    if pipeline_result is None:
+                        break
+                except Empty:
+                    break
 
+                file_index, _ = pipeline_result
                 file_meta = meta_pubmed[file_index]
                 file_meta.processed = True
-                file_meta.md5_hash = file.md5_hash
-                file_meta.no_articles = len(file.articles)
 
                 duration = time.time() - start
-                analytics.update(duration, pubmed_file_sizes[start_file_index + file.index])
-                analytics.update_remaining(pubmed_file_sizes[start_file_index + file.index + 1:])
+                analytics.update(duration, pubmed_file_sizes[file_index])
+                analytics.update_remaining(pubmed_file_sizes[file_index + 1:])
 
-                if time.time() - last_report_time >= report_every:
-                    last_report_time = time.time()
-                    analytics.report(prefix="PubMedExtract: ", verb="Processed")
+        last_report_time = time.time()
+        while True:
+            start = time.time()
+            file = file_queue.get()
+            file_index = file.index + start_file_index
+            if file.articles is None:
+                update_analytics_from_processed(True)
+                break
 
-                    # Mark the progress in the database.
-                    conn.push_new_db_metadata(meta)
+            # Push a new batch of articles to be processed into the pipeline.
+            try:
+                file_meta = meta_pubmed[file_index]
+                file_meta.md5_hash = file.md5_hash
+                file_meta.no_articles = len(file.articles)
+                pipeline.push(file_index, file.articles)
+            except Exception as e:
+                flush_print(f"Error occurred in file {analytics.num_processed + 1}:", file=sys.stderr)
+                raise e
 
-            # Mark that the extraction has completed.
-            meta.status = DatabaseStatus.NORMAL
-            conn.push_new_db_metadata(meta)
+            update_analytics_from_processed(False)
+
+            if time.time() - last_report_time >= report_every:
+                last_report_time = time.time()
+                analytics.report(
+                    prefix="PubMedExtract: ",
+                    verb="Processed",
+                    suffix=f" ({pipeline.get_utilisation_str()})"
+                )
+
+                # Mark the progress in the database.
+                neo4j_conn.push_new_db_metadata(meta)
+
+        # Stop the pipeline.
+        pipeline.finish()
+
+        # Mark that the extraction has completed.
+        meta.status = DatabaseStatus.NORMAL
+        neo4j_conn.push_new_db_metadata(meta)
 
         overall_duration = time.time() - overall_start
         flush_print(
@@ -372,10 +397,7 @@ class PubMedManager:
         # Then, we get started on the data files...
         flush_print(f"\nPubMedStats: Processing statistics for {len(pubmed_files)} PubMed files\n")
 
-        file_queue = read_all_pubmed_files(
-            log_dir, target_directory, pubmed_files
-        )
-
+        file_queue = read_all_pubmed_files(log_dir, pubmed_files)
         stats = {
             "article_count": 0,
             "author_count": 0,

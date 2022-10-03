@@ -388,6 +388,7 @@ class DBArticle:
         self.date: datetime.date = date
         self.title: str = truncate_long_names(title)
         self._journal: Optional[DBJournal] = None
+        # The database building relies on the authors being ordered.
         self._authors: Optional[list[DBArticleAuthor]] = None
         self._reference_pmids: Optional[list[int]] = None
         self._mesh_descriptor_ids: Optional[list[int]] = None

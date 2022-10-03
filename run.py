@@ -22,6 +22,13 @@ def run_test():
     application.run(host='0.0.0.0', port=8080, debug=True)
 
 
+def run_prod():
+    """
+    Runs a test webserver.
+    """
+    application.run(host='0.0.0.0', port=8080, debug=False)
+
+
 if __name__ == "__main__":
     args = sys.argv
     if len(args) < 2:
@@ -85,15 +92,23 @@ if __name__ == "__main__":
             sys.exit(1)
         run_test()
 
-    elif mode == "wait":
+    elif mode == "prod":
         if len(args) != 2:
-            err_print("Expected no arguments to wait")
+            err_print("Expected no arguments to test")
             sys.exit(1)
 
+        print("PubMedConnections: Updating the database...\n")
+        manager = PubMedManager()
+        exit_code = manager.run_sync()
+        if exit_code != 0:
+            sys.exit(exit_code)
 
-        print("Waiting until manually stopped...")
-        while True:
-            time.sleep(1)
+        exit_code = manager.run_extract()
+        if exit_code != 0:
+            sys.exit(exit_code)
+
+        print("PubMedConnections: Starting the backend...\n")
+        run_prod()
 
     else:
         err_print("Unknown run-mode", mode)
