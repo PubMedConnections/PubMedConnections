@@ -493,7 +493,9 @@ def _retrieve_analytics(snapshot_id: int):
 
     # TODO in cases where problems arose with creating the graph, it will return "In Progress" when it shouldn't
     if 'degree' not in analytics_response or 'betweenness' not in analytics_response:
-        analytics_response['status'] = 'In Progress' 
+        analytics_response = {
+            'status': 'In Progress' 
+        }
     else:
         analytics_response['status'] = 'Completed'
 
