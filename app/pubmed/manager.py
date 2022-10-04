@@ -75,6 +75,14 @@ class PubMedManager:
         )
         self._report_regenerate_instructions()
 
+    def initialise_backend_for_requests(self):
+        """
+        Runs any logic required to initialise the backend for receiving web requests.
+        """
+        # Create the indexes.
+        with neo4j_conn.new_session() as session:
+            neo4j_conn.create_indexes(session)
+
     def run_sync(self, *, target_directory=None) -> int:
         """
         Synchronises the PubMed dataset from FTP.
@@ -275,6 +283,15 @@ class PubMedManager:
 
         # Then, we get started on the data files...
         new_pubmed_files = pubmed_files[start_file_index:]
+
+        # If there are a lot of data files to extract, then it is
+        # quicker to drop the indexes and create them again later.
+        if len(new_pubmed_files) > 50:
+            flush_print(f"\nPubMedExtract: Dropping the database indexes for extraction...")
+            with neo4j_conn.new_session() as session:
+                dropped = neo4j_conn.drop_indexes(session)
+                flush_print(f"PubMedExtract: Dropped {dropped} indexes")
+
         flush_print(f"\nPubMedExtract: Extracting data from {len(new_pubmed_files)} PubMed files\n")
 
         file_queue = read_all_pubmed_files(log_dir, new_pubmed_files)
@@ -343,6 +360,10 @@ class PubMedManager:
         # Mark that the extraction has completed.
         meta.status = DatabaseStatus.NORMAL
         neo4j_conn.push_new_db_metadata(meta)
+
+        # Create the indexes.
+        with neo4j_conn.new_session() as session:
+            neo4j_conn.create_indexes(session)
 
         overall_duration = time.time() - overall_start
         flush_print(

@@ -90,6 +90,9 @@ if __name__ == "__main__":
         if len(args) != 2:
             err_print("Expected no arguments to test")
             sys.exit(1)
+
+        manager = PubMedManager()
+        manager.initialise_backend_for_requests()
         run_test()
 
     elif mode == "prod":
@@ -108,6 +111,7 @@ if __name__ == "__main__":
             sys.exit(exit_code)
 
         print("PubMedConnections: Starting the backend...\n")
+        manager.initialise_backend_for_requests()
         run_prod()
 
     else:

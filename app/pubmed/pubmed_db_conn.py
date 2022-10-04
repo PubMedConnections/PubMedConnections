@@ -72,7 +72,7 @@ class PubMedCacheConn:
 
         # Create a connection to the database to create its constraints and grab metadata.
         with self.new_session() as session:
-            self._create_constraints_and_indexes(session)
+            self.create_constraints(session)
             self._fetch_metadata(session)
 
         return self
@@ -87,20 +87,21 @@ class PubMedCacheConn:
     def new_session(self) -> neo4j.Session:
         return self.driver.session(database=self.database)
 
-    def _create_constraints_and_indexes(self, session: neo4j.Session):
+    def _wait_for_indexes(self, session: neo4j.Session):
         """
-        This method creates all the constraints and indexes required for the database.
+        We don't want to start inserting data until the indices are created.
+        """
+        session.run("CALL db.awaitIndexes()").consume()
+
+    def create_constraints(self, session: neo4j.Session):
+        """
+        This method creates all the constraints required for the database.
         Uniqueness constraints implicitly create an index for the constraint as well.
         """
-
         # MeSH Headings.
         session.run(
             "CREATE CONSTRAINT unique_mesh_heading_ids IF NOT EXISTS "
             "FOR (h:MeshHeading) REQUIRE h.id IS UNIQUE"
-        ).consume()
-        session.run(
-            "CREATE INDEX mesh_name IF NOT EXISTS "
-            "FOR (h:MeshHeading) ON (h.name)"
         ).consume()
 
         # Authors.
@@ -108,23 +109,11 @@ class PubMedCacheConn:
             "CREATE CONSTRAINT unique_author_names IF NOT EXISTS "
             "FOR (a:Author) REQUIRE a.name IS UNIQUE"
         ).consume()
-        session.run(
-            "CREATE CONSTRAINT unique_author_ids IF NOT EXISTS "
-            "FOR (a:Author) REQUIRE a.id IS UNIQUE"
-        ).consume()
-        session.run(
-            "CREATE INDEX author_names IF NOT EXISTS "
-            "FOR (a:Author) ON (a.name)"
-        ).consume()
 
         # Journals.
         session.run(
             "CREATE CONSTRAINT unique_journal_ids IF NOT EXISTS "
             "FOR (j:Journal) REQUIRE j.id IS UNIQUE"
-        ).consume()
-        session.run(
-            "CREATE INDEX journal_title IF NOT EXISTS "
-            "FOR (j:Journal) ON (j.title)"
         ).consume()
 
         # Articles.
@@ -132,6 +121,69 @@ class PubMedCacheConn:
             "CREATE CONSTRAINT unique_article_pmids IF NOT EXISTS "
             "FOR (a:Article) REQUIRE a.pmid IS UNIQUE"
         ).consume()
+
+        # Affiliations.
+        session.run(
+            "CREATE CONSTRAINT unique_affiliation_names IF NOT EXISTS "
+            "FOR (a:Affiliation) REQUIRE a.name IS UNIQUE"
+        ).consume()
+
+        # DBMetadata.
+        session.run(
+            "CREATE CONSTRAINT unique_dbmetadata_versions IF NOT EXISTS "
+            "FOR (m:DBMetadata) REQUIRE m.version IS UNIQUE"
+        ).consume()
+
+        # User.
+        session.run(
+            "CREATE CONSTRAINT unique_user_usernames IF NOT EXISTS "
+            "FOR (u:User) REQUIRE u.username IS UNIQUE"
+        ).consume()
+
+        self._wait_for_indexes(session)
+
+    def drop_indexes(self, session: neo4j.Session) -> int:
+        """
+        The indexes are unnecessary during the build of the database,
+        and would just slow things down.
+        """
+        existing_indexes: set[str] = set()
+        results = session.run("CALL db.indexes()")
+        for record in results:
+            existing_indexes.add(record["name"])
+
+        delete_indexes = [
+            "mesh_name", "journal_title", "article_date", "article_title",
+            "dbmetadata_datafile_file", "dbmetadata_meshfile_file"
+        ]
+
+        dropped = 0
+        for index_name in delete_indexes:
+            if index_name in existing_indexes:
+                session.run(f"DROP INDEX {index_name}").consume()
+                dropped += 1
+
+        self._wait_for_indexes(session)
+        return dropped
+
+    def create_indexes(self, session: neo4j.Session):
+        """
+        This method creates all the constraints and indexes required for the database.
+        Uniqueness constraints implicitly create an index for the constraint as well.
+        """
+        # MeSH Headings.
+        session.run(
+            "CREATE INDEX mesh_name IF NOT EXISTS "
+            "FOR (h:MeshHeading) ON (h.name)"
+        ).consume()
+
+        # Journals.
+        session.run(
+            "CREATE INDEX journal_title IF NOT EXISTS "
+            "FOR (j:Journal) ON (j.title)"
+        ).consume()
+
+        # Articles.
         session.run(
             "CREATE INDEX article_date IF NOT EXISTS "
             "FOR (a:Article) ON (a.date)"
@@ -141,38 +193,19 @@ class PubMedCacheConn:
             "FOR (a:Article) ON (a.title)"
         ).consume()
 
-        # Affiliations.
-        session.run(
-            "CREATE CONSTRAINT unqiue_affiliation_names IF NOT EXISTS "
-            "FOR (a:Affiliation) REQUIRE a.name IS UNIQUE"
-        ).consume()
-
-        # DBMetadata
-        session.run(
-            "CREATE CONSTRAINT unique_dbmetadata_versions IF NOT EXISTS "
-            "FOR (m:DBMetadata) REQUIRE m.version IS UNIQUE"
-        ).consume()
-
-        # DBMetadataDataFile
+        # DBMetadataDataFile.
         session.run(
             "CREATE INDEX dbmetadata_datafile_file IF NOT EXISTS "
             "FOR (m:DBMetadataDataFile) ON (m.file)"
         ).consume()
 
-        # DBMetadataMeshFile
+        # DBMetadataMeshFile.
         session.run(
             "CREATE INDEX dbmetadata_meshfile_file IF NOT EXISTS "
             "FOR (m:DBMetadataMeshFile) ON (m.file)"
         ).consume()
 
-        # User
-        session.run(
-            "CREATE CONSTRAINT unique_user_usernames IF NOT EXISTS "
-            "FOR (u:User) REQUIRE u.username IS UNIQUE"
-        ).consume()
-
-        # We don't want to start inserting data until the indices are created.
-        session.run("CALL db.awaitIndexes").consume()
+        self._wait_for_indexes(session)
 
     def _fetch_metadata(self, session: neo4j.Session):
         """

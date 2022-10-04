@@ -377,7 +377,7 @@ class BuildPacket:
             if debug:
                 print(f".. Stage 4a: Deleting old articles took {time.time() - start_time:.2f} seconds")
 
-    def _stage_2b_insert_articles(self, cache: BuildCache, *, debug: bool = False, max_batch_size: int = 5_000):
+    def _stage_2b_insert_articles(self, cache: BuildCache, *, debug: bool = False, max_batch_size: int = 8_000):
         """ Inserts the articles of this packet. """
         # Prepare the article data to insert.
         article_data: list[dict] = []
@@ -511,7 +511,7 @@ class BuildPacket:
 
             return article_ids, article_author_ids
 
-    def _stage_3a_connect_article_authors(self, *, debug: bool = False, max_batch_size: int = 10_000):
+    def _stage_3a_connect_article_authors(self, *, debug: bool = False, max_batch_size: int = 30_000):
         """
         Creates the ArticleAuthors for the articles in the packet.
         """
@@ -564,7 +564,7 @@ class BuildPacket:
                     f".. Stage 5 (batch {batch_no + 1} / {total_batches}): "
                     f"Connecting article authors to authors took {time.time() - start_time:.2f} seconds")
 
-    def _stage_3b_affiliate_authors(self, *, debug: bool = False, max_batch_size: int = 10_000):
+    def _stage_3b_affiliate_authors(self, *, debug: bool = False, max_batch_size: int = 30_000):
         """
         Creates the affiliation relationships between ArticleAuthors and Affiliations.
         """
