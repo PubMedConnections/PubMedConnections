@@ -21,15 +21,15 @@ class BuildCache:
     def __init__(self):
         self._mesh_ids: Optional[dict[int, int]] = None
 
-        self.max_journals_size = 2_000_000
+        self.max_journals_size = 1_000_000
         self._journal_ids: dict[str, int] = {}
         self._journal_id_last_access_times: dict[str, float] = {}
 
-        self.max_authors_size = 10_000_000
+        self.max_authors_size = 5_000_000
         self._author_ids: dict[str, int] = {}
         self._author_id_last_access_times: dict[str, float] = {}
 
-        self.max_affiliations_size = 2_000_000
+        self.max_affiliations_size = 1_000_000
         self._affiliation_ids: dict[str, int] = {}
         self._affiliation_id_last_access_times: dict[str, float] = {}
 
@@ -132,7 +132,7 @@ class BuildPacket:
     but each stage can be run for a new packet after it has been completed
     for the current packet. This allows pipelining the data insertion.
     """
-    NUM_STAGES: Final[int] = 7
+    NUM_STAGES: Final[int] = 3
 
     def __init__(
             self,
@@ -174,26 +174,22 @@ class BuildPacket:
         self._expect_stage(stage - 1)
 
         if stage == 1:
-            self._stage_1_journals(cache, debug=debug)
+            self._stage_1a_journals(cache, debug=debug)
+            self._stage_1b_authors(cache, debug=debug)
+            self._stage_1c_affiliations(cache, debug=debug)
         elif stage == 2:
-            self._stage_2_authors(cache, debug=debug)
+            self._stage_2a_remove_old_articles(debug=debug)
+            self._stage_2b_insert_articles(cache, debug=debug)
         elif stage == 3:
-            self._stage_3_affiliations(cache, debug=debug)
-        elif stage == 4:
-            self._stage_4a_remove_old_articles(debug=debug)
-            self._stage_4b_insert_articles(cache, debug=debug)
-        elif stage == 5:
-            self._stage_5_connect_article_authors(debug=debug)
-        elif stage == 6:
-            self._stage_6_affiliate_authors(debug=debug)
-        elif stage == 7:
-            self._stage_7_delete_orphaned_article_authors(debug=debug)
+            self._stage_3a_connect_article_authors(debug=debug)
+            self._stage_3b_affiliate_authors(debug=debug)
+            self._stage_3c_delete_orphaned_article_authors(debug=debug)
         else:
             raise Exception(f"Unknown stage {stage}")
 
         self._update_stage(stage)
 
-    def _stage_1_journals(self, cache: BuildCache, *, debug: bool = False):
+    def _stage_1a_journals(self, cache: BuildCache, *, debug: bool = False):
         """
         Inserts the journals into the database.
         """
@@ -243,7 +239,7 @@ class BuildPacket:
             if debug:
                 print(f".. Stage 1: Inserting journals took {time.time() - start_time:.2f} seconds")
 
-    def _stage_2_authors(self, cache: BuildCache, *, debug: bool = False):
+    def _stage_1b_authors(self, cache: BuildCache, *, debug: bool = False):
         """
         Inserts the authors (not ArticleAuthors) into the database.
         """
@@ -296,7 +292,7 @@ class BuildPacket:
             if debug:
                 print(f".. Stage 2: Inserting authors took {time.time() - start_time:.2f} seconds")
 
-    def _stage_3_affiliations(self, cache: BuildCache, *, debug: bool = False):
+    def _stage_1c_affiliations(self, cache: BuildCache, *, debug: bool = False):
         """
         Inserts the affiliations into the database.
         """
@@ -342,7 +338,7 @@ class BuildPacket:
             if debug:
                 print(f".. Stage 3: Inserting affiliations took {time.time() - start_time:.2f} seconds")
 
-    def _stage_4a_remove_old_articles(self, *, debug: bool = False):
+    def _stage_2a_remove_old_articles(self, *, debug: bool = False):
         """
         Removes old articles so that we can create their new versions.
         """
@@ -381,7 +377,7 @@ class BuildPacket:
             if debug:
                 print(f".. Stage 4a: Deleting old articles took {time.time() - start_time:.2f} seconds")
 
-    def _stage_4b_insert_articles(self, cache: BuildCache, *, debug: bool = False, max_batch_size: int = 10_000):
+    def _stage_2b_insert_articles(self, cache: BuildCache, *, debug: bool = False, max_batch_size: int = 5_000):
         """ Inserts the articles of this packet. """
         # Prepare the article data to insert.
         article_data: list[dict] = []
@@ -414,7 +410,7 @@ class BuildPacket:
         article_batches = split_into_batches(article_data, max_batch_size=max_batch_size)
         article_ids, article_author_ids = [], []
         for batch_no, batch in enumerate(article_batches):
-            batch_article_ids, batch_article_author_ids = self._stage_4b_insert_articles_batch(
+            batch_article_ids, batch_article_author_ids = self._stage_2b_insert_articles_batch(
                 batch_no, len(article_batches), batch, debug=debug
             )
             article_ids.extend(batch_article_ids)
@@ -423,7 +419,7 @@ class BuildPacket:
         self._article_ids = article_ids
         self._article_author_ids = article_author_ids
 
-    def _stage_4b_insert_articles_batch(
+    def _stage_2b_insert_articles_batch(
             self, batch_no: int, total_batches: int, article_data: list[dict], *, debug: bool = False
     ) -> tuple[list[int], list[list[int]]]:
         """
@@ -515,7 +511,7 @@ class BuildPacket:
 
             return article_ids, article_author_ids
 
-    def _stage_5_connect_article_authors(self, *, debug: bool = False, max_batch_size: int = 50_000):
+    def _stage_3a_connect_article_authors(self, *, debug: bool = False, max_batch_size: int = 10_000):
         """
         Creates the ArticleAuthors for the articles in the packet.
         """
@@ -532,11 +528,11 @@ class BuildPacket:
         # We batch the articles as otherwise we can hit maximum memory issues with Neo4J...
         article_author_batches = split_into_batches(article_author_data, max_batch_size)
         for batch_no, batch in enumerate(article_author_batches):
-            self._stage_5_connect_article_authors_batch(
+            self._stage_3a_connect_article_authors_batch(
                 batch_no, len(article_author_batches), batch, debug=debug
             )
 
-    def _stage_5_connect_article_authors_batch(
+    def _stage_3a_connect_article_authors_batch(
             self, batch_no: int, total_batches: int, article_author_data: list[dict], *, debug: bool = False):
         """
         Creates the IS_AUTHOR relationships between ArticleAuthors and Authors.
@@ -568,7 +564,7 @@ class BuildPacket:
                     f".. Stage 5 (batch {batch_no + 1} / {total_batches}): "
                     f"Connecting article authors to authors took {time.time() - start_time:.2f} seconds")
 
-    def _stage_6_affiliate_authors(self, *, debug: bool = False, max_batch_size: int = 50_000):
+    def _stage_3b_affiliate_authors(self, *, debug: bool = False, max_batch_size: int = 10_000):
         """
         Creates the affiliation relationships between ArticleAuthors and Affiliations.
         """
@@ -588,11 +584,11 @@ class BuildPacket:
         # We batch the articles as otherwise we can hit maximum memory issues with Neo4J...
         affiliation_batches = split_into_batches(affiliation_data, max_batch_size)
         for batch_no, batch in enumerate(affiliation_batches):
-            self._stage_6_affiliate_authors_batch(
+            self._stage_3b_affiliate_authors_batch(
                 batch_no, len(affiliation_batches), batch, debug=debug
             )
 
-    def _stage_6_affiliate_authors_batch(
+    def _stage_3b_affiliate_authors_batch(
             self, batch_no: int, total_batches: int, affiliation_data: list[dict], *, debug: bool = False):
         """
         Inserts one batch of article authors.
@@ -621,7 +617,7 @@ class BuildPacket:
                     f".. Stage 6 (batch {batch_no + 1} / {total_batches}): "
                     f"Affiliating authors took {time.time() - start_time:.2f} seconds")
 
-    def _stage_7_delete_orphaned_article_authors(self, *, debug: bool = False):
+    def _stage_3c_delete_orphaned_article_authors(self, *, debug: bool = False):
         """
         Removes old article authors from deleted articles.
         """
