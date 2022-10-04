@@ -1,36 +1,15 @@
-import sys
-from typing import Any, Optional
+from typing import Any
 
-import neo4j
-
-from app import neo4j_conn, PubMedCacheConn
+from app import neo4j_conn
 from flask import jsonify
-from datetime import datetime, date
 
 from app.controller.graph_builder import GraphOptions, GraphBuilder, ArticleAuthorNode, ArticleCoAuthorEdge, \
     ConstantNodesValueSource, MatchedNodesValueSource, ConstantEdgesValueSource, CoAuthoredArticlesEdgesValueSource, \
     NodesValueSource, EdgeCountNodesValueSource, AuthorCitationsNodesValueSource, MeanPublicationDateNodesValueSource
+from app.controller.graph_queries import CoAuthorGraph, query_graph
 from app.helpers import _create_query_from_filters
 
-from app.pubmed.filtering import PubMedFilterBuilder, PubMedFilterLimitError, PubMedFilterValueError, \
-    PubMedFilterQuerySettings, PubMedFilterCache, PubMedFilterQuery, PubMedFilterResults
-
-
-def parse_date(filter_key: str, date_str: str) -> datetime:
-    try:
-        return datetime.strptime(date_str, '%Y-%m-%d')
-    except ValueError as e:
-        raise PubMedFilterValueError(filter_key, f"The {filter_key} filter contains an invalid date")
-
-
-def parse_dates(filters):
-    if "published_after" in filters:
-        filters["published_after"] = parse_date("published_after", filters["published_after"])
-
-    if "published_before" in filters:
-        filters["published_before"] = parse_date("published_after", filters["published_before"])
-
-    return filters
+from app.pubmed.filtering import PubMedFilterValueError
 
 
 def _parse_node_value_source_filter(
@@ -54,21 +33,6 @@ def _parse_node_value_source_filter(
         return MeanPublicationDateNodesValueSource()
     else:
         raise PubMedFilterValueError("graph_node_size", f"Unknown {filter_key} type {node_size_type}")
-
-
-def construct_query_settings(filters: dict[str, Any]) -> PubMedFilterQuerySettings:
-    """
-    Constructs the query settings from those explicitly set within filters.
-    These settings will have to be modified further by the endpoint that is using them.
-    """
-    settings = PubMedFilterQuerySettings()
-    if "graph_size" in filters:
-        settings.node_limit = filters["graph_size"]
-        del filters["graph_size"]
-    else:
-        settings.node_limit = 1000
-
-    return settings
 
 
 def construct_graph_options(filters: dict[str, Any]) -> GraphOptions:
@@ -113,158 +77,45 @@ def construct_graph_options(filters: dict[str, Any]) -> GraphOptions:
     return options
 
 
-def construct_graph_filter(filters: dict[str, Any]) -> PubMedFilterBuilder:
-    """
-    Constructs a PubMedFilterBuilder that applies a set of filters to the PubMed graph
-    to fetch a set of IDs corresponding to the nodes that match the filters.
-    These IDs can then later be used to build graphs for visualisation.
-    """
-    filter_builder = PubMedFilterBuilder()
-    if "journal" in filters:
-        journal_name = filters["journal"]
-        del filters["journal"]
-        if len(journal_name.strip()) > 0:
-            filter_builder.add_journal_name_filter(journal_name)
-
-    if "mesh_heading" in filters:
-        mesh_name = filters["mesh_heading"]
-        del filters["mesh_heading"]
-
-        # Find all the matching MeSH headings.
-        if len(mesh_name.strip()) > 0:
-            filter_builder.add_mesh_name_filter(mesh_name)
-
-    if "author" in filters:
-        author_name = filters["author"]
-        del filters["author"]
-        if len(author_name.strip()) > 0:
-            filter_builder.add_author_name_filter(author_name)
-
-    if "affiliation" in filters:
-        affiliation_name = filters["affiliation"]
-        del filters["affiliation"]
-        if len(affiliation_name.strip()) > 0:
-            filter_builder.add_affiliation_filter(affiliation_name)
-
-    if "first_author" in filters:
-        restrict_to_first_author = filters["first_author"]
-        del filters["first_author"]
-        if restrict_to_first_author:
-            filter_builder.add_first_author_filter()
-
-    if "last_author" in filters:
-        restrict_to_last_author = filters["last_author"]
-        del filters["last_author"]
-        if restrict_to_last_author:
-            filter_builder.add_last_author_filter()
-
-    if "article" in filters:
-        article_name = filters["article"]
-        del filters["article"]
-        if len(article_name.strip()) > 0:
-            filter_builder.add_article_name_filter(article_name)
-
-    if "published_after" in filters:
-        filter_date = filters["published_after"]
-        del filters["published_after"]
-        boundary_date = date(year=filter_date.year, month=filter_date.month, day=filter_date.day)
-        filter_builder.add_published_after_filter(boundary_date)
-
-    if "published_before" in filters:
-        filter_date = filters["published_before"]
-        del filters["published_before"]
-        boundary_date = date(year=filter_date.year, month=filter_date.month, day=filter_date.day)
-        filter_builder.add_published_before_filter(boundary_date)
-
-    if len(filters) != 0:
-        print("Unknown filters present: " + str(filters), file=sys.stderr)
-
-    return filter_builder
-
-
-filter_query_cache = PubMedFilterCache()
-
-
-def query_graph(filters: dict[str, Any]):
+def visualise_graph(filters: dict[str, Any]) -> Any:
     """
     Builds a graph from the given filter options.
+    Returns a JSON response.
     """
-    graph_type = "author_coauthors_open"
-    if "graph_type" in filters:
-        graph_type = filters["graph_type"]
-        del filters["graph_type"]
-
-    if graph_type == "author_coauthors_open":
-        return query_coauthor_graph(filters, True)
-    elif graph_type == "author_coauthors_closed":
-        return query_coauthor_graph(filters, False)
-    else:
-        return {"error": f"Unknown graph type {graph_type}"}
-
-
-def query_coauthor_graph(filters: dict[str, Any], open: bool):
-    """
-    Builds a co-author graph based upon a set of filters
-    that returns the central authors to expand upon.
-    """
-    query_settings = construct_query_settings(filters)
-    query_settings.query_authors = True
-
     graph_options = construct_graph_options(filters)
-    graph_filter = construct_graph_filter(filters)
+    graph = query_graph(filters)
 
+    if isinstance(graph, CoAuthorGraph):
+        return visualise_coauthor_graph(graph_options, graph)
+    else:
+        return {"error": f"Unknown graph type {type(graph).__name__}"}
+
+
+def visualise_coauthor_graph(graph_options: GraphOptions, coauthor_graph: CoAuthorGraph):
+    """
+    Builds the given co-author graph into a JSON response for the frontend to visualise.
+    """
+    # Build the Vis.JS graph.
+    graph_builder = GraphBuilder()
+    for record in coauthor_graph.records:
+        graph_builder.add_record()
+
+        graph_builder.add_node(ArticleAuthorNode(record.author_id, True, record.author, record.article))
+        if record.coauthor is None:
+            continue
+
+        graph_builder.add_node(ArticleAuthorNode(record.coauthor_id, False, record.coauthor, record.article))
+        graph_builder.add_edge(ArticleCoAuthorEdge(
+            record.author_id, record.article_author, record.article,
+            record.article_coauthor, record.coauthor_id
+        ))
+
+    graph = graph_builder.build(ArticleAuthorNode.collapse, ArticleCoAuthorEdge.collapse)
     with neo4j_conn.new_session() as session:
-        # Query for the authors that match the filters.
-        filter_results = filter_query_cache.get_or_run(graph_filter.build(query_settings), session)
-
-        # Query for the co-author graph.
-        co_author_graph_results = session.run(
-            """
-            CYPHER planner=dp
-            MATCH (author:Author)
-            WHERE id(author) IN $author_ids
-            MATCH (author) -[author_rel:AUTHOR_OF]-> (article:Article)
-            WHERE id(article) in $article_ids
-            OPTIONAL MATCH (article) <-[coauthor_rel:AUTHOR_OF]- (coauthor)
-            WHERE author <> coauthor
-            """
-            + (" AND id(coauthor) IN $author_ids" if not open else "") +
-            """
-            RETURN id(author), author, author_rel, article, coauthor_rel, id(coauthor), coauthor
-            """,
-            author_ids=filter_results.author_ids,
-            article_ids=filter_results.article_ids,
-            node_limit=query_settings.node_limit
-        )
-
-        # Build the Vis.JS graph.
-        graph_builder = GraphBuilder()
-        for record in co_author_graph_results:
-            graph_builder.add_record()
-            author_id, author, author_rel, article, coauthor_rel, coauthor_id, coauthor = record
-
-            author = PubMedCacheConn.read_author_node(author)
-            article = PubMedCacheConn.read_article_node(article)
-            graph_builder.add_node(ArticleAuthorNode(author_id, True, author, article))
-            if coauthor is None:
-                continue
-
-            coauthor = PubMedCacheConn.read_author_node(coauthor)
-            author_rel = PubMedCacheConn.read_article_author_relation(article, author, author_rel)
-            coauthor_rel = PubMedCacheConn.read_article_author_relation(article, coauthor, coauthor_rel)
-
-            graph_builder.add_node(ArticleAuthorNode(coauthor_id, False, coauthor, article))
-            graph_builder.add_edge(ArticleCoAuthorEdge(
-                author.author_id, author_rel, article, coauthor_rel, coauthor.author_id
-            ))
-
-        if graph_builder.get_node_count() >= query_settings.node_limit:
-            raise PubMedFilterLimitError(f"The limit of {query_settings.node_limit} nodes was reached")
-
-        graph = graph_builder.build(ArticleAuthorNode.collapse, ArticleCoAuthorEdge.collapse)
         graph_json = graph.build_json(graph_options, session)
-        if len(graph.nodes) == 0:
-            graph_json["empty_message"] = "There are no matching nodes."
+
+    if len(graph.nodes) == 0:
+        graph_json["empty_message"] = "There are no matching nodes."
 
     return graph_json
 

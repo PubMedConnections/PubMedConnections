@@ -37,7 +37,7 @@ class DownloadAnalytics:
         self.download_times.append(download_time)
         self.download_sizes.append(download_size)
 
-    def report(self, *, prefix="", verb="Downloaded"):
+    def report(self, *, prefix="", suffix="", verb="Downloaded"):
         """
         Prints out a report of how the downloads are progressing.
         """
@@ -59,7 +59,7 @@ class DownloadAnalytics:
         bias = self.prediction_size_bias
         estimated_remaining = (1 - bias) * estimated_remaining_by_files + bias * estimated_remaining_by_size
 
-        flush_print(prefix + "{} {} of {} files. Estimated {} remaining ({:.2f} MB/s)\n".format(
-            verb, self.num_processed, self.total_files,
-            format_minutes(estimated_remaining / 60), avg_mb_per_sec
-        ))
+        estimated_remaining_str = format_minutes(estimated_remaining / 60)
+        flush_print(
+            f"{prefix}{verb} {self.num_processed} of {self.total_files} files. "
+            f"Estimated {estimated_remaining_str} remaining ({avg_mb_per_sec:.2f} MB/s){suffix}\n")

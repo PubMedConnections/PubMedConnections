@@ -1,8 +1,8 @@
 """
-Functions to parse results downloaded from the FTP server
-or retrieved from the Entrez API, and extract the data
-we want from the results.
+Functions to parse results downloaded from the FTP server,
+and extract the data we want from them.
 """
+import gzip
 import multiprocessing
 import os.path
 import queue
@@ -13,7 +13,7 @@ from typing import Optional
 
 from lxml import etree
 
-from app.pubmed.extract_xml import extract_articles
+from app.pubmed.extract_xml import extract_article
 from app.pubmed.model import DBArticle
 from app.pubmed.warning_log import WarningLog, LogFile
 from app.utils import calc_md5_hash_of_file
@@ -76,7 +76,6 @@ class ReadPubMedItem:
 
 def read_all_pubmed_files(
         log_dir: str,
-        target_directory: str,
         file_paths: list[str],
         *,
         read_thread_count=1
@@ -119,7 +118,7 @@ def read_all_pubmed_files(
             if is_empty:
                 break
 
-            articles = parse_pubmed_xml(log_dir, target_directory, process_file)
+            articles = parse_pubmed_xml(log_dir, process_file)
             md5_hash = calc_md5_hash_of_file(process_file)
             output = ReadPubMedItem(process_index, md5_hash, articles)
             with unordered_queue_lock:
@@ -162,6 +161,69 @@ def read_all_pubmed_files(
     order_thread.start()
 
     return ordered_output_queue
+
+
+def _do_parse_pubmed_xml(log_dir: str, path: str, return_queue: multiprocessing.Queue):
+    """
+    Parses the contents of the given file and returns the result.
+    """
+
+    # Remove directories and all extensions from filename (i.e. removes .xml.gz)
+    filename = os.path.basename(path)
+    try:
+        filename = filename[:filename.index(".", 1)]
+    except ValueError:
+        pass
+
+    # Open the log file for warnings about the extraction of the articles.
+    log_file: str = os.path.join(log_dir, f"warnings.{filename}.txt")
+    with LogFile(log_file) as log:
+        articles: list[DBArticle] = []
+        warning_log = WarningLog(log)
+
+        # Parse the file one article at a time.
+        with gzip.open(path, "rb") as f:
+            index = 0
+            for _, node in etree.iterparse(f, events=("end",), tag="PubmedArticle"):
+                if node.tag != "PubmedArticle":
+                    return None
+
+                article = extract_article(warning_log.group(f"index={index}"), node)
+                if article is not None:
+                    articles.append(article)
+
+                index += 1
+
+                # Delete the memory used to store the contentys of the node.
+                node.clear()
+                while node.getprevious() is not None:
+                    del node.getparent()[0]
+
+        return_queue.put(articles)
+
+
+def parse_pubmed_xml(log_dir: str, path: str) -> list[DBArticle]:
+    """
+    Parses the contents of the file at the given path into a Python object.
+    A new process is started to perform the parsing due to repeated calls
+    to lxml causing massive memory leaks. Instead, running lxml in a
+    separate process allows the process to be killed afterwards, along
+    with all of its memory.
+
+    This is quite wasteful, but we can just spin up more threads to
+    balance that waste. It is unfortunate that this is required.
+    """
+    return_queue = multiprocessing.Queue()
+    process = multiprocessing.Process(
+        name="parse_pubmed_xml",
+        target=_do_parse_pubmed_xml,
+        args=(log_dir, path, return_queue),
+        daemon=True
+    )
+    process.start()
+    result: list[DBArticle] = return_queue.get()
+    process.terminate()
+    return result
 
 
 class DTDResolver(etree.Resolver):
@@ -211,61 +273,3 @@ class DTDResolver(etree.Resolver):
                 return self.resolve_string(dtd_text, context)
         else:
             return super().resolve(system_url, public_id, context)
-
-
-def create_pubmed_xml_parser(target_directory: str) -> etree.XMLParser:
-    parser = etree.XMLParser(
-        remove_blank_text=True,
-        remove_comments=True,
-        remove_pis=True,
-        collect_ids=False,
-        load_dtd=False,
-        dtd_validation=False,
-        attribute_defaults=False
-    )
-    parser.resolvers.add(DTDResolver(os.path.join(target_directory, "pubmed"), "http://dtd.nlm.nih.gov/"))
-    return parser
-
-
-def _do_parse_pubmed_xml(log_dir: str, target_directory: str, path: str, return_queue: multiprocessing.Queue):
-    """
-    Parses the contents of the given file and returns the result.
-    """
-    parser = create_pubmed_xml_parser(target_directory)
-    tree: etree.ElementTree = etree.parse(path, parser)
-
-    # Remove directories and all extensions from filename (i.e. removes .xml.gz)
-    filename = os.path.basename(path)
-    try:
-        filename = filename[:filename.index(".", 1)]
-    except ValueError:
-        pass
-
-    # Open the log file for warnings about the extraction of the articles.
-    log_file: str = os.path.join(log_dir, f"warnings.{filename}.txt")
-    with LogFile(log_file) as log:
-        return_queue.put(extract_articles(WarningLog(log), tree))
-
-
-def parse_pubmed_xml(log_dir: str, target_directory: str, path: str) -> list[DBArticle]:
-    """
-    Parses the contents of the file at the given path into a Python object.
-    A new process is started to perform the parsing due to repeated calls
-    to lxml causing massive memory leaks. Instead, running lxml in a
-    separate process allows the process to be killed afterwards, along
-    with all of its memory.
-
-    This is quite wasteful, but we can just spin up more threads to
-    balance that waste. It is unfortunate that this is required.
-    """
-    return_queue = multiprocessing.Queue()
-    process = multiprocessing.Process(
-        name="parse_pubmed_xml",
-        target=_do_parse_pubmed_xml,
-        args=(log_dir, target_directory, path, return_queue),
-        daemon=True
-    )
-    process.start()
-    result: list[DBArticle] = return_queue.get()
-    process.terminate()
-    return result

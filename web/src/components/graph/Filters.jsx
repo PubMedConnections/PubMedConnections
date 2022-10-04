@@ -99,7 +99,9 @@ const Filters = () => {
     }
 
     function updateStateDateCallbackGenerator(filterKey) {
-        return updateStateCallbackGenerator(filterKey, (newValue) => newValue.format("YYYY-MM-DD"));
+        return updateStateCallbackGenerator(filterKey, (newValue) => {
+            return newValue !== null ? newValue.format("YYYY-MM-DD") : null;
+        });
     }
 
     function updateStateFromEventValueCallbackGenerator(filterKey) {
@@ -261,7 +263,6 @@ const Filters = () => {
                 onChange={updateStateFromEventValueCallbackGenerator(filterDesc.key)}>
                     <MenuItem value={"constant"}>Constant</MenuItem>
                     <MenuItem value={"coauthored_articles"}>Co-Authored Articles</MenuItem>
-                    <MenuItem value={"citations"}>Citations of Co-Authored Articles</MenuItem>
             </Select>
         </FormControl>;
 

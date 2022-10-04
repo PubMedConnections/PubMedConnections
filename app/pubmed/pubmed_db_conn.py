@@ -2,13 +2,13 @@
 Allows dumping data into SQLite to speed up iteration
 over the ~33 million records.
 """
-import datetime
-import time
 from typing import Optional
 
 import atomics
 import neo4j
-from app.pubmed.model import DBArticle, DBMetadata, DBMeSHHeading, DBAuthor, DBArticleAuthorRelation
+
+from app.pubmed.filtering import PubMedFilterCache
+from app.pubmed.model import DBArticle, DBMetadata, DBMeSHHeading, DBAuthor, DBArticleAuthor, DBAffiliation
 from config import NEO4J_URI, NEO4J_REQUIRES_AUTH
 
 
@@ -36,6 +36,7 @@ class PubMedCacheConn:
     def __init__(self, database: Optional[str] = None):
         self.database: Optional[str] = database
         self.driver: Optional[neo4j.Driver] = None
+        self.filter_query_cache = PubMedFilterCache()
 
         # We store metadata about the database within a Metadata node.
         self.metadata: Optional[DBMetadata] = None
@@ -71,7 +72,7 @@ class PubMedCacheConn:
 
         # Create a connection to the database to create its constraints and grab metadata.
         with self.new_session() as session:
-            self._create_constraints_and_indexes(session)
+            self.create_constraints(session)
             self._fetch_metadata(session)
 
         return self
@@ -86,20 +87,21 @@ class PubMedCacheConn:
     def new_session(self) -> neo4j.Session:
         return self.driver.session(database=self.database)
 
-    def _create_constraints_and_indexes(self, session: neo4j.Session):
+    def _wait_for_indexes(self, session: neo4j.Session):
         """
-        This method creates all the constraints and indexes required for the database.
+        We don't want to start inserting data until the indices are created.
+        """
+        session.run("CALL db.awaitIndexes()").consume()
+
+    def create_constraints(self, session: neo4j.Session):
+        """
+        This method creates all the constraints required for the database.
         Uniqueness constraints implicitly create an index for the constraint as well.
         """
-
         # MeSH Headings.
         session.run(
             "CREATE CONSTRAINT unique_mesh_heading_ids IF NOT EXISTS "
             "FOR (h:MeshHeading) REQUIRE h.id IS UNIQUE"
-        ).consume()
-        session.run(
-            "CREATE INDEX mesh_name IF NOT EXISTS "
-            "FOR (h:MeshHeading) ON (h.name)"
         ).consume()
 
         # Authors.
@@ -107,19 +109,11 @@ class PubMedCacheConn:
             "CREATE CONSTRAINT unique_author_names IF NOT EXISTS "
             "FOR (a:Author) REQUIRE a.name IS UNIQUE"
         ).consume()
-        session.run(
-            "CREATE CONSTRAINT unique_author_ids IF NOT EXISTS "
-            "FOR (a:Author) REQUIRE a.id IS UNIQUE"
-        ).consume()
 
         # Journals.
         session.run(
             "CREATE CONSTRAINT unique_journal_ids IF NOT EXISTS "
             "FOR (j:Journal) REQUIRE j.id IS UNIQUE"
-        ).consume()
-        session.run(
-            "CREATE INDEX journal_title IF NOT EXISTS "
-            "FOR (j:Journal) ON (j.title)"
         ).consume()
 
         # Articles.
@@ -127,6 +121,69 @@ class PubMedCacheConn:
             "CREATE CONSTRAINT unique_article_pmids IF NOT EXISTS "
             "FOR (a:Article) REQUIRE a.pmid IS UNIQUE"
         ).consume()
+
+        # Affiliations.
+        session.run(
+            "CREATE CONSTRAINT unique_affiliation_names IF NOT EXISTS "
+            "FOR (a:Affiliation) REQUIRE a.name IS UNIQUE"
+        ).consume()
+
+        # DBMetadata.
+        session.run(
+            "CREATE CONSTRAINT unique_dbmetadata_versions IF NOT EXISTS "
+            "FOR (m:DBMetadata) REQUIRE m.version IS UNIQUE"
+        ).consume()
+
+        # User.
+        session.run(
+            "CREATE CONSTRAINT unique_user_usernames IF NOT EXISTS "
+            "FOR (u:User) REQUIRE u.username IS UNIQUE"
+        ).consume()
+
+        self._wait_for_indexes(session)
+
+    def drop_indexes(self, session: neo4j.Session) -> int:
+        """
+        The indexes are unnecessary during the build of the database,
+        and would just slow things down.
+        """
+        existing_indexes: set[str] = set()
+        results = session.run("CALL db.indexes()")
+        for record in results:
+            existing_indexes.add(record["name"])
+
+        delete_indexes = [
+            "mesh_name", "journal_title", "article_date", "article_title",
+            "dbmetadata_datafile_file", "dbmetadata_meshfile_file"
+        ]
+
+        dropped = 0
+        for index_name in delete_indexes:
+            if index_name in existing_indexes:
+                session.run(f"DROP INDEX {index_name}").consume()
+                dropped += 1
+
+        self._wait_for_indexes(session)
+        return dropped
+
+    def create_indexes(self, session: neo4j.Session):
+        """
+        This method creates all the constraints and indexes required for the database.
+        Uniqueness constraints implicitly create an index for the constraint as well.
+        """
+        # MeSH Headings.
+        session.run(
+            "CREATE INDEX mesh_name IF NOT EXISTS "
+            "FOR (h:MeshHeading) ON (h.name)"
+        ).consume()
+
+        # Journals.
+        session.run(
+            "CREATE INDEX journal_title IF NOT EXISTS "
+            "FOR (j:Journal) ON (j.title)"
+        ).consume()
+
+        # Articles.
         session.run(
             "CREATE INDEX article_date IF NOT EXISTS "
             "FOR (a:Article) ON (a.date)"
@@ -136,38 +193,19 @@ class PubMedCacheConn:
             "FOR (a:Article) ON (a.title)"
         ).consume()
 
-        # AUTHOR_OF
-        session.run(
-            "CREATE INDEX author_of_affiliation IF NOT EXISTS "
-            "FOR ()-[r:AUTHOR_OF]-() ON (r.affiliation)"
-        ).consume()
-
-        # DBMetadata
-        session.run(
-            "CREATE CONSTRAINT unique_dbmetadata_versions IF NOT EXISTS "
-            "FOR (m:DBMetadata) REQUIRE m.version IS UNIQUE"
-        ).consume()
-
-        # DBMetadataDataFile
+        # DBMetadataDataFile.
         session.run(
             "CREATE INDEX dbmetadata_datafile_file IF NOT EXISTS "
             "FOR (m:DBMetadataDataFile) ON (m.file)"
         ).consume()
 
-        # DBMetadataMeshFile
+        # DBMetadataMeshFile.
         session.run(
             "CREATE INDEX dbmetadata_meshfile_file IF NOT EXISTS "
             "FOR (m:DBMetadataMeshFile) ON (m.file)"
         ).consume()
 
-        # User
-        session.run(
-            "CREATE CONSTRAINT unique_user_usernames IF NOT EXISTS "
-            "FOR (u:User) REQUIRE u.username IS UNIQUE"
-        ).consume()
-
-        # We don't want to start inserting data until the indices are created.
-        session.run("CALL db.awaitIndexes").consume()
+        self._wait_for_indexes(session)
 
     def _fetch_metadata(self, session: neo4j.Session):
         """
@@ -189,158 +227,14 @@ class PubMedCacheConn:
         # If there are no nodes, then None will be returned.
         return 0 if result is None else result
 
-    def insert_article_batch(self, articles: list[DBArticle], *, max_batch_size=10000):
-        """
-        Inserts a batch of articles into the database, including their authors.
-        """
-        if len(articles) == 0:
-            return
-
-        # We batch the articles as otherwise we can hit maximum memory issues with Neo4J...
-        required_batches = (len(articles) + max_batch_size - 1) // max_batch_size
-        articles_per_batch = (len(articles) + required_batches - 1) // required_batches
-        total_articles_inserted = 0
-        for batch_no in range(required_batches):
-            start_index = batch_no * articles_per_batch
-            end_index = len(articles) if batch_no == required_batches - 1 else (batch_no + 1) * articles_per_batch
-            batch = articles[start_index:end_index]
-            total_articles_inserted += len(batch)
-            with self.new_session() as session:
-                session.write_transaction(self._insert_article_batch, batch)
-
-        # Just to be sure...
-        assert total_articles_inserted == len(articles)
-
-    def _insert_article_batch(self, tx: neo4j.Transaction, articles: list[DBArticle]):
-        """
-        Inserts a batch of articles into the database, including their authors.
-        """
-        articles_data = []
-        for article in articles:
-            author_relations = []
-            for author_relation in article.author_relations:
-                author = author_relation.author
-                author_relations.append({
-                    "author": {
-                        "id": self.author_id_counter.next(),
-                        "name": author.full_name,
-                        "is_collective": author.is_collective
-                    },
-                    "affiliation": author_relation.affiliation,
-                    "author_position": author_relation.author_position,
-                    "is_first_author": author_relation.is_first_author,
-                    "is_last_author": author_relation.is_last_author
-                })
-
-            journal = article.journal
-            articles_data.append({
-                "pmid": article.pmid,
-                "date": article.date,
-                "title": article.title,
-                "journal": {
-                    "id": journal.identifier,
-                    "title": journal.title,
-                    "volume": journal.non_null_volume,
-                    "issue": journal.non_null_issue
-                },
-                "author_relations": author_relations,
-                "refs": article.reference_pmids,
-                "mesh_desc_ids": article.mesh_descriptor_ids
-            })
-
-        tx.run(
-            """
-            CYPHER planner=dp
-            
-            // Loop through all the articles we want to insert.
-            UNWIND $articles AS article
-            WITH article, article.journal as journal, article.author_relations as author_relations
-
-                // Make sure the journal exists.
-                CALL {
-                    WITH journal
-                    MERGE (journal_node:Journal {id: journal.id})
-                    ON CREATE
-                        SET journal_node.title = journal.title
-                    RETURN journal_node
-                }
-
-                // Insert the article.
-                CALL {
-                    WITH article
-                    MERGE (article_node:Article {pmid: article.pmid})
-                    ON CREATE
-                        SET
-                            article_node.title = article.title,
-                            article_node.date = article.date
-                    ON MATCH
-                        SET
-                            article_node.title = article.title,
-                            article_node.date = article.date
-                    RETURN article_node
-                }
-                
-                // If there was already an old version of the article,
-                // then delete any relationships that it had.
-                CALL {
-                    WITH article_node
-                    MATCH (article_node) -[r]-> ()
-                    DELETE r
-                }
-                CALL {
-                    WITH article_node
-                    MATCH () -[r]-> (article_node)
-                    DELETE r
-                }
-
-                // Add the journal of the article.
-                CALL {
-                    WITH article_node, journal_node, journal
-                    CREATE (article_node)-[:PUBLISHED_IN {
-                        volume: journal.volume,
-                        issue: journal.issue
-                    }]->(journal_node)
-                }
-
-                // Add the references from this article to other articles.
-                CALL {
-                    WITH article_node, article
-                    UNWIND article.refs as ref_pmid
-                    MATCH (ref_node:Article)
-                    WHERE ref_node.pmid = ref_pmid
-                    CREATE (article_node)-[:CITES]->(ref_node)
-                }
-
-                // Add the mesh headings of the article.
-                CALL {
-                    WITH article_node, article
-                    UNWIND article.mesh_desc_ids as mesh_id
-                    MATCH (mesh_node:MeshHeading)
-                    WHERE mesh_node.id = mesh_id
-                    CREATE (article_node)-[:CATEGORISED_BY]->(mesh_node)
-                }
-
-            // Add all of the authors of the article.
-            UNWIND author_relations AS author_relation
-            WITH article_node, author_relation, author_relation.author AS author
-                CALL {
-                    WITH author
-                    MERGE (author_node:Author {name: author.name})
-                    ON CREATE
-                        SET
-                            author_node.id = author.id,
-                            author_node.is_collective = author.is_collective
-                    RETURN author_node
-                }
-                CREATE (author_node)-[:AUTHOR_OF {
-                    author_position: author_relation.author_position,
-                    is_first_author: author_relation.is_first_author,
-                    is_last_author: author_relation.is_last_author,
-                    affiliation: author_relation.affiliation
-                }]->(article_node)
-            """,
-            articles=articles_data
-        ).consume()
+    @staticmethod
+    def read_article_node(node: neo4j.graph.Node) -> DBArticle:
+        """ Reads an article node into an Article model object. """
+        return DBArticle(
+            node["pmid"],
+            node["date"].to_native(),
+            node["title"]
+        )
 
     @staticmethod
     def read_author_node(node: neo4j.graph.Node) -> DBAuthor:
@@ -352,26 +246,19 @@ class PubMedCacheConn:
         )
 
     @staticmethod
-    def read_article_node(node: neo4j.graph.Node) -> DBArticle:
-        """ Reads an article node into an Article model object. """
-        return DBArticle(
-            node["pmid"],
-            node["date"].to_native(),
-            node["title"]
+    def read_article_author_node(node: neo4j.graph.Node) -> DBArticleAuthor:
+        """ Reads an ArticleAuthor node into a DBArticleAuthor model object. """
+        return DBArticleAuthor(
+            node["author_position"],
+            node["is_first_author"],
+            node["is_last_author"]
         )
 
     @staticmethod
-    def read_article_author_relation(
-            article: DBArticle, author: DBAuthor, rel: neo4j.graph.Relationship
-    ) -> DBArticleAuthorRelation:
-        """ Reads an article-author relationship into an ArticleAuthorRelation model object. """
-        return DBArticleAuthorRelation(
-            article,
-            author,
-            rel["affiliation"],
-            rel["author_position"],
-            rel["is_first_author"],
-            rel["is_last_author"]
+    def read_affiliation_node(node: neo4j.graph.Node) -> DBAffiliation:
+        """ Reads an Affiliation node into a DBAffiliation model object. """
+        return DBAffiliation(
+            node["name"]
         )
 
     def insert_mesh_heading_batch(self, headings: list[DBMeSHHeading], *, max_batch_size=500):

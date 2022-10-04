@@ -32,7 +32,10 @@ const Graph = () => {
     options: {
       autoResize: true,
       nodes: {
-        shape: 'dot',
+          shape: 'dot',
+          font: {
+              color: "#000000"
+          }
       },
       edges: {
           arrows: {to: {enabled: false}},
@@ -139,7 +142,14 @@ const Graph = () => {
 
               // If the user changed the viewport, stop trying to fit it.
               if (lastFitParameters["initialised"]) {
-                  const position = VISJSNetwork.getViewPosition();
+                  let position;
+                  try {
+                      position = VISJSNetwork.getViewPosition();
+                  } catch (e) {
+                      // The VISJSNetwork may have been destroyed when a new one was loaded
+                      return;
+                  }
+
                   if (VISJSNetwork.getScale() !== lastFitParameters["scale"] ||
                       position.x !== lastFitParameters["x"] || position.y !== lastFitParameters["y"]) {
 
@@ -221,6 +231,8 @@ const Graph = () => {
               <span className="not-loaded" >{resultsLoaded ? "" : " (Graph not refreshed)"}</span>
           </div>
       }
+
+      
     </div>;
 };
 

@@ -279,6 +279,8 @@ span.MuiTypography-root {
   padding-left: 20px;
   padding-right: 20px;
   padding-bottom: 20px;
+  align-items: center;
+  justify-content: center;
 }
 
 #user-details > p {

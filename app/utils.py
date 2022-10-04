@@ -20,6 +20,28 @@ def truncate_long_names(name: str, max_name_length: int = 512, *, suffix: str = 
     if len(suffix) >= max_name_length:
         raise ValueError("The suffix is longer than the maximum name length!")
 
+    # First, remove all content between brackets.
+    for brackets in ["()", "[]", "{}"]:
+        left_bracket, right_bracket = brackets
+        result = ""
+        depth = 0
+        for ch in name:
+            if ch == left_bracket:
+                depth += 1
+                if depth == 1:
+                    result += f"{left_bracket}...{right_bracket}"
+            elif ch == right_bracket:
+                depth = max(0, depth - 1)
+            elif depth == 0:
+                result += ch
+
+        # If the whole name is in brackets, we don't want to remove everything.
+        if len(result) >= max_name_length // 3:
+            name = result
+            if len(name) <= max_name_length:
+                return name
+
+    # Remove text from end of the name.
     truncated = name[:(max_name_length - len(suffix))]
 
     def find_break(find: str):
@@ -55,6 +77,23 @@ def calc_md5_hash_of_file(file_and_dir: str, *, block_size=2**20) -> str:
 
 
 T = TypeVar('T')
+
+
+def split_into_batches(items: list[T], max_batch_size: int = 10_000) -> list[list[T]]:
+    """
+    Splits one long list into several shorter lists with a maximum
+    size of max_batch_size entries.
+    """
+    batches: list[list[T]] = []
+
+    required_batches = (len(items) + max_batch_size - 1) // max_batch_size
+    items_per_batch = (len(items) + required_batches - 1) // required_batches
+    for batch_no in range(required_batches):
+        start_index = batch_no * items_per_batch
+        end_index = (len(items) if batch_no == required_batches - 1 else (batch_no + 1) * items_per_batch)
+        batches.append(items[start_index:end_index])
+
+    return batches
 
 
 def or_else(value: T, default_value: T) -> T:
