@@ -325,12 +325,20 @@ def retrieve_analytics(snapshot_id: int):
     analytics_response = {}
 
     with neo4j_conn.new_session() as session:
+        snapshot = get_snapshot(snapshot_id)
+        if len(snapshot) == 0:
+            raise PubMedSnapshotDoesNotExistError(f"There is no snapshot with the id: {snapshot_id}")
+    
+        snapshot = snapshot[0]
+
         status = session.read_transaction(
             _retrieve_analytics_status, 
             retrieve_analytics_status_query, 
             snapshot_id
-        ).data()['status']
-
+        )
+        
+        if status is not None:
+            status = status.data()['status']
 
         # Retrieve the degree centrality record.
         degree_centrality_record = session.read_transaction(
