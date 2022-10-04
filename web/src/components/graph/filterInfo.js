@@ -39,13 +39,6 @@ const availableFilters = [
         help: "The title of the article that was published."
     },
     {
-        key: "journal",
-        name: "Journal Name",
-        form_name: "Journal",
-        category: filterCategories.Journal,
-        help: "The name of the journal that the article was published in."
-    },
-    {
         key: "published_before",
         name: "Published Before",
         form_name: "Before",
@@ -58,6 +51,18 @@ const availableFilters = [
         form_name: "After",
         category: filterCategories.Article,
         help: "The date after which the articles were published."
+    },
+    {
+        key: "list_subheader",
+        name: "Journal:",
+        category: filterCategories.Article
+    },
+    {
+        key: "journal",
+        name: "Journal Name",
+        form_name: "Journal",
+        category: filterCategories.Journal,
+        help: "The name of the journal that the article was published in."
     },
     {
         key: "list_subheader",
@@ -124,7 +129,7 @@ const availableFilters = [
         name: "Graph Node Colour",
         form_name: "Node Colour Source",
         category: filterCategories.Graph,
-        help: "The metric that determines the colour of each node when displayed."
+        help: "The metric that determines the colour of each node when displayed. The brighter the colour, the higher the value."
     },
     {
         key: "graph_edge_size",
