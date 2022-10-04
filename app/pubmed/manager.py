@@ -298,9 +298,22 @@ class PubMedManager:
         pipeline = BuildPipeline()
         pipeline.start()
 
-        analytics_state = {
+        extraction_state = {
+            "last_report_time": time.time(),
             "last_pull_time": time.time()
         }
+
+        def report_progress():
+            """ Prints the extraction progress to the console. """
+            extraction_state["last_report_time"] = time.time()
+            analytics.report(
+                prefix="PubMedExtract: ",
+                verb="Processed",
+                suffix=f" ({pipeline.get_utilisation_str()})"
+            )
+
+            # Mark the progress in the database.
+            neo4j_conn.push_new_db_metadata(meta)
 
         def update_analytics_from_processed(block: bool):
             """ Update the metadata for the files that have finished being processed. """
@@ -317,18 +330,19 @@ class PubMedManager:
                 file_meta.processed = True
 
                 # This isn't perfect, but it should be accurate enough.
-                duration = time.time() - analytics_state["last_pull_time"]
-                analytics_state["last_pull_time"] = time.time()
+                duration = time.time() - extraction_state["last_pull_time"]
+                extraction_state["last_pull_time"] = time.time()
 
                 analytics.update(duration, pubmed_file_sizes[file_index])
                 analytics.update_remaining(pubmed_file_sizes[file_index + 1:])
 
-        last_report_time = time.time()
         while True:
             file = file_queue.get()
             file_index = file.index + start_file_index
             if file.articles is None:
+                pipeline.finish()
                 update_analytics_from_processed(True)
+                report_progress()
                 break
 
             # Push a new batch of articles to be processed into the pipeline.
@@ -343,19 +357,8 @@ class PubMedManager:
 
             update_analytics_from_processed(False)
 
-            if time.time() - last_report_time >= report_every:
-                last_report_time = time.time()
-                analytics.report(
-                    prefix="PubMedExtract: ",
-                    verb="Processed",
-                    suffix=f" ({pipeline.get_utilisation_str()})"
-                )
-
-                # Mark the progress in the database.
-                neo4j_conn.push_new_db_metadata(meta)
-
-        # Stop the pipeline.
-        pipeline.finish()
+            if time.time() - extraction_state["last_report_time"] >= report_every:
+                report_progress()
 
         # Mark that the extraction has completed.
         meta.status = DatabaseStatus.NORMAL

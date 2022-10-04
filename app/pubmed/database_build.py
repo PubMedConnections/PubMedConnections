@@ -22,16 +22,13 @@ class BuildCache:
         self._mesh_ids: Optional[dict[int, int]] = None
 
         self.max_journals_size = 1_000_000
-        self._journal_ids: dict[str, int] = {}
-        self._journal_id_last_access_times: dict[str, float] = {}
+        self._journal_ids: list[dict[str, int]] = []
 
         self.max_authors_size = 5_000_000
-        self._author_ids: dict[str, int] = {}
-        self._author_id_last_access_times: dict[str, float] = {}
+        self._author_ids: list[dict[str, int]] = []
 
         self.max_affiliations_size = 1_000_000
-        self._affiliation_ids: dict[str, int] = {}
-        self._affiliation_id_last_access_times: dict[str, float] = {}
+        self._affiliation_ids: list[dict[str, int]] = []
 
     def fetch_mesh_ids(self):
         """
@@ -64,64 +61,63 @@ class BuildCache:
 
         return self._mesh_ids
 
-    def _add(
-            self,
-            ids: dict[Any, int],
-            dest_ids: dict[Any, int],
-            dest_last_access_times: dict[Any, float],
-            max_size: int):
+    def _count_items(self, ids: list[dict[Any, int]]) -> int:
+        count = 0
+        for id_dict in ids:
+            count += len(id_dict)
+
+        return count
+
+    def _add(self, ids: dict[Any, int], dest_ids: list[dict[Any, int]], max_size: int):
         """
         Adds a new set of IDs to the cache, and removes old entries if the cache is full.
         """
-        current_access_time = time.time()
-        for key, value in ids.items():
-            dest_ids[key] = value
-            dest_last_access_times[key] = current_access_time
+        dest_ids.append(ids)
+        while len(dest_ids) > 1 and self._count_items(dest_ids) > max_size:
+            del dest_ids[0]
 
-        while len(dest_ids) > max_size:
-            oldest_keys: list[Any] = []
-            oldest_access_time: Optional[float] = None
-            for key, access_time in dest_last_access_times.items():
-                if oldest_access_time is None or access_time < oldest_access_time:
-                    oldest_keys.clear()
-                    oldest_keys.append(key)
-                    oldest_access_time = access_time
-                elif access_time == oldest_access_time:
-                    oldest_keys.append(key)
-
-            if len(oldest_keys) == 0:
-                raise Exception("Unexpected error occurred")
-
-            oldest_keys = oldest_keys[:len(dest_ids) - max_size]
-            for key in oldest_keys:
-                del dest_ids[key]
-                del dest_last_access_times[key]
-
-    def _get(self, key: Any, dest_ids: dict[Any, int], dest_last_access_times: dict[Any, float]) -> Optional[int]:
-        if key not in dest_ids:
+    def _get(self, key: Any, dest_ids: list[dict[Any, int]]) -> Optional[int]:
+        if len(dest_ids) == 0:
             return None
 
-        dest_last_access_times[key] = time.time()
-        return dest_ids[key]
+        # If it's in the latest set of IDs, then we don't need to move the value if we find it.
+        latest_id_dict = dest_ids[-1]
+        value = latest_id_dict.get(key)
+        if value is not None:
+            return value
+
+        # Look for the value in the rest of the ID dictionaries.
+        for index in reversed(range(0, len(dest_ids) - 1)):
+            id_dict = dest_ids[index]
+            value = id_dict.get(key)
+            if value is None:
+                continue
+
+            # Move the value to the latest ID set.
+            del id_dict[key]
+            latest_id_dict[key] = value
+            return value
+
+        return None
 
     def add_journal_ids(self, journal_ids: dict[str, int]):
-        self._add(journal_ids, self._journal_ids, self._journal_id_last_access_times, self.max_journals_size)
+        self._add(journal_ids, self._journal_ids, self.max_journals_size)
 
     def add_author_ids(self, author_ids: dict[str, int]):
-        self._add(author_ids, self._author_ids, self._author_id_last_access_times, self.max_authors_size)
+        self._add(author_ids, self._author_ids, self.max_authors_size)
 
     def add_affiliation_ids(self, affiliation_ids: dict[str, int]):
         self._add(
-            affiliation_ids, self._affiliation_ids, self._affiliation_id_last_access_times, self.max_affiliations_size)
+            affiliation_ids, self._affiliation_ids, self.max_affiliations_size)
 
     def get_journal_id(self, key: str) -> Optional[int]:
-        return self._get(key, self._journal_ids, self._journal_id_last_access_times)
+        return self._get(key, self._journal_ids)
 
     def get_author_id(self, key: str) -> Optional[int]:
-        return self._get(key, self._author_ids, self._author_id_last_access_times)
+        return self._get(key, self._author_ids)
 
     def get_affiliation_id(self, key: str) -> Optional[int]:
-        return self._get(key, self._affiliation_ids, self._affiliation_id_last_access_times)
+        return self._get(key, self._affiliation_ids)
 
 
 class BuildPacket:
