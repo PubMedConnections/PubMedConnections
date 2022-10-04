@@ -20,9 +20,10 @@ class AnalyticsThreading(object):
 
 
 # TODO
-# force timeing out of analytics
+# timeout long queries?
 # testing
 # GDS working with docker
+# "in progress" when error has occurred
 
 update_degree_centrality_query = \
     """
@@ -216,9 +217,8 @@ def project_graph_and_run_analytics(
 
 def compute_analytics(snapshot_id: int):
     """
-    Gets analytics for the snapshot. If the analytics have been previously computed,
-    retrieve the stored results from the DB, otherwise project the snapshot graph and 
-    compute them.
+    Computes the analytics for the snapshot. Builds the node and relationship queries which are then 
+    passed to a helper function for computation and storing of results in the db.
     """
 
     # Fetch the snapshot settings from the database.
@@ -265,7 +265,8 @@ def compute_analytics(snapshot_id: int):
 
 def retrieve_analytics(snapshot_id: int):
     """
-    Returns a JSON object containing the analytics results for a given snapshot.
+    Returns the status of the analytics computation, including the results (should they have been completed)
+    of a given snapshot.
     """
 
     analytics_response = {}
