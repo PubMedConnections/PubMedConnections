@@ -42,7 +42,6 @@ const SnapshotAnalytics = ({ data }) => {
     datasets: [],
   });
 
-  const [unsuccessful, setUnsuccessful] = useState(false);
   const [unsuccessfulMsg, setUnsuccessfulMsg] = useState("");
 
   // Anytime data prop is updated, re-render analytics
@@ -50,7 +49,6 @@ const SnapshotAnalytics = ({ data }) => {
     console.log(data);
 
     if (data.status === "Completed" && data.betweenness && data.degree) {
-      setUnsuccessful(false);
       setUnsuccessfulMsg("");
 
       const betweennessTop5Names = [];
@@ -140,7 +138,6 @@ const SnapshotAnalytics = ({ data }) => {
         });
       }
     } else {
-      setUnsuccessful(true);
       if (data.status === "In Progress") {
        setUnsuccessfulMsg("Analytics in Progress...\n" +
                             "Please try again later")
@@ -196,7 +193,7 @@ const SnapshotAnalytics = ({ data }) => {
     maintainAspectRatio: false,
   };
 
-  return unsuccessful ? (
+  return unsuccessfulMsg !== "" ? (
     <div id='visjs-graph-message'>
         <p>
           { unsuccessfulMsg }
