@@ -87,11 +87,12 @@ def split_into_batches(items: list[T], max_batch_size: int = 10_000) -> list[lis
     batches: list[list[T]] = []
 
     required_batches = (len(items) + max_batch_size - 1) // max_batch_size
-    items_per_batch = (len(items) + required_batches - 1) // required_batches
-    for batch_no in range(required_batches):
-        start_index = batch_no * items_per_batch
-        end_index = (len(items) if batch_no == required_batches - 1 else (batch_no + 1) * items_per_batch)
-        batches.append(items[start_index:end_index])
+    if required_batches > 0:
+        items_per_batch = (len(items) + required_batches - 1) // required_batches
+        for batch_no in range(required_batches):
+            start_index = batch_no * items_per_batch
+            end_index = (len(items) if batch_no == required_batches - 1 else (batch_no + 1) * items_per_batch)
+            batches.append(items[start_index:end_index])
 
     return batches
 
