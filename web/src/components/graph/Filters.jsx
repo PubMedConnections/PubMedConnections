@@ -11,7 +11,8 @@ import {
     FormControl,
     InputLabel,
     FormControlLabel,
-    Popover
+    Popover,
+    ListSubheader
 } from '@mui/material'
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
@@ -320,10 +321,17 @@ const Filters = () => {
                 }}>
 
             {availableFilters.map(filterSpec => {
-                return <MenuItem key={filterSpec.key} value={filterSpec.key}>
-                    <Checkbox checked={activeFilters.indexOf(filterSpec.key) > -1} />
-                    <ListItemText primary={filterSpec.name} />
-                </MenuItem>;
+                if (filterSpec.key === "list_subheader") {
+                    return <ListSubheader>
+                        <ListItemText primary={filterSpec.name} style={{fontSize: "1.5em"}}/>
+                    </ListSubheader>
+                }
+                else {
+                    return <MenuItem key={filterSpec.key} value={filterSpec.key}>
+                        <Checkbox checked={activeFilters.indexOf(filterSpec.key) > -1} />
+                        <ListItemText primary={filterSpec.name} />
+                    </MenuItem>;
+                }
             })}
         </Select>
     </FormControl>;

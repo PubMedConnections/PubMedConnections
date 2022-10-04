@@ -20,11 +20,49 @@ const filterCategories = {
 
 const availableFilters = [
     {
+        key: "list_subheader",
+        name: "Article:",
+        category: filterCategories.Article
+    },
+    {
         key: "mesh_heading",
         name: "MeSH Heading",
         form_name: "MeSH",
         category: filterCategories.Article,
         help: "The name (or part of the name) of the Medical Subject Heading"
+    },
+    {
+        key: "article",
+        name: "Article Title",
+        form_name: "Article",
+        category: filterCategories.Article,
+        help: "The title of the article that was published."
+    },
+    {
+        key: "journal",
+        name: "Journal Name",
+        form_name: "Journal",
+        category: filterCategories.Journal,
+        help: "The name of the journal that the article was published in."
+    },
+    {
+        key: "published_before",
+        name: "Published Before",
+        form_name: "Before",
+        category: filterCategories.Article,
+        help: "The date before which the articles were published."
+    },
+    {
+        key: "published_after",
+        name: "Published After",
+        form_name: "After",
+        category: filterCategories.Article,
+        help: "The date after which the articles were published."
+    },
+    {
+        key: "list_subheader",
+        name: "Author:",
+        category: filterCategories.Article
     },
     {
         key: "author",
@@ -55,32 +93,9 @@ const availableFilters = [
         help: "Whether the author search term should search for articles where they are the last listed author."
     },
     {
-        key: "published_before",
-        name: "Published Before",
-        form_name: "Before",
-        category: filterCategories.Article,
-        help: "The date before which the articles were published."
-    },
-    {
-        key: "published_after",
-        name: "Published After",
-        form_name: "After",
-        category: filterCategories.Article,
-        help: "The date after which the articles were published."
-    },
-    {
-        key: "journal",
-        name: "Journal Name",
-        form_name: "Journal",
-        category: filterCategories.Journal,
-        help: "The name of the journal that the article was published in."
-    },
-    {
-        key: "article",
-        name: "Article Title",
-        form_name: "Article",
-        category: filterCategories.Article,
-        help: "The title of the article that was published."
+        key: "list_subheader",
+        name: "Graph:",
+        category: filterCategories.Article
     },
     {
         key: "graph_size",
