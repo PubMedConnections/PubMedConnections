@@ -23,7 +23,6 @@ class AnalyticsThreading(object):
 # timeout long queries?
 # testing
 # GDS working with docker
-# "in progress" when error has occurred
 
 update_degree_centrality_query = \
     """
@@ -71,6 +70,28 @@ retrieve_betweenness_centrality_query = \
     RETURN s.betweenness_centrality AS betweenness_centrality
     """
 
+set_analytics_status_query = \
+    """
+    MATCH (m:DBMetadata)
+    WITH max(m.version) AS max_version
+    MATCH (d:DBMetadata)
+    WHERE d.version = max_version
+
+    MATCH (s:Snapshot { id: $snapshot_id })
+    SET s.analytics_status = $status
+    RETURN s
+    """
+
+retrieve_analytics_status_query = \
+    """
+    MATCH (m:DBMetadata)
+    WITH max(m.version) AS max_version
+    MATCH (d:DBMetadata)
+    WHERE d.version = max_version
+
+    MATCH (s: Snapshot { id: $snapshot_id })
+    RETURN s.analytics_status AS status
+    """
 
 def _update_snapshot_centrality(tx, update_snapshot_centrality_query: str, snapshot_id: int, centrality_record):
     """
@@ -98,6 +119,24 @@ def _retrieve_centrality(tx, retrieve_centrality_query: str, snapshot_id: int):
 
     return result.single()
 
+def _set_analytics_status(tx, status_update_query: str, snapshot_id: int, status: str):
+    result = tx.run(
+        status_update_query,
+        snapshot_id=snapshot_id,
+        status=status
+    )
+
+    if result is None:
+        raise PubMedUpdateSnapshotError("Unable to update snapshot analytics status.")
+
+def _retrieve_analytics_status(tx, retrieve_status_query: str, snapshot_id: int):
+    result = tx.run(
+        retrieve_status_query,
+        snapshot_id=snapshot_id
+    )
+
+    return result.single()
+
 def project_graph_and_run_analytics(
         graph_name: str,
         node_query: str,
@@ -112,6 +151,11 @@ def project_graph_and_run_analytics(
     with neo4j_conn.new_session() as session:
         # try project graph into memory
         try:
+            session.write_transaction(_set_analytics_status, 
+                                    set_analytics_status_query, 
+                                    snapshot_id,
+                                    status="In Progress")
+
             # make sure graph has not already been projected
             if gds.graph.exists(graph_name)["exists"]:
                 G = gds.graph.get(graph_name)
@@ -205,8 +249,17 @@ def project_graph_and_run_analytics(
                 betweenness_centrality_record
             )
 
+            session.write_transaction(_set_analytics_status, 
+                                set_analytics_status_query,
+                                snapshot_id,
+                                status="Completed")
+
         except ClientError as err:
             print(err)
+            session.write_transaction(_set_analytics_status, 
+                                set_analytics_status_query, 
+                                snapshot_id,
+                                status="Error")
             raise PubMedAnalyticsError(err.code, err.message)
         
         finally:
@@ -272,6 +325,12 @@ def retrieve_analytics(snapshot_id: int):
     analytics_response = {}
 
     with neo4j_conn.new_session() as session:
+        status = session.read_transaction(
+            _retrieve_analytics_status, 
+            retrieve_analytics_status_query, 
+            snapshot_id
+        ).data()['status']
+
 
         # Retrieve the degree centrality record.
         degree_centrality_record = session.read_transaction(
@@ -303,10 +362,13 @@ def retrieve_analytics(snapshot_id: int):
                 betweenness_centrality = json.loads(betweenness_centrality_json)
                 analytics_response['betweenness'] = betweenness_centrality
 
-    # TODO in cases where problems arose with creating the graph, it will return "In Progress" when it shouldn't
-    if 'degree' not in analytics_response or 'betweenness' not in analytics_response:
+    if status == "In Progress" or status is None:
         analytics_response = {
             'status': 'In Progress' 
+        }
+    elif status == "Error" or status == "Completed" and len(analytics_response) != 2:
+        analytics_response = {
+            'status': 'Error' 
         }
     else:
         analytics_response['status'] = 'Completed'
