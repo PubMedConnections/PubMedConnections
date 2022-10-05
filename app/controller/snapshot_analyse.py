@@ -1,3 +1,4 @@
+import traceback
 from typing import Any
 
 from neo4j.exceptions import ClientError
@@ -12,18 +13,19 @@ from app.helpers import remove_snapshot_metadata
 from app import neo4j_conn
 from app.PubMedErrors import PubMedSnapshotDoesNotExistError, PubMedUpdateSnapshotError, PubMedAnalyticsError
 
-
 class AnalyticsThreading(object):
-    def __init__(self, graph_type: str, snapshot_id: int, filters):
-        thread = threading.Thread(target=get_analytics, args=(graph_type, snapshot_id, filters))
+    def __init__(self, snapshot_id: int):
+        thread = threading.Thread(target=compute_analytics, args=(snapshot_id,))
         thread.daemon = True
         thread.start()
 
 
 # TODO
-# force timeing out of analytics
+# timeout long queries?
 # testing
 # GDS working with docker
+# problem: analytics in front-end showing as in progress when they have actually finished
+#   (only when after immediately creating the snapshot)
 
 update_degree_centrality_query = \
     """
@@ -71,6 +73,28 @@ retrieve_betweenness_centrality_query = \
     RETURN s.betweenness_centrality AS betweenness_centrality
     """
 
+set_analytics_status_query = \
+    """
+    MATCH (m:DBMetadata)
+    WITH max(m.version) AS max_version
+    MATCH (d:DBMetadata)
+    WHERE d.version = max_version
+
+    MATCH (s:Snapshot { id: $snapshot_id })
+    SET s.analytics_status = $status
+    RETURN s
+    """
+
+retrieve_analytics_status_query = \
+    """
+    MATCH (m:DBMetadata)
+    WITH max(m.version) AS max_version
+    MATCH (d:DBMetadata)
+    WHERE d.version = max_version
+
+    MATCH (s: Snapshot { id: $snapshot_id })
+    RETURN s.analytics_status AS status
+    """
 
 def _update_snapshot_centrality(tx, update_snapshot_centrality_query: str, snapshot_id: int, centrality_record):
     """
@@ -98,6 +122,23 @@ def _retrieve_centrality(tx, retrieve_centrality_query: str, snapshot_id: int):
 
     return result.single()
 
+def _set_analytics_status(tx, status_update_query: str, snapshot_id: int, status: str):
+    result = tx.run(
+        status_update_query,
+        snapshot_id=snapshot_id,
+        status=status
+    )
+
+    if result is None:
+        raise PubMedUpdateSnapshotError("Unable to update snapshot analytics status.")
+
+def _retrieve_analytics_status(tx, retrieve_status_query: str, snapshot_id: int):
+    result = tx.run(
+        retrieve_status_query,
+        snapshot_id=snapshot_id
+    )
+
+    return result.single()
 
 def project_graph_and_run_analytics(
         graph_name: str,
@@ -113,6 +154,11 @@ def project_graph_and_run_analytics(
     with neo4j_conn.new_session() as session:
         # try project graph into memory
         try:
+            session.write_transaction(_set_analytics_status, 
+                                    set_analytics_status_query, 
+                                    snapshot_id,
+                                    status="In Progress")
+
             # make sure graph has not already been projected
             if gds.graph.exists(graph_name)["exists"]:
                 G = gds.graph.get(graph_name)
@@ -152,7 +198,6 @@ def project_graph_and_run_analytics(
                 )
 
             # construct degree centrality record and save to db
-
             degree_centrality_record = json.dumps(
                 {
                     "top_5": top_5_degree,
@@ -207,20 +252,17 @@ def project_graph_and_run_analytics(
                 betweenness_centrality_record
             )
 
-            analytics_response = {
-                "degree": {
-                    "top_5": top_5_degree,
-                    "distributions": degree_distributions
-                },
-                "betweenness": {
-                    "top_5": top_5_betweenness,
-                    "distributions": betweenness_distributions
-                }
-            }
+            session.write_transaction(_set_analytics_status, 
+                                set_analytics_status_query,
+                                snapshot_id,
+                                status="Completed")
 
         except ClientError as err:
-            print(err)
-            raise PubMedAnalyticsError(err.code, err.message)
+            traceback.print_exc()
+            session.write_transaction(_set_analytics_status, 
+                                set_analytics_status_query, 
+                                snapshot_id,
+                                status="Error")
         
         finally:
             # drop projected graph
@@ -228,28 +270,19 @@ def project_graph_and_run_analytics(
                 G = gds.graph.get(graph_name)
                 G.drop()
 
-    return analytics_response
-
-
-def get_analytics(snapshot_id: int):
+def compute_analytics(snapshot_id: int):
     """
-    Gets analytics for the snapshot. If the analytics have been previously computed,
-    retrieve the stored results from the DB, otherwise project the snapshot graph and 
-    compute them.
+    Computes the analytics for the snapshot. Builds the node and relationship queries which are then 
+    passed to a helper function for computation and storing of results in the db.
     """
+    try:
+        # Fetch the snapshot settings from the database.
+        snapshot = get_snapshot(snapshot_id)
+        if len(snapshot) == 0:
+            raise PubMedSnapshotDoesNotExistError(f"There is no snapshot with the id: {snapshot_id}")
+        
+        snapshot = snapshot[0]
 
-    # Fetch the snapshot settings from the database.
-    snapshot = get_snapshot(snapshot_id)
-    if len(snapshot) == 0:
-        raise PubMedSnapshotDoesNotExistError(f"There is no snapshot with the id: {snapshot_id}")
-    
-    snapshot = snapshot[0]
-
-    # Fetch any existing analytics results for this snapshot.
-    analytics_results = retrieve_analytics(snapshot_id)
-
-    # If we haven't queried the analytics for this snapshot yet, then do it now.
-    if analytics_results == {} or "degree" not in analytics_results or "betweenness" not in analytics_results:
         graph_name = "coauthors" + str(snapshot_id)
         snapshot_filters = remove_snapshot_metadata(snapshot)
 
@@ -269,7 +302,7 @@ def get_analytics(snapshot_id: int):
         """
         relationship_query = """
         MATCH (author) -[:IS_AUTHOR]-> (:ArticleAuthor) -[:AUTHOR_OF]-> (article:Article)
-                       <-[:AUTHOR_OF]- (:ArticleAuthor) <-[IS_AUTHOR]- (coauthor:Author)
+                        <-[:AUTHOR_OF]- (:ArticleAuthor) <-[IS_AUTHOR]- (coauthor:Author)
         WHERE
             id(author) IN $author_ids
             AND id(coauthor) IN $author_ids
@@ -281,21 +314,36 @@ def get_analytics(snapshot_id: int):
             apoc.create.vRelationship(author, 'COAUTHOR', {count: COUNT(DISTINCT article)}, coauthor) as rel
         """
 
-        analytics_results = project_graph_and_run_analytics(
+        project_graph_and_run_analytics(
             graph_name, node_query, relationship_query, query_params, snapshot_id
         )
-
-    return analytics_results
-
+    
+    except Exception as e:
+        traceback.print_exc()
 
 def retrieve_analytics(snapshot_id: int):
     """
-    Returns a JSON object containing the analytics results for a given snapshot.
+    Returns the status of the analytics computation, including the results (should they have been completed)
+    of a given snapshot.
     """
 
     analytics_response = {}
 
     with neo4j_conn.new_session() as session:
+        snapshot = get_snapshot(snapshot_id)
+        if len(snapshot) == 0:
+            raise PubMedSnapshotDoesNotExistError(f"There is no snapshot with the id: {snapshot_id}")
+    
+        snapshot = snapshot[0]
+
+        status = session.read_transaction(
+            _retrieve_analytics_status, 
+            retrieve_analytics_status_query, 
+            snapshot_id
+        )
+        
+        if status is not None:
+            status = status.data()['status']
 
         # Retrieve the degree centrality record.
         degree_centrality_record = session.read_transaction(
@@ -326,5 +374,16 @@ def retrieve_analytics(snapshot_id: int):
             if betweenness_centrality_json is not None and len(betweenness_centrality_json) > 0:
                 betweenness_centrality = json.loads(betweenness_centrality_json)
                 analytics_response['betweenness'] = betweenness_centrality
+
+    if status == "In Progress" or status is None:
+        analytics_response = {
+            'status': 'In Progress' 
+        }
+    elif status == "Error" or status == "Completed" and len(analytics_response) != 2:
+        analytics_response = {
+            'status': 'Error' 
+        }
+    else:
+        analytics_response['status'] = 'Completed'
 
     return analytics_response

@@ -42,14 +42,12 @@ const SnapshotAnalytics = ({ data }) => {
     datasets: [],
   });
 
-  const [error, setError] = useState(false);
+  const [unsuccessfulMsg, setUnsuccessfulMsg] = useState("");
 
   // Anytime data prop is updated, re-render analytics
   useEffect(() => {
-    console.log(data);
-
-    if (data.betweenness && data.degree) {
-      setError(false);
+    if (data.status === "Completed" && data.betweenness && data.degree) {
+      setUnsuccessfulMsg("");
 
       const betweennessTop5Names = [];
       const betweennessTop5Values = [];
@@ -138,7 +136,13 @@ const SnapshotAnalytics = ({ data }) => {
         });
       }
     } else {
-      setError(true);
+      if (data.status === "In Progress") {
+       setUnsuccessfulMsg("Analytics in Progress...\n" +
+                            "Please try again later.")
+      } else {
+        setUnsuccessfulMsg("Unable to fetch analytics\n" +
+                            "Please try creating the snapshot again.")
+      }
     }
   }, [data]);
 
@@ -187,10 +191,11 @@ const SnapshotAnalytics = ({ data }) => {
     maintainAspectRatio: false,
   };
 
-  return error ? (
+  return unsuccessfulMsg !== "" ? (
     <div id='visjs-graph-message'>
-      <p>Unable to fetch analytics</p>
-      <p>Please try refreshing the page</p>
+        <p>
+          { unsuccessfulMsg }
+        </p>
     </div>
   ) : (
     <div>
