@@ -347,12 +347,13 @@ const Filters = () => {
             <div id="add-filters">
                     {activeFiltersSelector}
             </div>
-            <div id="filters-load-button" style={{opacity: resultsLoaded ? 0.6 : 1}}>
+            <div id="filters-load-button">
                 <Button
                     onClick={loadResults}
                     endIcon={<Refresh />}
                     variant="contained"
                     color="success"
+                    disabled={resultsLoaded}
                 >
                     Load
                 </Button>
