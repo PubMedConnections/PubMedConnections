@@ -17,7 +17,7 @@ import {
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker'
-import {useSelector, useDispatch} from 'react-redux'
+import { useSelector, useDispatch } from 'react-redux'
 import {
     setFilter,
     setActiveFilters,
@@ -25,8 +25,8 @@ import {
     setLoadResults,
     setResultsLoaded
 } from '../../store/slices/filterSlice'
-import {availableFilters, availableFiltersMap} from './filterInfo';
-import {useEffect, useState} from "react";
+import { availableFilters, availableFiltersMap } from './filterInfo';
+import { useEffect, useState} from "react";
 
 const Filters = () => {
     const filters = useSelector((state) => state.filters.filters);
@@ -294,12 +294,10 @@ const Filters = () => {
     }
 
     const handleFilterSelectionChange = (event) => {
-        const {
-            target: { value },
-        } = event;
-        let oldFilters = [...activeFilters];
-
-        dispatch(setActiveFilters({filters: value}));
+      const {
+        target: { value },
+      } = event;
+      dispatch(setActiveFilters({ filters: value }));
     };
 
     const activeFiltersSelector = <FormControl size="small">
@@ -321,8 +319,8 @@ const Filters = () => {
                 }}>
 
             {availableFilters.map(filterSpec => {
-                if (filterSpec.key === "list_subheader") {
-                    return <ListSubheader>
+                if (filterSpec.key.includes("list_subheader")) {
+                    return <ListSubheader key={filterSpec.key}>
                         <ListItemText primary={filterSpec.name} style={{fontSize: "1.5em"}}/>
                     </ListSubheader>
                 }

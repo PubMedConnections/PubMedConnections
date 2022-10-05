@@ -20,7 +20,7 @@ const filterCategories = {
 
 const availableFilters = [
     {
-        key: "list_subheader",
+        key: "list_subheader_1",
         name: "Article:",
         category: filterCategories.Article
     },
@@ -53,7 +53,7 @@ const availableFilters = [
         help: "The date after which the articles were published."
     },
     {
-        key: "list_subheader",
+        key: "list_subheader_2",
         name: "Journal:",
         category: filterCategories.Article
     },
@@ -65,7 +65,7 @@ const availableFilters = [
         help: "The name of the journal that the article was published in."
     },
     {
-        key: "list_subheader",
+        key: "list_subheader_3",
         name: "Author:",
         category: filterCategories.Article
     },
@@ -98,7 +98,7 @@ const availableFilters = [
         help: "Whether the author search term should search for articles where they are the last listed author."
     },
     {
-        key: "list_subheader",
+        key: "list_subheader_4",
         name: "Graph:",
         category: filterCategories.Article
     },
