@@ -152,18 +152,21 @@ function SnapshotSidebar() {
           }
       }
   }, [filters, selectedSnapshot, snapshots])
-
+  
+  function getAnalytics(id) {
+      if (id > -1) {
+          GET('snapshot/analyse/' + id)
+              .then((resp) => {
+                  setAnalyticsData(resp.data);
+              })
+              .catch((err) => {
+                  console.log(err);
+              })
+      }
+  }
     useEffect(() => {
-        setAnalyticsData(null);
-        if (selectedSnapshot > -1) {
-            GET('snapshot/analyse/' + selectedSnapshot)
-                .then((resp) => {
-                    setAnalyticsData(resp.data);
-                })
-                .catch((err) => {
-                    console.log(err);
-                })
-        }
+      setAnalyticsData(null);
+      getAnalytics(selectedSnapshot);
     }, [selectedSnapshot])
 
   return (
@@ -252,6 +255,7 @@ function SnapshotSidebar() {
             />
             <div id="user-details" >
                 <Button onClick={() => {
+                    getAnalytics(selectedSnapshot)
                     setShowModal(true)
                 }}
                         disabled={analyticsData == null}

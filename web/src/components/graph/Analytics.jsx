@@ -140,10 +140,10 @@ const SnapshotAnalytics = ({ data }) => {
     } else {
       if (data.status === "In Progress") {
        setUnsuccessfulMsg("Analytics in Progress...\n" +
-                            "Please try again later")
+                            "Please try again later.")
       } else {
         setUnsuccessfulMsg("Unable to fetch analytics\n" +
-                            "Please try refreshing the page")
+                            "Please try creating the snapshot again.")
       }
     }
   }, [data]);
