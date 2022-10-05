@@ -44,14 +44,14 @@ const Graph = () => {
           },
           color: {
             inherit: false,
-            highlight: '#000000',
-            color: '#666666',
-            hover: '#666666'
+            color: '#ccc',
+            hover: '#777',
+            highlight: '#333'
           }
       },
       interaction: {
         hover: true,
-        tooltipDelay: 100,
+        tooltipDelay: 500,
       },
       physics: {
           minVelocity: 2,

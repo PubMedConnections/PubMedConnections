@@ -11,7 +11,8 @@ import {
     FormControl,
     InputLabel,
     FormControlLabel,
-    Popover
+    Popover,
+    ListSubheader
 } from '@mui/material'
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
@@ -30,6 +31,7 @@ import {useEffect, useState} from "react";
 const Filters = () => {
     const filters = useSelector((state) => state.filters.filters);
     const dispatch = useDispatch();
+    const resultsLoaded = useSelector((state) => state.filters.resultsLoaded);
 
     const activeFilters = useSelector((state) => state.filters.activeFilters)
 
@@ -53,7 +55,7 @@ const Filters = () => {
             <div className="filter-name"><p>{filterDesc.name}</p></div>
             <div className="filter-entry">{element}</div>
             {filterDesc.help &&
-                <div className="filter-delete">
+                <div className="filter-help">
                     <IconButton size={"small"}
                                 onMouseEnter={(event) => handlePopoverOpen(filterDesc.key, event)}
                                 onMouseLeave={() => handlePopoverClose(filterDesc.key)}>
@@ -319,10 +321,17 @@ const Filters = () => {
                 }}>
 
             {availableFilters.map(filterSpec => {
-                return <MenuItem key={filterSpec.key} value={filterSpec.key}>
-                    <Checkbox checked={activeFilters.indexOf(filterSpec.key) > -1} />
-                    <ListItemText primary={filterSpec.name} />
-                </MenuItem>;
+                if (filterSpec.key === "list_subheader") {
+                    return <ListSubheader>
+                        <ListItemText primary={filterSpec.name} style={{fontSize: "1.5em"}}/>
+                    </ListSubheader>
+                }
+                else {
+                    return <MenuItem key={filterSpec.key} value={filterSpec.key}>
+                        <Checkbox checked={activeFilters.indexOf(filterSpec.key) > -1} />
+                        <ListItemText primary={filterSpec.name} />
+                    </MenuItem>;
+                }
             })}
         </Select>
     </FormControl>;
@@ -344,6 +353,7 @@ const Filters = () => {
                     endIcon={<Refresh />}
                     variant="contained"
                     color="success"
+                    disabled={resultsLoaded}
                 >
                     Load
                 </Button>

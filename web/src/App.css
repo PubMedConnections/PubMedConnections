@@ -239,6 +239,16 @@ span.MuiTypography-root {
   transform: scale(1.4);
 }
 
+.filter-help {
+  margin-top: auto;
+  margin-bottom: auto;
+}
+
+.filter-help > button > svg {
+  cursor: help;
+  transform: scale(1.4);
+}
+
 .filter-entry-slider {
   padding-left: 1em;
   padding-right: 1em;
