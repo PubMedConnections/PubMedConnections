@@ -46,8 +46,6 @@ const SnapshotAnalytics = ({ data }) => {
 
   // Anytime data prop is updated, re-render analytics
   useEffect(() => {
-    console.log(data);
-
     if (data.status === "Completed" && data.betweenness && data.degree) {
       setUnsuccessfulMsg("");
 
