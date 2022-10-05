@@ -4,7 +4,7 @@ from datetime import timedelta
 # Authentication configuration.
 JWT_SECRET_KEY = 'a5ee6ccda844d043e1e7039787bee989'  # pubmedconnections2022
 JWT_HEADER_TYPE = ""
-JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=1)
+JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=24)
 
 REGISTRATION_INVITE_CODE = "pubmedconnections2022"
 
