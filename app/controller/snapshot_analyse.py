@@ -1,3 +1,4 @@
+import traceback
 from typing import Any
 
 from neo4j.exceptions import ClientError
@@ -23,6 +24,8 @@ class AnalyticsThreading(object):
 # timeout long queries?
 # testing
 # GDS working with docker
+# problem: analytics in front-end showing as in progress when they have actually finished
+#   (only when after immediately creating the snapshot)
 
 update_degree_centrality_query = \
     """
@@ -255,12 +258,11 @@ def project_graph_and_run_analytics(
                                 status="Completed")
 
         except ClientError as err:
-            print(err)
+            traceback.print_exc()
             session.write_transaction(_set_analytics_status, 
                                 set_analytics_status_query, 
                                 snapshot_id,
                                 status="Error")
-            raise PubMedAnalyticsError(err.code, err.message)
         
         finally:
             # drop projected graph
@@ -273,48 +275,51 @@ def compute_analytics(snapshot_id: int):
     Computes the analytics for the snapshot. Builds the node and relationship queries which are then 
     passed to a helper function for computation and storing of results in the db.
     """
+    try:
+        # Fetch the snapshot settings from the database.
+        snapshot = get_snapshot(snapshot_id)
+        if len(snapshot) == 0:
+            raise PubMedSnapshotDoesNotExistError(f"There is no snapshot with the id: {snapshot_id}")
+        
+        snapshot = snapshot[0]
 
-    # Fetch the snapshot settings from the database.
-    snapshot = get_snapshot(snapshot_id)
-    if len(snapshot) == 0:
-        raise PubMedSnapshotDoesNotExistError(f"There is no snapshot with the id: {snapshot_id}")
+        graph_name = "coauthors" + str(snapshot_id)
+        snapshot_filters = remove_snapshot_metadata(snapshot)
+
+        # Query the graph to perform the analytics on.
+        graph = query_graph(snapshot_filters)
+        if not isinstance(graph, CoAuthorGraph):
+            raise Exception("Only co-author graphs are supported for analytics")
+
+        # Build the queries for projecting the graph for analytics.
+        query_params = {
+            "author_ids": list(graph.authors_with_coauthors_ids),
+            "article_ids": list(graph.article_ids)
+        }
+        node_query = """
+        UNWIND $author_ids AS id
+        RETURN id
+        """
+        relationship_query = """
+        MATCH (author) -[:IS_AUTHOR]-> (:ArticleAuthor) -[:AUTHOR_OF]-> (article:Article)
+                        <-[:AUTHOR_OF]- (:ArticleAuthor) <-[IS_AUTHOR]- (coauthor:Author)
+        WHERE
+            id(author) IN $author_ids
+            AND id(coauthor) IN $author_ids
+            AND author <> coauthor
+            AND id(article) in $article_ids
+        RETURN
+            id(author) AS source,
+            id(coauthor) AS target,
+            apoc.create.vRelationship(author, 'COAUTHOR', {count: COUNT(DISTINCT article)}, coauthor) as rel
+        """
+
+        project_graph_and_run_analytics(
+            graph_name, node_query, relationship_query, query_params, snapshot_id
+        )
     
-    snapshot = snapshot[0]
-
-    graph_name = "coauthors" + str(snapshot_id)
-    snapshot_filters = remove_snapshot_metadata(snapshot)
-
-    # Query the graph to perform the analytics on.
-    graph = query_graph(snapshot_filters)
-    if not isinstance(graph, CoAuthorGraph):
-        raise Exception("Only co-author graphs are supported for analytics")
-
-    # Build the queries for projecting the graph for analytics.
-    query_params = {
-        "author_ids": list(graph.authors_with_coauthors_ids),
-        "article_ids": list(graph.article_ids)
-    }
-    node_query = """
-    UNWIND $author_ids AS id
-    RETURN id
-    """
-    relationship_query = """
-    MATCH (author) -[:IS_AUTHOR]-> (:ArticleAuthor) -[:AUTHOR_OF]-> (article:Article)
-                    <-[:AUTHOR_OF]- (:ArticleAuthor) <-[IS_AUTHOR]- (coauthor:Author)
-    WHERE
-        id(author) IN $author_ids
-        AND id(coauthor) IN $author_ids
-        AND author <> coauthor
-        AND id(article) in $article_ids
-    RETURN
-        id(author) AS source,
-        id(coauthor) AS target,
-        apoc.create.vRelationship(author, 'COAUTHOR', {count: COUNT(DISTINCT article)}, coauthor) as rel
-    """
-
-    project_graph_and_run_analytics(
-        graph_name, node_query, relationship_query, query_params, snapshot_id
-    )
+    except Exception as e:
+        traceback.print_exc()
 
 def retrieve_analytics(snapshot_id: int):
     """
