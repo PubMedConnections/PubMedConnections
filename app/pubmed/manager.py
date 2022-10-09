@@ -22,7 +22,7 @@ from app.pubmed.pubmed_db_conn import PubMedCacheConn
 from app.pubmed.source_files import list_downloaded_pubmed_files, read_all_pubmed_files
 from app.pubmed.source_ftp import PubMedFTP
 from app.utils import format_minutes, calc_md5_hash_of_file, flush_print
-from config import LOGS_DIR, DATA_DIR
+from app.config import LOGS_DIR, DATA_DIR
 
 
 class PubMedManager:

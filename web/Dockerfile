@@ -1,7 +1,7 @@
 FROM httpd:2.4
 
 # Add the URL to access the backend.
-ENV REACT_APP_API_ENDPOINT="http://<HOSTNAME>:8080/api/"
+ENV REACT_APP_API_ENDPOINT="http://<HOSTNAME>:18877/api/"
 
 # Copy the source code of the website into the container.
 COPY ./ ./src/

@@ -9,7 +9,7 @@ import neo4j
 
 from app.pubmed.filtering import PubMedFilterCache
 from app.pubmed.model import DBArticle, DBMetadata, DBMeSHHeading, DBAuthor, DBArticleAuthor, DBAffiliation
-from config import NEO4J_URI, NEO4J_REQUIRES_AUTH
+from app.config import NEO4J_URI, NEO4J_REQUIRES_AUTH
 
 
 class IdCounter:
@@ -61,7 +61,7 @@ class PubMedCacheConn:
 
         max_life = 1000 * 60 * 60 * 24
         if NEO4J_REQUIRES_AUTH:
-            from config import NEO4J_USER, NEO4J_PASSWORD
+            from app.config import NEO4J_USER, NEO4J_PASSWORD
             self.driver = neo4j.GraphDatabase.driver(
                 NEO4J_URI,
                 auth=(NEO4J_USER, NEO4J_PASSWORD),
