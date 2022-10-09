@@ -154,6 +154,10 @@ class BuildPacket:
 
         self._stage: int = 0
 
+    def ensure_completed(self):
+        """ Raises an exception if this packet has not finished being processed. """
+        self._expect_stage(BuildPacket.NUM_STAGES)
+
     def _expect_stage(self, stage: int):
         """ Checks that we are at the correct stage before running a stage. """
         if self._stage != stage:
@@ -224,6 +228,9 @@ class BuildPacket:
 
         # Insert the journals and save their IDs.
         with neo4j_conn.new_session() as session:
+            if debug:
+                print(f".. Stage 1a: Inserting journals... ({len(journal_data)} journals)")
+
             start_time = time.time()
 
             if len(journal_data) > 0:
@@ -232,8 +239,9 @@ class BuildPacket:
                 journal_ids.update(queried_journal_ids)
 
             self._journal_ids = journal_ids
+
             if debug:
-                print(f".. Stage 1: Inserting journals took {time.time() - start_time:.2f} seconds")
+                print(f".. Stage 1a: Inserting journals took {time.time() - start_time:.2f} seconds")
 
     def _stage_1b_authors(self, cache: BuildCache, *, debug: bool = False):
         """
@@ -277,6 +285,9 @@ class BuildPacket:
 
         # Insert the authors and save their IDs.
         with neo4j_conn.new_session() as session:
+            if debug:
+                print(f".. Stage 1b: Inserting authors... ({len(author_data)} authors)")
+
             start_time = time.time()
 
             if len(author_data) > 0:
@@ -285,8 +296,9 @@ class BuildPacket:
                 author_ids.update(queried_author_ids)
 
             self._author_ids = author_ids
+
             if debug:
-                print(f".. Stage 2: Inserting authors took {time.time() - start_time:.2f} seconds")
+                print(f".. Stage 1b: Inserting authors took {time.time() - start_time:.2f} seconds")
 
     def _stage_1c_affiliations(self, cache: BuildCache, *, debug: bool = False):
         """
@@ -324,6 +336,9 @@ class BuildPacket:
 
         # Insert the affiliations and save their IDs.
         with neo4j_conn.new_session() as session:
+            if debug:
+                print(f".. Stage 1c: Inserting affiliations... ({len(affiliation_data)} affiliations)")
+
             start_time = time.time()
             if len(affiliation_data) > 0:
                 queried_affiliation_ids = session.write_transaction(run_affiliation_insertion_query)
@@ -331,10 +346,11 @@ class BuildPacket:
                 affiliation_ids.update(queried_affiliation_ids)
 
             self._affiliation_ids = affiliation_ids
-            if debug:
-                print(f".. Stage 3: Inserting affiliations took {time.time() - start_time:.2f} seconds")
 
-    def _stage_2a_remove_old_articles(self, *, debug: bool = False):
+            if debug:
+                print(f".. Stage 1c: Inserting affiliations took {time.time() - start_time:.2f} seconds")
+
+    def _stage_2a_remove_old_articles(self, *, debug: bool = False, max_batch_size: int = 1_000):
         """
         Removes old articles so that we can create their new versions.
         """
@@ -343,9 +359,9 @@ class BuildPacket:
         for article in self.articles:
             pmids.append(article.pmid)
 
-        def run_article_deletion_query(tx: neo4j.Transaction) -> list[int]:
-            """ Deletes the articles from the pmids list. """
-            results = tx.run(
+        def run_collect_articles_to_delete_query(session: neo4j.Session) -> tuple[list[int], list[int]]:
+            """ Fetches all articles and article authors to delete from the pmids list. """
+            results = session.run(
                 """
                 CYPHER planner=dp
                 MATCH (article_node:Article)
@@ -355,23 +371,72 @@ class BuildPacket:
                     MATCH (article_author_node:ArticleAuthor) -[:AUTHOR_OF]-> (article_node)
                     RETURN COLLECT(id(article_author_node)) AS orphan_article_author_ids
                 }
-                DETACH DELETE article_node
-                RETURN orphan_article_author_ids
+                RETURN id(article_node) AS article_id, orphan_article_author_ids
                 """,
                 pmids=pmids
             )
+            article_ids: list[int] = []
             orphaned_article_author_ids: list[int] = []
             for record in results:
-                orphaned_article_author_ids.extend(record[0])
+                article_id, orphaned_ids = record
+                article_ids.append(article_id)
+                orphaned_article_author_ids.extend(orphaned_ids)
 
-            return orphaned_article_author_ids
+            return article_ids, orphaned_article_author_ids
 
-        # Delete the old articles.
+        # Collect the articles to delete.
         with neo4j_conn.new_session() as session:
-            start_time = time.time()
-            self._orphaned_article_author_ids = session.write_transaction(run_article_deletion_query)
             if debug:
-                print(f".. Stage 4a: Deleting old articles took {time.time() - start_time:.2f} seconds")
+                print(f".. Stage 2a: Finding old articles...")
+
+            start_time = time.time()
+            article_ids, orphaned_article_author_ids = session.write_transaction(run_collect_articles_to_delete_query)
+            self._orphaned_article_author_ids = orphaned_article_author_ids
+
+            if debug:
+                print(f".. Stage 2a: Finding old articles took {time.time() - start_time:.2f} seconds")
+
+        # We batch the articles as otherwise we can hit maximum memory issues with Neo4J...
+        article_batches = split_into_batches(article_ids, max_batch_size=max_batch_size)
+        for batch_no, batch in enumerate(article_batches):
+            self._stage_2a_remove_old_articles_batch(
+                batch_no, len(article_batches), batch, debug=debug
+            )
+
+    def _stage_2a_remove_old_articles_batch(
+            self, batch_no: int, total_batches: int, article_ids: list[int], *, debug: bool = False):
+        """
+        Deletes one batch of articles.
+        """
+        def run_article_deletion_query(tx: neo4j.Transaction):
+            """ Deletes the articles. """
+            tx.run(
+                """
+                CYPHER planner=dp
+                UNWIND $article_ids AS article_id
+                MATCH (article_node:Article)
+                WHERE id(article_node) = article_id
+                DETACH DELETE article_node
+                """,
+                article_ids=article_ids
+            ).consume()
+
+        # Delete the old article authors.
+        with neo4j_conn.new_session() as session:
+            if debug:
+                print(
+                    f".. Stage 2a (batch {batch_no + 1} / {total_batches}): "
+                    f"Deleting old articles... ({len(article_ids)} articles)"
+                )
+
+            start_time = time.time()
+            session.write_transaction(run_article_deletion_query)
+
+            if debug:
+                print(
+                    f".. Stage 2a (batch {batch_no + 1} / {total_batches}): "
+                    f"Deleting old articles took {time.time() - start_time:.2f} seconds"
+                )
 
     def _stage_2b_insert_articles(self, cache: BuildCache, *, debug: bool = False, max_batch_size: int = 8_000):
         """ Inserts the articles of this packet. """
@@ -498,12 +563,20 @@ class BuildPacket:
 
         # Create the articles.
         with neo4j_conn.new_session() as session:
-            start_time = time.time()
-            article_ids, article_author_ids = session.write_transaction(run_article_creation_query)
             if debug:
                 print(
-                    f".. Stage 4b (batch {batch_no + 1} / {total_batches}): "
-                    f"Creating articles took {time.time() - start_time:.2f} seconds")
+                    f".. Stage 2b (batch {batch_no + 1} / {total_batches}): "
+                    f"Creating articles... ({len(article_data)} articles)"
+                )
+
+            start_time = time.time()
+            article_ids, article_author_ids = session.write_transaction(run_article_creation_query)
+
+            if debug:
+                print(
+                    f".. Stage 2b (batch {batch_no + 1} / {total_batches}): "
+                    f"Creating articles took {time.time() - start_time:.2f} seconds"
+                )
 
             return article_ids, article_author_ids
 
@@ -553,14 +626,22 @@ class BuildPacket:
 
         # Create the article authors.
         with neo4j_conn.new_session() as session:
-            start_time = time.time()
-            session.write_transaction(run_article_author_connect_query)
             if debug:
                 print(
-                    f".. Stage 5 (batch {batch_no + 1} / {total_batches}): "
-                    f"Connecting article authors to authors took {time.time() - start_time:.2f} seconds")
+                    f".. Stage 3a (batch {batch_no + 1} / {total_batches}): "
+                    f"Connecting article authors... ({len(article_author_data)} article authors)"
+                )
 
-    def _stage_3b_affiliate_authors(self, *, debug: bool = False, max_batch_size: int = 30_000):
+            start_time = time.time()
+            session.write_transaction(run_article_author_connect_query)
+
+            if debug:
+                print(
+                    f".. Stage 3a (batch {batch_no + 1} / {total_batches}): "
+                    f"Connecting article authors to authors took {time.time() - start_time:.2f} seconds"
+                )
+
+    def _stage_3b_affiliate_authors(self, *, debug: bool = False, max_batch_size: int = 10_000):
         """
         Creates the affiliation relationships between ArticleAuthors and Affiliations.
         """
@@ -606,20 +687,39 @@ class BuildPacket:
 
         # Affiliate authors.
         with neo4j_conn.new_session() as session:
-            start_time = time.time()
-            session.write_transaction(run_affiliate_authors_query)
             if debug:
                 print(
-                    f".. Stage 6 (batch {batch_no + 1} / {total_batches}): "
+                    f".. Stage 3b (batch {batch_no + 1} / {total_batches}): "
+                    f"Affiliating authors... ({len(affiliation_data)} affiliations)"
+                )
+
+            start_time = time.time()
+            session.write_transaction(run_affiliate_authors_query)
+
+            if debug:
+                print(
+                    f".. Stage 3b (batch {batch_no + 1} / {total_batches}): "
                     f"Affiliating authors took {time.time() - start_time:.2f} seconds")
 
-    def _stage_3c_delete_orphaned_article_authors(self, *, debug: bool = False):
+    def _stage_3c_delete_orphaned_article_authors(self, *, debug: bool = False, max_batch_size: int = 10_000):
         """
         Removes old article authors from deleted articles.
         """
         # Get the list of article author IDs for deletion.
         orphaned_article_author_ids: list[int] = self._orphaned_article_author_ids
 
+        # We batch the article authors as otherwise we can hit maximum memory issues with Neo4J...
+        article_author_batches = split_into_batches(orphaned_article_author_ids, max_batch_size)
+        for batch_no, batch in enumerate(article_author_batches):
+            self._stage_3c_delete_orphaned_article_authors_batch(
+                batch_no, len(article_author_batches), batch, debug=debug
+            )
+
+    def _stage_3c_delete_orphaned_article_authors_batch(
+            self, batch_no: int, total_batches: int, orphaned_article_author_ids: list[int], *, debug: bool = False):
+        """
+        Removes one batch of old article authors.
+        """
         def run_article_author_deletion_query(tx: neo4j.Transaction):
             """ Deletes the article authors. """
             tx.run(
@@ -635,10 +735,20 @@ class BuildPacket:
 
         # Delete the old article authors.
         with neo4j_conn.new_session() as session:
+            if debug:
+                print(
+                    f".. Stage 3c (batch {batch_no + 1} / {total_batches}): "
+                    f"Deleting old article authors... ({len(orphaned_article_author_ids)} article authors)"
+                )
+
             start_time = time.time()
             session.write_transaction(run_article_author_deletion_query)
+
             if debug:
-                print(f".. Stage 7: Deleting old article authors took {time.time() - start_time:.2f} seconds")
+                print(
+                    f".. Stage 3c (batch {batch_no + 1} / {total_batches}): "
+                    f"Deleting old article authors took {time.time() - start_time:.2f} seconds"
+                )
 
     @staticmethod
     def prepare(articles: list[DBArticle]) -> 'BuildPacket':
@@ -722,7 +832,13 @@ class BuildPipelineStage:
                 if self.debug:
                     print(f"Stage {self.stage}: Receive {packet_id}")
 
-                packet.run_stage(self.stage, self.cache, debug=self.debug)
+                if self.stage >= 0:
+                    packet.run_stage(self.stage, self.cache, debug=self.debug)
+                else:
+                    # Careful mode: run all stages in a single thread.
+                    for stage in range(1, BuildPacket.NUM_STAGES + 1):
+                        packet.run_stage(stage, self.cache, debug=self.debug)
+
                 if self.debug:
                     print(f"Stage {self.stage}: Complete {packet_id}")
                 process_duration = time.time() - process_start
@@ -753,22 +869,30 @@ class BuildPipeline:
     Starts and manages feeding packets of articles through
     a pipeline to insert them into the database.
     """
-    def __init__(self, *, queue_size=1, debug: bool = False):
+    def __init__(self, *, queue_size=1, debug: bool = False, careful: bool = False):
         self._input_queue: Queue[Optional[tuple[int, BuildPacket]]] = Queue(queue_size)
         self.stages: list[BuildPipelineStage] = []
         self.cache: BuildCache = BuildCache()
 
         # Create the pipeline stages.
-        next_input_queue = self._input_queue
-        for stage in range(1, BuildPacket.NUM_STAGES + 1):
-            output_queue_size = (0 if stage == BuildPacket.NUM_STAGES else queue_size)
-            pipeline_stage = BuildPipelineStage(
-                stage, self.cache, next_input_queue,
-                output_queue_size=output_queue_size,
+        if not careful:
+            next_input_queue = self._input_queue
+            for stage in range(1, BuildPacket.NUM_STAGES + 1):
+                output_queue_size = (0 if stage == BuildPacket.NUM_STAGES else queue_size)
+                pipeline_stage = BuildPipelineStage(
+                    stage, self.cache, next_input_queue,
+                    output_queue_size=output_queue_size,
+                    debug=debug
+                )
+                next_input_queue = pipeline_stage.output_queue
+                self.stages.append(pipeline_stage)
+        else:
+            # Only use 1 thread in careful mode.
+            self.stages.append(BuildPipelineStage(
+                -1, self.cache, self._input_queue,
+                output_queue_size=0,
                 debug=debug
-            )
-            next_input_queue = pipeline_stage.output_queue
-            self.stages.append(pipeline_stage)
+            ))
 
         self.output_queue = self.stages[-1].output_queue
 

@@ -295,7 +295,7 @@ class PubMedManager:
         flush_print(f"\nPubMedExtract: Extracting data from {len(new_pubmed_files)} PubMed files\n")
 
         file_queue = read_all_pubmed_files(log_dir, new_pubmed_files)
-        pipeline = BuildPipeline()
+        pipeline = BuildPipeline(debug=True, careful=True)
         pipeline.start()
 
         extraction_state = {
@@ -325,7 +325,9 @@ class PubMedManager:
                 except Empty:
                     break
 
-                file_index, _ = pipeline_result
+                file_index, packet = pipeline_result
+                packet.ensure_completed()
+
                 file_meta = meta_pubmed[file_index]
                 file_meta.processed = True
 
