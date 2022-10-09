@@ -1,19 +1,19 @@
-FROM node:13.12.0-alpine
+FROM httpd:2.4
 
-# set working directory
-WORKDIR /web
+# Add the URL to access the backend.
+ENV REACT_APP_API_ENDPOINT="http://<HOSTNAME>:8080/api/"
 
-# add `/app/node_modules/.bin` to $PATH
-ENV PATH /web/node_modules/.bin:$PATH
-ENV REACT_APP_API_ENDPOINT="http://0.0.0.0:8080/api/"
+# Copy the source code of the website into the container.
+COPY ./ ./src/
 
-# install app dependencies
-COPY package.json ./
-COPY package-lock.json ./
-RUN npm install --silent
+# Install NPM.
+RUN apt-get update && \
+    apt-get install -y curl
+RUN curl -fsSL https://deb.nodesource.com/setup_current.x | bash -
+RUN apt-get install -y nodejs && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
-# add app
-COPY . ./
-
-# start app
-CMD ["npm", "start"]
+# Build the website.
+ENV BUILD_PATH="/usr/local/apache2/htdocs/"
+RUN cd src && npm install -y && npm run build

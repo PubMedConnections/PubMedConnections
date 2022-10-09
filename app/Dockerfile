@@ -23,23 +23,21 @@ ENV PATH=$CONDA_DIR/bin:$PATH
 
 
 # Build Conda Environment
-COPY environment.yml /environment.yml
+COPY ../environment.yml /environment.yml
 RUN conda init bash && \
     conda env create -f /environment.yml
 
 
 # PubMed Connections
 COPY app /app
-COPY deployment/deployment-config.py /config.py
-COPY LICENSE.txt /LICENSE.txt
-COPY README.md /README.md
+COPY ../deployment/backend-config.py /config.py
 COPY run.py /run.py
 
 
 # Entrypoint
-COPY deployment/pmc-entrypoint.sh /usr/local/bin/pmc-entrypoint.sh
-RUN chmod u+x /usr/local/bin/pmc-entrypoint.sh
+COPY docker-entrypoint.sh /usr/local/bin/pmc-backend-entrypoint.sh
+RUN chmod u+x /usr/local/bin/docker-entrypoint.sh
 SHELL ["conda", "run", "-n", "pmc", "/bin/bash", "-c"]
 WORKDIR "/"
-ENTRYPOINT ["/usr/local/bin/pmc-entrypoint.sh"]
+ENTRYPOINT ["/usr/local/bin/pmc-backend-entrypoint.sh"]
 CMD ["echo", "If this printed, then something went wrong..."]

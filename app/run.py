@@ -1,5 +1,4 @@
 import sys
-import time
 
 from app import app as application
 from app.pubmed.manager import PubMedManager
