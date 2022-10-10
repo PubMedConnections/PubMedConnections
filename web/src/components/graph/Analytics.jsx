@@ -154,7 +154,7 @@ const SnapshotAnalytics = ({ data }) => {
       },
       title: {
         display: true,
-        text: 'Top 5 Degrees of Centrality',
+        text: 'Top 5 Nodes by Degree Centrality',
       },
     },
     maintainAspectRatio: false,
@@ -167,7 +167,7 @@ const SnapshotAnalytics = ({ data }) => {
       },
       title: {
         display: true,
-        text: 'Top 5 Betweenness of Nodes',
+        text: 'Top 5 Nodes by Betweenness',
       },
     },
     maintainAspectRatio: false,
@@ -180,7 +180,7 @@ const SnapshotAnalytics = ({ data }) => {
       },
       title: {
         display: true,
-        text: 'Distribution of Degrees Centrality',
+        text: 'Distribution of Degree Centrality',
       },
     },
     elements: {

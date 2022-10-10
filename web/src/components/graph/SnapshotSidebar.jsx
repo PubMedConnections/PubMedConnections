@@ -89,9 +89,9 @@ function SnapshotSidebar() {
       <div style={{position: 'absolute', zIndex: 10000, backgroundColor: "black",  width: "100%", height: "100%", opacity: '0.4', textAlign: 'center'}} onClick={() => setShowModal(false)}></div>
 
 
-      <div style={{position: "absolute", left: "15%", top: "15%", width: '70%', height: "70%", backgroundColor: "white", zIndex: 100000}}>
+      <div className="analytics" style={{position: "absolute", left: "15%", top: "15%", width: '70%', height: "70%", backgroundColor: "white", zIndex: 100000}}>
 
-        <div style={{position: "fixed", left: "17.5%", top: "25%", width: "30%", height:"30%"}}>
+        <div className="analytics-title" style={{position: "fixed", left: "17.5%", top: "25%", width: "30%", height:"30%"}}>
             <h1>{snapshot.snapshot_name}</h1>
             <p>Snapshot ID: {selectedSnapshot} <i>({snapshot.creation_time})</i></p>
         </div>

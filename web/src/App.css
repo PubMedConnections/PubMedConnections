@@ -381,3 +381,7 @@ span.MuiTypography-root {
   margin: 10px;
   float: left;
 }
+
+.analytics-title h1 {
+    color: #333333;
+}
