@@ -17,3 +17,7 @@ RUN apt-get install -y nodejs && \
 # Build the website.
 ENV BUILD_PATH="/usr/local/apache2/htdocs/"
 RUN cd src && npm install -y && npm run build
+
+# Copy in the Apache configurations.
+COPY apache-httpd.conf /usr/local/apache2/conf/httpd.conf
+COPY apache-htaccess /usr/local/apache2/htdocs/.htaccess

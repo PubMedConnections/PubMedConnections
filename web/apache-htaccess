@@ -1,0 +1,7 @@
+# Re-routes all requests for a HTML page to the SPA root index.html.
+# This allows the SPA to handle all routing.
+Options +SymLinksIfOwnerMatch
+RewriteEngine On
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule . /index.html [L]
