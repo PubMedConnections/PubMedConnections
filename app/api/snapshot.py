@@ -5,7 +5,7 @@ from app.controller.graph_builder import PubMedGraphError
 from app.controller.graph_queries import parse_dates
 from app.controller.snapshot_visualise import query_by_snapshot_id, visualise_graph
 from app.controller.snapshot_create import create_snapshot
-from app.controller.snapshot_get import get_snapshot, get_user_snapshots
+from app.controller.snapshot_get import get_snapshot, get_user_snapshots, get_db_latest_version
 from app.controller.snapshot_delete import delete_snapshot_by_id
 from app.controller.snapshot_analyse import retrieve_analytics, AnalyticsThreading
 from flask_jwt_extended import jwt_required, get_jwt_identity
@@ -115,3 +115,9 @@ class VisualiseSnapshot(Resource):
     def get():
         current_user = get_jwt_identity()
         return get_user_snapshots(current_user)
+
+@ns.route('/database_version/')
+class GetDBVersion(Resource):
+    @staticmethod
+    def get():
+        return get_db_latest_version()
