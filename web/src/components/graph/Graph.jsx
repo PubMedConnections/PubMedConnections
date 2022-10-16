@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, {Fragment, useEffect, useState} from 'react';
 import LinearProgress from '@mui/material/LinearProgress'
 import {useSelector, useDispatch} from 'react-redux'
-import {POST} from "../../utils/APIRequests";
+import {GET, POST} from "../../utils/APIRequests";
 import { useSnackbar } from 'notistack';
 import { DisplayError } from '../common/SnackBar';
 import {setLoadResults, setResultsReturned, setResultsLoaded} from '../../store/slices/filterSlice';
@@ -22,6 +22,8 @@ const Graph = () => {
   const [VISJSNetwork, setNetwork] = useState(null);
 
   const [loadingProgress, setLoadingProgress] = useState(-1)
+
+  const [DBMetaData, setDBMetaData] = useState(null);
 
   const [graphInfo, setGraphInfo] = useState({
     data: {
@@ -194,9 +196,22 @@ const Graph = () => {
               processResponse(err.response, err.message)
           });
   }
-  
+
+  function loadDBMetaData() {
+    GET('snapshot/database_version/')
+        .then((resp) => {
+            var data = resp.data;
+            data['time'] = new Date(resp.data['time']);
+            setDBMetaData(data);
+        })
+  }
+
+
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(loadGraphData, [loadResults])
+  useEffect(() => {
+      loadGraphData();
+      loadDBMetaData();
+  }, [loadResults])
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => loadGraphData(true), [VISJSNetwork]) // The first time
@@ -226,13 +241,25 @@ const Graph = () => {
 
       {loadingProgress >= 100 && graphInfo.data && graphInfo.data.nodes && graphInfo.data.edges &&
           <div id="visjs-graph-info">
-              {graphInfo.data.nodes.length.toLocaleString()} Nodes,&nbsp;
-              {graphInfo.data.edges.length.toLocaleString()} Edges
-              <span className="not-loaded" >{resultsLoaded ? "" : " (Graph not refreshed)"}</span>
+              <p>
+                  {graphInfo.data.nodes.length.toLocaleString()} Nodes,&nbsp;
+                  {graphInfo.data.edges.length.toLocaleString()} Edges
+                  <span className="not-loaded" >{resultsLoaded ? "" : " (Graph not refreshed)"}</span>
+
+                  {DBMetaData &&
+                      <Fragment>
+                        <br/>
+                        <span>
+                          Database updated at:&nbsp;
+                            {DBMetaData.time.toLocaleDateString() + ' ' + DBMetaData.time.toLocaleTimeString()}
+                        </span>
+                      </Fragment>
+                  }
+              </p>
           </div>
       }
 
-      
+
     </div>;
 };
 
