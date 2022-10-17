@@ -250,8 +250,8 @@ const Graph = () => {
                       <Fragment>
                         <br/>
                         <span>
-                          Database updated at:&nbsp;
-                            {DBMetaData.time.toLocaleDateString() + ' ' + DBMetaData.time.toLocaleTimeString()}
+                          Database updated on:&nbsp;
+                            {DBMetaData.time.toLocaleDateString()}
                         </span>
                       </Fragment>
                   }

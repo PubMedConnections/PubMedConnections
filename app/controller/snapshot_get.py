@@ -70,7 +70,7 @@ def get_user_snapshots(username: str) -> list[object]:
 
 def get_db_latest_version() -> dict:
     """
-    Retrieves all the snapshots by the given user.
+    Retrieves the latest database version.
     """
     def run_get_db_latest_version(tx):
         return list(tx.run(
