@@ -1,42 +1,42 @@
 {
   "Team": [
     {
-      "img": "img/team/default.jpg",
+      "img": "img/team/marc.jpeg",
       "name": "Marc Tennant",
       "st_num": "Project Owner"
     },
     {
-      "img": "img/team/default.jpg",
+      "img": "img/team/jai.jpeg",
       "name": "Jai Castle",
       "st_num": "22465418"
     },
     {
-      "img": "img/team/default.jpg",
+      "img": "img/team/paddy.jpeg",
       "name": "Paddy Lamont",
       "st_num": "22494652"
     },
     {
-      "img": "img/team/default.jpg",
+      "img": "img/team/patrick.jpeg",
       "name": "Patrick Roe",
       "st_num": "22479686"
     },
     {
-      "img": "img/team/default.jpg",
+      "img": "img/team/chintan.jpeg",
       "name": "Chintan Shah",
       "st_num": "22497366"
     },
     {
-      "img": "img/team/default.jpg",
+      "img": "img/team/aaron.jpeg",
       "name": "Aaron Norrish",
       "st_num": "21972015"
     },
     {
-      "img": "img/team/default.jpg",
+      "img": "img/team/hadi.jpeg",
       "name": "Hadi Navabi",
       "st_num": "22228685"
     },
     {
-      "img": "img/team/default.jpg",
+      "img": "img/team/wenxiao.jpeg",
       "name": "Wenxiao Zhang",
       "st_num": "22792191"
     }
