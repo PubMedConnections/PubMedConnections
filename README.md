@@ -9,7 +9,7 @@ PubMed database.
 
 ## Config
 
-The [config.py](config.py) file is used to hold user
+The [config.py](app/config.py) file is used to hold user
 specific settings for the project. This includes
 secret keys or email addresses. These values should
 not be committed to the GitHub repository, but by
@@ -24,7 +24,7 @@ git update-index --skip-worktree config.py
 However, sometimes you may wish to push changes
 that include changes within config.py. In these
 cases, you should first manually remove all private
-information from [config.py](config.py). After you
+information from [config.py](app/config.py). After you
 have done this, you can use the following command
 to allow config.py to be included in commits,
 

@@ -72,7 +72,7 @@ code {
 #visjs-graph-info {
   right: 0;
   bottom: 0;
-  height: 2em;
+  text-align: right;
   line-height: 2em;
   padding: 0 1em;
   z-index: 1;
@@ -380,4 +380,8 @@ span.MuiTypography-root {
   width: 2px;
   margin: 10px;
   float: left;
+}
+
+.analytics-title h1 {
+    color: #333333;
 }

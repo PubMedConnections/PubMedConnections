@@ -17,10 +17,16 @@ function DELETE(route, data) {
     return makeRequest('delete', route, data)
 }
 
+function getAPIEndpoint() {
+    const endpointURL = process.env.REACT_APP_API_ENDPOINT;
+    return endpointURL.replace("<HOSTNAME>", window.location.hostname);
+}
+
 function makeRequest(method, route, data) {
+
     const config = {
         method: method,
-        url: `${process.env.REACT_APP_API_ENDPOINT}${route}`,
+        url: `${getAPIEndpoint()}${route}`,
         headers: {
             'Content-Type': 'application/json',
             'Access-Control-Allow-Origin': '*',

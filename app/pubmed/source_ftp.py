@@ -12,7 +12,7 @@ from typing import Final
 from app.pubmed.progress_analytics import DownloadAnalytics
 from app.pubmed.download import DownloadTempFile
 from app.utils import flush_print
-from config import PUBMED_ACCESS_EMAIL, PUBMED_FTP_DEBUG
+from app.config import PUBMED_ACCESS_EMAIL, PUBMED_FTP_DEBUG
 
 PUBMED_FTP_URL: Final[str] = "ftp.ncbi.nlm.nih.gov"
 PUBMED_FTP_BASELINE_DIR: Final[str] = "/pubmed/baseline/"

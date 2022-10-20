@@ -67,3 +67,23 @@ def get_user_snapshots(username: str) -> list[object]:
     with neo4j_conn.new_session() as neo4j_session:
         result = neo4j_session.read_transaction(run_get_user_snapshots_query)
         return json.loads(json.dumps([record.data()["snapshot"] for record in result], default=date_handler))
+
+def get_db_latest_version() -> dict:
+    """
+    Retrieves the latest database version.
+    """
+    def run_get_db_latest_version(tx):
+        return list(tx.run(
+            """
+            MATCH (m:DBMetadata)
+            WITH max(m.version) AS max_version
+            MATCH (d:DBMetadata)
+            WHERE d.version = max_version
+            RETURN d
+            """
+        ))
+
+    with neo4j_conn.new_session() as neo4j_session:
+        result = neo4j_session.read_transaction(run_get_db_latest_version)
+        return json.loads(json.dumps(result[0].data()['d'], default=date_handler))
+

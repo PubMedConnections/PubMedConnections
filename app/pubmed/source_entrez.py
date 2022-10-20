@@ -7,7 +7,7 @@ import time
 from typing import Final
 from Bio import Entrez
 from app.utils import run_over_threads
-from config import PUBMED_ACCESS_EMAIL, ENTREZ_TOOL, ENTREZ_API_KEY
+from app.config import PUBMED_ACCESS_EMAIL, ENTREZ_TOOL, ENTREZ_API_KEY
 
 
 PUBMED_DB_NAME: Final = "pubmed"

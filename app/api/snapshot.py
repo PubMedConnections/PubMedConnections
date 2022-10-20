@@ -3,9 +3,9 @@ from flask_restx import Namespace, Resource, fields
 
 from app.controller.graph_builder import PubMedGraphError
 from app.controller.graph_queries import parse_dates
-from app.controller.snapshot_visualise import query_by_snapshot_id, get_author_graph, visualise_graph
+from app.controller.snapshot_visualise import query_by_snapshot_id, visualise_graph
 from app.controller.snapshot_create import create_snapshot
-from app.controller.snapshot_get import get_snapshot, get_user_snapshots
+from app.controller.snapshot_get import get_snapshot, get_user_snapshots, get_db_latest_version
 from app.controller.snapshot_delete import delete_snapshot_by_id
 from app.controller.snapshot_analyse import retrieve_analytics, AnalyticsThreading
 from flask_jwt_extended import jwt_required, get_jwt_identity
@@ -99,19 +99,6 @@ class VisualiseSnapshot(Resource):
                 "empty_message": f"{e}."
             }
 
-
-@ns.route('/visualise_three_hop/')
-class VisualiseThreeHopNeighbourhoodSnapshot(Resource):
-    @staticmethod
-    @ns.expect(filters)
-    @jwt_required()
-    @ns.doc(security="api_key")
-    def post():
-        filter_params = request.json
-        filter_params = parse_dates(filter_params)
-        return get_author_graph(filter_params)
-
-
 @ns.route('/analyse/<int:snapshot_id>')
 class AnalyseSnapshot(Resource):
     @staticmethod
@@ -128,3 +115,9 @@ class VisualiseSnapshot(Resource):
     def get():
         current_user = get_jwt_identity()
         return get_user_snapshots(current_user)
+
+@ns.route('/database_version/')
+class GetDBVersion(Resource):
+    @staticmethod
+    def get():
+        return get_db_latest_version()

@@ -22,7 +22,7 @@ from app.pubmed.pubmed_db_conn import PubMedCacheConn
 from app.pubmed.source_files import list_downloaded_pubmed_files, read_all_pubmed_files
 from app.pubmed.source_ftp import PubMedFTP
 from app.utils import format_minutes, calc_md5_hash_of_file, flush_print
-from config import LOGS_DIR, DATA_DIR
+from app.config import LOGS_DIR, DATA_DIR
 
 
 class PubMedManager:
@@ -295,7 +295,7 @@ class PubMedManager:
         flush_print(f"\nPubMedExtract: Extracting data from {len(new_pubmed_files)} PubMed files\n")
 
         file_queue = read_all_pubmed_files(log_dir, new_pubmed_files)
-        pipeline = BuildPipeline()
+        pipeline = BuildPipeline(debug=True, careful=True)
         pipeline.start()
 
         extraction_state = {
@@ -325,7 +325,9 @@ class PubMedManager:
                 except Empty:
                     break
 
-                file_index, _ = pipeline_result
+                file_index, packet = pipeline_result
+                packet.ensure_completed()
+
                 file_meta = meta_pubmed[file_index]
                 file_meta.processed = True
 

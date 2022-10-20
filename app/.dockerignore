@@ -3,8 +3,6 @@ data/
 logs/
 data-backup/
 error.node.txt
-deployment/image.tar
-deployment/backend-config.py
 
 # General
 .git

@@ -29,17 +29,15 @@ RUN conda init bash && \
 
 
 # PubMed Connections
-COPY app /app
-COPY deployment/deployment-config.py /config.py
-COPY LICENSE.txt /LICENSE.txt
-COPY README.md /README.md
+COPY ./ /app
+COPY ./config.py /config.py
 COPY run.py /run.py
 
 
 # Entrypoint
-COPY deployment/pmc-entrypoint.sh /usr/local/bin/pmc-entrypoint.sh
-RUN chmod u+x /usr/local/bin/pmc-entrypoint.sh
+COPY docker-entrypoint.sh /usr/local/bin/pmc-backend-entrypoint.sh
+RUN chmod u+x /usr/local/bin/pmc-backend-entrypoint.sh
 SHELL ["conda", "run", "-n", "pmc", "/bin/bash", "-c"]
 WORKDIR "/"
-ENTRYPOINT ["/usr/local/bin/pmc-entrypoint.sh"]
+ENTRYPOINT ["/usr/local/bin/pmc-backend-entrypoint.sh"]
 CMD ["echo", "If this printed, then something went wrong..."]
