@@ -314,6 +314,11 @@ def compute_analytics(snapshot_id: int):
     
     except Exception as e:
         traceback.print_exc()
+        with neo4j_conn.new_session() as session:
+            session.write_transaction(_set_analytics_status, 
+                            set_analytics_status_query, 
+                            snapshot_id,
+                            status="Error")
 
 def retrieve_analytics(snapshot_id: int):
     """
