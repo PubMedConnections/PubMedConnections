@@ -7,7 +7,7 @@ from graphdatascience import GraphDataScience
 import json
 import threading
 
-from app.controller.graph_queries import query_graph, CoAuthorGraph
+from app.controller.graph_queries import query_graph, CoAuthorGraph, parse_dates
 from app.controller.snapshot_get import get_snapshot
 from app.helpers import remove_snapshot_metadata
 from app import neo4j_conn
@@ -19,13 +19,6 @@ class AnalyticsThreading(object):
         thread.daemon = True
         thread.start()
 
-
-# TODO
-# timeout long queries?
-# testing
-# GDS working with docker
-# problem: analytics in front-end showing as in progress when they have actually finished
-#   (only when after immediately creating the snapshot)
 
 update_degree_centrality_query = \
     """
@@ -285,6 +278,7 @@ def compute_analytics(snapshot_id: int):
 
         graph_name = "coauthors" + str(snapshot_id)
         snapshot_filters = remove_snapshot_metadata(snapshot)
+        snapshot_filters = parse_dates(snapshot_filters)
 
         # Query the graph to perform the analytics on.
         graph = query_graph(snapshot_filters)
