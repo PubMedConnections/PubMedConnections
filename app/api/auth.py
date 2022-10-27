@@ -2,23 +2,33 @@ import json
 from flask import request, jsonify, make_response
 from flask_restx import Namespace, Resource, fields
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, get_jwt
+
+from app.config import REGISTRATION_INVITE_CODE
 from app.controller.user_controller import authenticate_user, create_user, get_user, expire_token
 from app import app, jwt
 
-ns = Namespace('auth', description='user authentication',
-               authorizations={'api_key':
-                                   {'type': 'apiKey',
-                                    'in': 'header',
-                                    'name': 'Authorization'}
-                               },
-               security="api_key")
+ns = Namespace(
+    'auth', description='user authentication',
+    authorizations={'api_key': {
+        'type': 'apiKey', 'in': 'header', 'name': 'Authorization'
+    }},
+    security="api_key"
+)
 
-user = ns.model('user', {'username': fields.String(required=False, default="admin"),
-                         'password': fields.String(required=False, default="admin")})
-
-registration = ns.model('registration', {'username': fields.String(required=False, default="admin"),
-                                         'password': fields.String(required=False, default="admin"),
-                                         'invite_code': fields.String(required=False, default=app.config['REGISTRATION_INVITE_CODE'])})
+user = ns.model(
+    'user',
+    {
+        'username': fields.String(required=False, default="admin"),
+        'password': fields.String(required=False, default="admin")
+    }
+)
+registration = ns.model(
+    'registration', {
+        'username': fields.String(required=False, default="admin"),
+        'password': fields.String(required=False, default="admin"),
+        'invite_code': fields.String(required=False, default=REGISTRATION_INVITE_CODE)
+    }
+)
 
 
 @jwt.token_in_blocklist_loader
@@ -67,7 +77,7 @@ class RegisterUser(Resource):
     def post():
         data = request.json
 
-        if data['invite_code'] != app.config['REGISTRATION_INVITE_CODE']:
+        if data['invite_code'] != REGISTRATION_INVITE_CODE:
             return make_response(jsonify({"message": "Invalid invite code."}), 401)
 
         username = data['username']

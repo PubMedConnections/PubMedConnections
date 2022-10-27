@@ -31,10 +31,11 @@ NEO4J_PASSWORD = "password"
 
 
 # Flask settings.
-THREADS_PER_PAGE = 2
-CSRF_ENABLED = True  # Cross-site Request Forgery (CSRF)
-CSRF_SESSION_KEY = "secret"
-SECRET_KEY = "secret"
+class FlaskConfig:
+    THREADS_PER_PAGE = 2
+    CSRF_ENABLED = True  # Cross-site Request Forgery (CSRF)
+    CSRF_SESSION_KEY = "secret"
+    SECRET_KEY = "secret"
 
 
 # Define the Entrez email, tool, and the optional api-key

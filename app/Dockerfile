@@ -30,7 +30,6 @@ RUN conda init bash && \
 
 # PubMed Connections
 COPY ./ /app
-COPY ./config.py /config.py
 COPY run.py /run.py
 
 

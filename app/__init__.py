@@ -11,7 +11,7 @@ app = Flask(__name__)
 CORS(app)
 
 # Load the configuration from config.py
-app.config.from_object('config')
+app.config.from_object('app.config.FlaskConfig')
 
 # Initialise authentication using JWT.
 jwt = JWTManager(app)
