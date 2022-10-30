@@ -10,7 +10,7 @@ import neo4j
 
 from app import neo4j_conn
 from app.pubmed.model import DBArticle, DBJournal, DBAuthor, DBAffiliation
-from app.utils import split_into_batches
+from app.utils import split_into_batches, flush_print
 
 
 class BuildCache:
@@ -229,7 +229,7 @@ class BuildPacket:
         # Insert the journals and save their IDs.
         with neo4j_conn.new_session() as session:
             if debug:
-                print(f".. Stage 1a: Inserting journals... ({len(journal_data)} journals)")
+                flush_print(f".. Stage 1a: Inserting journals... ({len(journal_data)} journals)")
 
             start_time = time.time()
 
@@ -241,7 +241,7 @@ class BuildPacket:
             self._journal_ids = journal_ids
 
             if debug:
-                print(f".. Stage 1a: Inserting journals took {time.time() - start_time:.2f} seconds")
+                flush_print(f".. Stage 1a: Inserting journals took {time.time() - start_time:.2f} seconds")
 
     def _stage_1b_authors(self, cache: BuildCache, *, debug: bool = False):
         """
@@ -286,7 +286,7 @@ class BuildPacket:
         # Insert the authors and save their IDs.
         with neo4j_conn.new_session() as session:
             if debug:
-                print(f".. Stage 1b: Inserting authors... ({len(author_data)} authors)")
+                flush_print(f".. Stage 1b: Inserting authors... ({len(author_data)} authors)")
 
             start_time = time.time()
 
@@ -298,7 +298,7 @@ class BuildPacket:
             self._author_ids = author_ids
 
             if debug:
-                print(f".. Stage 1b: Inserting authors took {time.time() - start_time:.2f} seconds")
+                flush_print(f".. Stage 1b: Inserting authors took {time.time() - start_time:.2f} seconds")
 
     def _stage_1c_affiliations(self, cache: BuildCache, *, debug: bool = False):
         """
@@ -337,7 +337,7 @@ class BuildPacket:
         # Insert the affiliations and save their IDs.
         with neo4j_conn.new_session() as session:
             if debug:
-                print(f".. Stage 1c: Inserting affiliations... ({len(affiliation_data)} affiliations)")
+                flush_print(f".. Stage 1c: Inserting affiliations... ({len(affiliation_data)} affiliations)")
 
             start_time = time.time()
             if len(affiliation_data) > 0:
@@ -348,7 +348,7 @@ class BuildPacket:
             self._affiliation_ids = affiliation_ids
 
             if debug:
-                print(f".. Stage 1c: Inserting affiliations took {time.time() - start_time:.2f} seconds")
+                flush_print(f".. Stage 1c: Inserting affiliations took {time.time() - start_time:.2f} seconds")
 
     def _stage_2a_remove_old_articles(self, *, debug: bool = False, max_batch_size: int = 1_000):
         """
@@ -387,14 +387,14 @@ class BuildPacket:
         # Collect the articles to delete.
         with neo4j_conn.new_session() as session:
             if debug:
-                print(f".. Stage 2a: Finding old articles...")
+                flush_print(f".. Stage 2a: Finding old articles...")
 
             start_time = time.time()
             article_ids, orphaned_article_author_ids = session.write_transaction(run_collect_articles_to_delete_query)
             self._orphaned_article_author_ids = orphaned_article_author_ids
 
             if debug:
-                print(f".. Stage 2a: Finding old articles took {time.time() - start_time:.2f} seconds")
+                flush_print(f".. Stage 2a: Finding old articles took {time.time() - start_time:.2f} seconds")
 
         # We batch the articles as otherwise we can hit maximum memory issues with Neo4J...
         article_batches = split_into_batches(article_ids, max_batch_size=max_batch_size)
@@ -424,7 +424,7 @@ class BuildPacket:
         # Delete the old article authors.
         with neo4j_conn.new_session() as session:
             if debug:
-                print(
+                flush_print(
                     f".. Stage 2a (batch {batch_no + 1} / {total_batches}): "
                     f"Deleting old articles... ({len(article_ids)} articles)"
                 )
@@ -433,7 +433,7 @@ class BuildPacket:
             session.write_transaction(run_article_deletion_query)
 
             if debug:
-                print(
+                flush_print(
                     f".. Stage 2a (batch {batch_no + 1} / {total_batches}): "
                     f"Deleting old articles took {time.time() - start_time:.2f} seconds"
                 )
@@ -564,7 +564,7 @@ class BuildPacket:
         # Create the articles.
         with neo4j_conn.new_session() as session:
             if debug:
-                print(
+                flush_print(
                     f".. Stage 2b (batch {batch_no + 1} / {total_batches}): "
                     f"Creating articles... ({len(article_data)} articles)"
                 )
@@ -573,7 +573,7 @@ class BuildPacket:
             article_ids, article_author_ids = session.write_transaction(run_article_creation_query)
 
             if debug:
-                print(
+                flush_print(
                     f".. Stage 2b (batch {batch_no + 1} / {total_batches}): "
                     f"Creating articles took {time.time() - start_time:.2f} seconds"
                 )
@@ -627,7 +627,7 @@ class BuildPacket:
         # Create the article authors.
         with neo4j_conn.new_session() as session:
             if debug:
-                print(
+                flush_print(
                     f".. Stage 3a (batch {batch_no + 1} / {total_batches}): "
                     f"Connecting article authors... ({len(article_author_data)} article authors)"
                 )
@@ -636,7 +636,7 @@ class BuildPacket:
             session.write_transaction(run_article_author_connect_query)
 
             if debug:
-                print(
+                flush_print(
                     f".. Stage 3a (batch {batch_no + 1} / {total_batches}): "
                     f"Connecting article authors to authors took {time.time() - start_time:.2f} seconds"
                 )
@@ -688,7 +688,7 @@ class BuildPacket:
         # Affiliate authors.
         with neo4j_conn.new_session() as session:
             if debug:
-                print(
+                flush_print(
                     f".. Stage 3b (batch {batch_no + 1} / {total_batches}): "
                     f"Affiliating authors... ({len(affiliation_data)} affiliations)"
                 )
@@ -697,7 +697,7 @@ class BuildPacket:
             session.write_transaction(run_affiliate_authors_query)
 
             if debug:
-                print(
+                flush_print(
                     f".. Stage 3b (batch {batch_no + 1} / {total_batches}): "
                     f"Affiliating authors took {time.time() - start_time:.2f} seconds")
 
@@ -736,7 +736,7 @@ class BuildPacket:
         # Delete the old article authors.
         with neo4j_conn.new_session() as session:
             if debug:
-                print(
+                flush_print(
                     f".. Stage 3c (batch {batch_no + 1} / {total_batches}): "
                     f"Deleting old article authors... ({len(orphaned_article_author_ids)} article authors)"
                 )
@@ -745,7 +745,7 @@ class BuildPacket:
             session.write_transaction(run_article_author_deletion_query)
 
             if debug:
-                print(
+                flush_print(
                     f".. Stage 3c (batch {batch_no + 1} / {total_batches}): "
                     f"Deleting old article authors took {time.time() - start_time:.2f} seconds"
                 )
@@ -799,17 +799,20 @@ class BuildPipelineStage:
     Performs a single stage in a build pipeline.
     """
     def __init__(
-            self, stage: int, cache: BuildCache,
+            self, cache: BuildCache,
             input_queue: Queue[Optional[tuple[int, BuildPacket]]],
             *, output_queue_size=1, debug: bool = False):
 
-        self.stage: int = stage
         self.cache: BuildCache = cache
         self.debug: bool = debug
         self.input_queue: Queue[Optional[tuple[int, BuildPacket]]] = input_queue
         self.output_queue: Queue[Optional[tuple[int, BuildPacket]]] = Queue(output_queue_size)
         self.thread: Optional[Thread] = None
         self.utilisation_metrics: list[float] = []
+
+    def process(self, id_and_packet: Optional[tuple[int, BuildPacket]]) -> list[Optional[tuple[int, BuildPacket]]]:
+        """ Override to process a packet in the pipeline. """
+        raise NotImplementedError(f"The process method has not been defined for {type(self).__name__}")
 
     def start(self):
         def do_run():
@@ -823,35 +826,20 @@ class BuildPipelineStage:
     def run(self):
         while True:
             wait_start = time.time()
-            id_and_packet = self.input_queue.get()
+            input_id_and_packet = self.input_queue.get()
             wait_duration = time.time() - wait_start
 
-            if id_and_packet is not None:
-                process_start = time.time()
-                packet_id, packet = id_and_packet
-                if self.debug:
-                    print(f"Stage {self.stage}: Receive {packet_id}")
+            process_start = time.time()
+            output_id_and_packets = self.process(input_id_and_packet)
+            process_duration = time.time() - process_start
 
-                if self.stage >= 0:
-                    packet.run_stage(self.stage, self.cache, debug=self.debug)
-                else:
-                    # Careful mode: run all stages in a single thread.
-                    for stage in range(1, BuildPacket.NUM_STAGES + 1):
-                        packet.run_stage(stage, self.cache, debug=self.debug)
+            wait_start = time.time()
+            for output_id_and_packet in output_id_and_packets:
+                self.output_queue.put(output_id_and_packet)
+            wait_duration += time.time() - wait_start
 
-                if self.debug:
-                    print(f"Stage {self.stage}: Complete {packet_id}")
-                process_duration = time.time() - process_start
-
-                wait_start = time.time()
-                self.output_queue.put(id_and_packet)
-                wait_duration += time.time() - wait_start
-
-                if process_duration + wait_duration > 0:
-                    self.utilisation_metrics.append(process_duration / (process_duration + wait_duration))
-            else:
-                self.output_queue.put(None)
-                break
+            if process_duration + wait_duration > 0:
+                self.utilisation_metrics.append(process_duration / (process_duration + wait_duration))
 
     def get_utilisation(self, *, window: int = 10) -> float:
         """ Gets the percentage of time that this pipeline stage is working. """
@@ -862,6 +850,137 @@ class BuildPipelineStage:
             metric_count += 1
 
         return metric_sum / max(1, metric_count)
+
+
+class BuildPipelineFilterStage(BuildPipelineStage):
+    """
+    Filters a window of packets to remove articles that are included
+    more than once in nearby packets. This is important due to the
+    way that we use multiple threads to delete and insert the articles
+    into the database. If an article shows up twice in close packets,
+    then it may attempt to delete and insert the same article at the
+    same time, which can cause a deadlock. This avoids that issue by
+    filtering out all articles that are added in close future packets.
+    This seems to be only a big issue for the daily update files.
+    """
+    def __init__(
+            self, window_size: int, cache: BuildCache,
+            input_queue: Queue[Optional[tuple[int, BuildPacket]]],
+            *, output_queue_size=1, debug: bool = False):
+
+        super().__init__(cache, input_queue, output_queue_size=output_queue_size, debug=debug)
+        self.window_size: int = window_size
+        self.window: list[tuple[int, BuildPacket]] = []
+
+    def _filter(self, packet: BuildPacket) -> tuple[int, BuildPacket]:
+        """
+        Removes all articles in the build packet that exist in any
+        packet in the window.
+        """
+        # Create a set of all the article PMIDs in the packets in the window.
+        window_pmids: set[int] = set()
+        for _, other_packet in self.window:
+            for article in other_packet.articles:
+                window_pmids.add(article.pmid)
+
+        # Remove articles from the packet that contain any articles with the
+        # same PMIDs as articles in other packets in the window.
+        filtered_articles = list(filter(lambda a: a.pmid not in window_pmids, packet.articles))
+        removed_articles_count = len(packet.articles) - len(filtered_articles)
+        return removed_articles_count, BuildPacket.prepare(filtered_articles)
+
+    def _take(self) -> tuple[int, tuple[int, BuildPacket]]:
+        """
+        Removes, filters, and returns the next build packet.
+        """
+        if len(self.window) == 0:
+            raise ValueError("No remaining packets")
+
+        packet_id, input_packet = self.window.pop(0)
+        removed_articles_count, output_packet = self._filter(input_packet)
+        return removed_articles_count, (packet_id, output_packet)
+
+    def process(
+            self, input_id_and_packet: Optional[tuple[int, BuildPacket]]
+    ) -> list[Optional[tuple[int, BuildPacket]]]:
+        """
+        Adds the input packet to the window of packets, filters the next packet to be removed from
+        the packet, and returns it if applicable.
+        """
+        # Filter and return all remaining packets at the end of the queue.
+        if input_id_and_packet is None:
+            output: list[Optional[tuple[int, BuildPacket]]] = []
+            removed_articles_count = 0
+            while len(self.window) > 0:
+                packet_removed_articles_count, output_id_and_packet = self._take()
+                removed_articles_count += packet_removed_articles_count
+                output.append(output_id_and_packet)
+
+            output.append(None)
+            if self.debug:
+                flush_print(
+                    f"Filter Stage: Complete and output {len(output) - 1} packets" +
+                    (" (packet\\s " + ", ".join([str(t[0]) for t in output[:-1]]) + ")" if len(output) > 1 else "") +
+                    (f" with {removed_articles_count} articles filtered away" if removed_articles_count > 0 else "")
+                )
+
+            return output
+
+        # Add the packet to the end of the window.
+        self.window.append(input_id_and_packet)
+
+        # If the window is not full, return no items.
+        if len(self.window) < self.window_size:
+            if self.debug:
+                flush_print(f"Filter Stage: Append packet {input_id_and_packet[0]} to window")
+            return []
+
+        # Return the packet at the front of the window.
+        removed_articles_count, output_id_and_packet = self._take()
+        if self.debug:
+            flush_print(
+                f"Filter Stage: Append packet {input_id_and_packet[0]} to window, "
+                f"output packet {output_id_and_packet[0]}" +
+                (f" with {removed_articles_count} articles filtered away" if removed_articles_count > 0 else "")
+            )
+
+        return [output_id_and_packet]
+
+
+class BuildPipelineProcessingStage(BuildPipelineStage):
+    """
+    Performs a processing stage in the build pipeline.
+    """
+    def __init__(
+            self, stage: int, cache: BuildCache,
+            input_queue: Queue[Optional[tuple[int, BuildPacket]]],
+            *, output_queue_size=1, debug: bool = False):
+
+        super().__init__(cache, input_queue, output_queue_size=output_queue_size, debug=debug)
+        self.stage: int = stage
+
+    def process(self, id_and_packet: Optional[tuple[int, BuildPacket]]) -> list[Optional[tuple[int, BuildPacket]]]:
+        """
+        Performs one or all stages of packet processing.
+        """
+        if id_and_packet is None:
+            return [None]
+
+        packet_id, packet = id_and_packet
+        if self.debug:
+            flush_print(f"Stage {self.stage}: Receive {packet_id}")
+
+        if self.stage >= 0:
+            packet.run_stage(self.stage, self.cache, debug=self.debug)
+        else:
+            # Careful mode: run all stages in a single thread.
+            for stage in range(1, BuildPacket.NUM_STAGES + 1):
+                packet.run_stage(stage, self.cache, debug=self.debug)
+
+        if self.debug:
+            flush_print(f"Stage {self.stage}: Complete {packet_id}")
+
+        return [id_and_packet]
 
 
 class BuildPipeline:
@@ -875,23 +994,26 @@ class BuildPipeline:
         self.cache: BuildCache = BuildCache()
 
         # Create the pipeline stages.
+        filter_stage = BuildPipelineFilterStage(
+            BuildPacket.NUM_STAGES, self.cache, self._input_queue,
+            output_queue_size=queue_size, debug=debug
+        )
+        self.stages.append(filter_stage)
         if not careful:
-            next_input_queue = self._input_queue
+            # Use a thread per processing stage.
+            next_input_queue = filter_stage.output_queue
             for stage in range(1, BuildPacket.NUM_STAGES + 1):
-                output_queue_size = (0 if stage == BuildPacket.NUM_STAGES else queue_size)
-                pipeline_stage = BuildPipelineStage(
+                pipeline_stage = BuildPipelineProcessingStage(
                     stage, self.cache, next_input_queue,
-                    output_queue_size=output_queue_size,
-                    debug=debug
+                    output_queue_size=queue_size, debug=debug
                 )
                 next_input_queue = pipeline_stage.output_queue
                 self.stages.append(pipeline_stage)
         else:
-            # Only use 1 thread in careful mode.
-            self.stages.append(BuildPipelineStage(
-                -1, self.cache, self._input_queue,
-                output_queue_size=0,
-                debug=debug
+            # Only use one thread for processing in careful mode.
+            self.stages.append(BuildPipelineProcessingStage(
+                -1, self.cache, filter_stage.output_queue,
+                output_queue_size=queue_size, debug=debug
             ))
 
         self.output_queue = self.stages[-1].output_queue

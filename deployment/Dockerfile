@@ -1,4 +1,4 @@
-FROM alpine:3.14
+FROM --platform=linux/amd64 alpine:3.14
 
 # Install bash and Docker.
 RUN apk update && apk add bash curl
