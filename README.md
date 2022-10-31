@@ -1,15 +1,11 @@
 <p align="center">
-  <img src="/app/static/logo-with-name.png" alt="PubMed Connections Logo" height="160" width="420" />
+  <img src="/app/static/logo-with-name.png" alt="PubMed Connections Logo" height="160" />
 </p>
 
 
 PubMed Connections is a web application that facilitates
 the analysis of the relationships between authors in the
 PubMed database.
-
-<p align="center">
-  <img src="/app/static/example-graph.png" alt="Example PubMed Connections Graph" height="1245" width="1245" />
-</p>
 
 ## Config
 
@@ -88,3 +84,10 @@ dbms.tx_log.rotation.retention_policy=1 files
 dbms.tx_log.rotation.size=56M
 dbms.tx_log.rotation.retention_policy=keep_none
 ```
+
+## Example Graph
+An example graph that was generated from academics at the University of Western Australia is shown below.
+
+<p align="center">
+  <img src="/app/static/example-graph.png" alt="Example PubMed Connections Graph" width="600" />
+</p>
