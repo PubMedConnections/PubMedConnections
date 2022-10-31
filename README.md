@@ -7,6 +7,10 @@ PubMed Connections is a web application that facilitates
 the analysis of the relationships between authors in the
 PubMed database.
 
+<p align="center">
+  <img src="/app/static/example-graph.png" alt="Example PubMed Connections Graph" height="1245" width="1245" />
+</p>
+
 ## Config
 
 The [config.py](app/config.py) file is used to hold user
