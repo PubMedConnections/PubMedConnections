@@ -1,10 +1,6 @@
 import os
 from datetime import timedelta
 
-# Authentication configuration.
-JWT_SECRET_KEY = "a5ee6ccda844d043e1e7039787bee989"  # pubmedconnections2022
-JWT_HEADER_TYPE = ""
-JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=24)
 
 REGISTRATION_INVITE_CODE = "pubmedconnections2022"
 
@@ -36,6 +32,11 @@ class FlaskConfig:
     CSRF_ENABLED = True  # Cross-site Request Forgery (CSRF)
     CSRF_SESSION_KEY = "secret"
     SECRET_KEY = "secret"
+
+    # Authentication configuration.
+    JWT_SECRET_KEY = "a5ee6ccda844d043e1e7039787bee989"
+    JWT_HEADER_TYPE = ""
+    JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=24)
 
 
 # Define the Entrez email, tool, and the optional api-key
